@@ -6,18 +6,32 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
--- ENUMS
+-- ENUMS (Idempotent)
 -- ============================================
-CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer');
-CREATE TYPE content_status AS ENUM ('draft', 'published', 'archived');
-CREATE TYPE collection_type AS ENUM ('post', 'page', 'custom');
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE content_status AS ENUM ('draft', 'published', 'archived');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE collection_type AS ENUM ('post', 'page', 'custom');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================
 -- TABLES
 -- ============================================
 
 -- Profiles table (extends Supabase auth.users)
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
@@ -29,7 +43,7 @@ CREATE TABLE profiles (
 );
 
 -- Collections table (defines content types)
-CREATE TABLE collections (
+CREATE TABLE IF NOT EXISTS collections (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
@@ -45,7 +59,7 @@ CREATE TABLE collections (
 );
 
 -- Entries table (actual content)
-CREATE TABLE entries (
+CREATE TABLE IF NOT EXISTS entries (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     collection_id UUID NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
@@ -65,7 +79,7 @@ CREATE TABLE entries (
 );
 
 -- Media table (file metadata)
-CREATE TABLE media (
+CREATE TABLE IF NOT EXISTS media (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     filename TEXT NOT NULL,
     original_name TEXT NOT NULL,
@@ -85,7 +99,7 @@ CREATE TABLE media (
 );
 
 -- Entry revisions table (version history)
-CREATE TABLE entry_revisions (
+CREATE TABLE IF NOT EXISTS entry_revisions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     entry_id UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,

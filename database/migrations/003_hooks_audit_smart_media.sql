@@ -5,29 +5,81 @@
 -- EVENT HOOKS & WEBHOOKS
 -- ============================================
 
-CREATE TYPE webhook_event AS ENUM (
-    'content.created',
-    'content.updated',
-    'content.published',
-    'content.archived',
-    'content.deleted',
-    'media.uploaded',
-    'media.processed',
-    'media.deleted',
-    'user.created',
-    'user.updated',
-    'user.login',
-    'user.logout',
-    'organization.updated',
-    'ai.task.completed',
-    'ai.task.failed'
-);
+DO $$ BEGIN
+    CREATE TYPE webhook_event AS ENUM (
+        'content.created',
+        'content.updated',
+        'content.published',
+        'content.archived',
+        'content.deleted',
+        'media.uploaded',
+        'media.processed',
+        'media.deleted',
+        'user.created',
+        'user.updated',
+        'user.login',
+        'user.logout',
+        'organization.updated',
+        'ai.task.completed',
+        'ai.task.failed'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE webhook_status AS ENUM ('active', 'inactive', 'failed');
-CREATE TYPE webhook_method AS ENUM ('POST', 'PUT', 'PATCH');
+DO $$ BEGIN
+    CREATE TYPE webhook_status AS ENUM ('active', 'inactive', 'failed');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE webhook_method AS ENUM ('POST', 'PUT', 'PATCH');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE audit_action AS ENUM (
+        'create', 'read', 'update', 'delete', 'restore',
+        'publish', 'unpublish', 'archive', 'unarchive',
+        'approve', 'reject', 'lock', 'unlock',
+        'share', 'unshare', 'export', 'import',
+        'login', 'logout', 'password_change', 'permission_change'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE audit_entity_type AS ENUM (
+        'content_node', 'media_asset', 'taxonomy', 'user',
+        'organization', 'webhook', 'api_key', 'role'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE media_processing_status AS ENUM (
+        'pending', 'processing', 'completed', 'failed', 'skipped'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE media_transformation AS ENUM (
+        'resize', 'crop', 'rotate', 'compress', 'format',
+        'watermark', 'blur', 'grayscale', 'thumbnail',
+        'webp', 'avif', 'progressive'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Webhook Endpoints
-CREATE TABLE webhook_endpoints (
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 
@@ -62,7 +114,7 @@ CREATE TABLE webhook_endpoints (
 );
 
 -- Webhook Logs
-CREATE TABLE webhook_logs (
+CREATE TABLE IF NOT EXISTS webhook_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     endpoint_id UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
 
@@ -104,7 +156,7 @@ CREATE TYPE audit_entity_type AS ENUM (
 );
 
 -- Comprehensive Audit Log
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
 
@@ -140,7 +192,7 @@ CREATE TABLE audit_logs (
 );
 
 -- Content Version Control
-CREATE TABLE content_versions (
+CREATE TABLE IF NOT EXISTS content_versions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
     version_number INTEGER NOT NULL,
@@ -185,7 +237,7 @@ CREATE TYPE media_transformation AS ENUM (
 );
 
 -- Media Processing Queue
-CREATE TABLE media_processing_queue (
+CREATE TABLE IF NOT EXISTS media_processing_queue (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     media_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
 
@@ -210,7 +262,7 @@ CREATE TABLE media_processing_queue (
 );
 
 -- Transformed Media Variants
-CREATE TABLE media_variants (
+CREATE TABLE IF NOT EXISTS media_variants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     original_media_id UUID NOT NULL REFERENCES media_assets(id) ON DELETE CASCADE,
 
@@ -242,7 +294,7 @@ CREATE TABLE media_variants (
 );
 
 -- Smart Media Metadata
-CREATE TABLE media_metadata (
+CREATE TABLE IF NOT EXISTS media_metadata (
     media_id UUID PRIMARY KEY REFERENCES media_assets(id) ON DELETE CASCADE,
 
     -- EXIF Data
@@ -287,7 +339,7 @@ CREATE TABLE media_metadata (
 );
 
 -- CDN Configuration
-CREATE TABLE cdn_configurations (
+CREATE TABLE IF NOT EXISTS cdn_configurations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 

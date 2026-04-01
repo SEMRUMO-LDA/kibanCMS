@@ -12,26 +12,70 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy text search
 CREATE EXTENSION IF NOT EXISTS "unaccent"; -- For accent-insensitive search
 
 -- ============================================
--- ENUMS
+-- ENUMS (Idempotent)
 -- ============================================
-CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'editor', 'author', 'viewer');
-CREATE TYPE content_status AS ENUM ('draft', 'review', 'scheduled', 'published', 'archived');
-CREATE TYPE node_type AS ENUM ('page', 'post', 'product', 'directory', 'custom');
-CREATE TYPE block_type AS ENUM (
-    'heading', 'paragraph', 'image', 'video', 'code', 'quote',
-    'list', 'table', 'divider', 'embed', 'callout', 'toggle',
-    'columns', 'tabs', 'accordion', 'gallery', 'map', 'form',
-    'custom'
-);
-CREATE TYPE locale_code AS ENUM ('pt', 'en', 'es', 'fr', 'de');
-CREATE TYPE cache_strategy AS ENUM ('none', 'swr', 'immutable', 'revalidate');
+
+-- user_role
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'editor', 'author', 'viewer');
+EXCEPTION
+    WHEN duplicate_object THEN 
+        BEGIN
+            ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'super_admin';
+            ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'author';
+        EXCEPTION WHEN OTHERS THEN null; END;
+END $$;
+
+-- content_status
+DO $$ BEGIN
+    CREATE TYPE content_status AS ENUM ('draft', 'review', 'scheduled', 'published', 'archived');
+EXCEPTION
+    WHEN duplicate_object THEN 
+        BEGIN
+            ALTER TYPE content_status ADD VALUE IF NOT EXISTS 'review';
+            ALTER TYPE content_status ADD VALUE IF NOT EXISTS 'scheduled';
+        EXCEPTION WHEN OTHERS THEN null; END;
+END $$;
+
+-- node_type
+DO $$ BEGIN
+    CREATE TYPE node_type AS ENUM ('page', 'post', 'product', 'directory', 'custom');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- block_type
+DO $$ BEGIN
+    CREATE TYPE block_type AS ENUM (
+        'heading', 'paragraph', 'image', 'video', 'code', 'quote',
+        'list', 'table', 'divider', 'embed', 'callout', 'toggle',
+        'columns', 'tabs', 'accordion', 'gallery', 'map', 'form',
+        'custom'
+    );
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- locale_code
+DO $$ BEGIN
+    CREATE TYPE locale_code AS ENUM ('pt', 'en', 'es', 'fr', 'de');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+-- cache_strategy
+DO $$ BEGIN
+    CREATE TYPE cache_strategy AS ENUM ('none', 'swr', 'immutable', 'revalidate');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- ============================================
 -- CORE TABLES
 -- ============================================
 
 -- Organizations (Multi-tenancy support)
-CREATE TABLE organizations (
+CREATE TABLE IF NOT EXISTS organizations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     slug TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
@@ -44,7 +88,7 @@ CREATE TABLE organizations (
 );
 
 -- Enhanced Profiles with organization support
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
@@ -61,7 +105,7 @@ CREATE TABLE profiles (
 );
 
 -- Content Nodes (Polymorphic content table)
-CREATE TABLE content_nodes (
+CREATE TABLE IF NOT EXISTS content_nodes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     type node_type NOT NULL,
@@ -115,7 +159,7 @@ CREATE TABLE content_nodes (
 );
 
 -- Internationalization table
-CREATE TABLE content_translations (
+CREATE TABLE IF NOT EXISTS content_translations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
     locale locale_code NOT NULL,
@@ -145,7 +189,7 @@ CREATE TABLE content_translations (
 );
 
 -- Media Library with AI metadata
-CREATE TABLE media_assets (
+CREATE TABLE IF NOT EXISTS media_assets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 
@@ -186,7 +230,7 @@ CREATE TABLE media_assets (
 );
 
 -- Taxonomies (Categories, Tags, Custom)
-CREATE TABLE taxonomies (
+CREATE TABLE IF NOT EXISTS taxonomies (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     type TEXT NOT NULL, -- category, tag, custom
@@ -213,7 +257,7 @@ CREATE TABLE taxonomies (
 );
 
 -- Content-Taxonomy relationships
-CREATE TABLE content_taxonomies (
+CREATE TABLE IF NOT EXISTS content_taxonomies (
     node_id UUID NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
     taxonomy_id UUID NOT NULL REFERENCES taxonomies(id) ON DELETE CASCADE,
     is_primary BOOLEAN DEFAULT false,
@@ -223,7 +267,7 @@ CREATE TABLE content_taxonomies (
 );
 
 -- Content Revisions with diff tracking
-CREATE TABLE content_revisions (
+CREATE TABLE IF NOT EXISTS content_revisions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,
@@ -245,7 +289,7 @@ CREATE TABLE content_revisions (
 );
 
 -- Analytics & Performance
-CREATE TABLE content_analytics (
+CREATE TABLE IF NOT EXISTS content_analytics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     node_id UUID NOT NULL REFERENCES content_nodes(id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -275,7 +319,7 @@ CREATE TABLE content_analytics (
 );
 
 -- AI Processing Queue
-CREATE TABLE ai_tasks (
+CREATE TABLE IF NOT EXISTS ai_tasks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 

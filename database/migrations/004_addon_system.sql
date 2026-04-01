@@ -2,7 +2,7 @@
 -- Version: 4.0.0
 
 -- Add-on Registry (Stores the state of installed add-ons)
-CREATE TABLE addon_registry (
+CREATE TABLE IF NOT EXISTS addon_registry (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     addon_id TEXT NOT NULL UNIQUE,
     status JSONB NOT NULL DEFAULT '{"installed": true, "enabled": false}',
@@ -12,7 +12,7 @@ CREATE TABLE addon_registry (
 );
 
 -- Add-on Configurations (Stores versioned or specific configurations)
-CREATE TABLE addon_configs (
+CREATE TABLE IF NOT EXISTS addon_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     addon_id TEXT NOT NULL REFERENCES addon_registry(addon_id) ON DELETE CASCADE,
     config JSONB NOT NULL,
@@ -35,24 +35,28 @@ ALTER TABLE addon_registry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE addon_configs ENABLE ROW LEVEL SECURITY;
 
 -- Policies
-CREATE POLICY "Admins can manage addon registry"
-    ON addon_registry
-    TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-            AND profiles.role IN ('super_admin', 'admin')
-        )
-    );
+DO $$ BEGIN
+    CREATE POLICY "Admins can manage addon registry"
+        ON addon_registry
+        TO authenticated
+        USING (
+            EXISTS (
+                SELECT 1 FROM profiles
+                WHERE profiles.id = auth.uid()
+                AND profiles.role IN ('super_admin', 'admin')
+            )
+        );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
-CREATE POLICY "Admins can manage addon configs"
-    ON addon_configs
-    TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-            AND profiles.role IN ('super_admin', 'admin')
-        )
-    );
+DO $$ BEGIN
+    CREATE POLICY "Admins can manage addon configs"
+        ON addon_configs
+        TO authenticated
+        USING (
+            EXISTS (
+                SELECT 1 FROM profiles
+                WHERE profiles.id = auth.uid()
+                AND profiles.role IN ('super_admin', 'admin')
+            )
+        );
+EXCEPTION WHEN duplicate_object THEN null; END $$;
