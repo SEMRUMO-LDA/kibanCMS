@@ -263,7 +263,7 @@ CREATE TABLE IF NOT EXISTS content_taxonomies (
     is_primary BOOLEAN DEFAULT false,
     position INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    PRIMARY KEY (node_id, taxonomy_id)
+    UNIQUE (node_id, taxonomy_id)
 );
 
 -- Content Revisions with diff tracking
@@ -315,7 +315,7 @@ CREATE TABLE IF NOT EXISTS content_analytics (
     visitor_cities JSONB DEFAULT '{}',
 
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
-    PRIMARY KEY (node_id, date)
+    UNIQUE (node_id, date)
 );
 
 -- AI Processing Queue
