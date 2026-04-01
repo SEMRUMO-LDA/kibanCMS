@@ -12,18 +12,8 @@ CREATE EXTENSION IF NOT EXISTS "vector";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================
--- ENUMS (extend v1 + add new)
+-- ENUMS (new types only - user_role and content_status already defined in 001)
 -- ============================================
-
--- Extend user_role with new values
-DO $$ BEGIN ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'super_admin'; EXCEPTION WHEN OTHERS THEN null; END $$;
-DO $$ BEGIN ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'author'; EXCEPTION WHEN OTHERS THEN null; END $$;
-
--- Extend content_status with new values
-DO $$ BEGIN ALTER TYPE content_status ADD VALUE IF NOT EXISTS 'review'; EXCEPTION WHEN OTHERS THEN null; END $$;
-DO $$ BEGIN ALTER TYPE content_status ADD VALUE IF NOT EXISTS 'scheduled'; EXCEPTION WHEN OTHERS THEN null; END $$;
-
--- New enums
 DO $$ BEGIN CREATE TYPE node_type AS ENUM ('page', 'post', 'product', 'directory', 'custom'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE block_type AS ENUM ('heading', 'paragraph', 'image', 'video', 'code', 'quote', 'list', 'table', 'divider', 'embed', 'callout', 'toggle', 'columns', 'tabs', 'accordion', 'gallery', 'map', 'form', 'custom'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE locale_code AS ENUM ('pt', 'en', 'es', 'fr', 'de'); EXCEPTION WHEN duplicate_object THEN null; END $$;

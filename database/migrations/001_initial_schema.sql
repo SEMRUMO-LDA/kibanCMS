@@ -10,8 +10,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================
 -- ENUMS
 -- ============================================
-DO $$ BEGIN CREATE TYPE user_role AS ENUM ('admin', 'editor', 'viewer'); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE TYPE content_status AS ENUM ('draft', 'published', 'archived'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE user_role AS ENUM ('super_admin', 'admin', 'editor', 'author', 'viewer'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE TYPE content_status AS ENUM ('draft', 'review', 'scheduled', 'published', 'archived'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE TYPE collection_type AS ENUM ('post', 'page', 'custom'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- ============================================
