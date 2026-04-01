@@ -384,6 +384,6 @@ ALTER TABLE content_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE media_processing_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE media_variants ENABLE ROW LEVEL SECURITY;
 
-DO $$ BEGIN CREATE POLICY "Users can manage org webhooks" ON webhook_endpoints TO authenticated USING (organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Users can view org audit logs" ON audit_logs FOR SELECT TO authenticated USING (organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid() AND role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Users can manage org webhooks" ON webhook_endpoints TO authenticated USING (organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid() AND role::text IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Users can view org audit logs" ON audit_logs FOR SELECT TO authenticated USING (organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid() AND role::text IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN CREATE POLICY "Users can view content versions" ON content_versions FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM content_nodes WHERE content_nodes.id = content_versions.node_id AND content_nodes.organization_id IN (SELECT organization_id FROM profiles WHERE id = auth.uid()))); EXCEPTION WHEN duplicate_object THEN null; END $$;

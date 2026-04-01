@@ -46,5 +46,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 ALTER TABLE addon_registry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE addon_configs ENABLE ROW LEVEL SECURITY;
 
-DO $$ BEGIN CREATE POLICY "Admins can manage addon registry" ON addon_registry TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Admins can manage addon configs" ON addon_configs TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can manage addon registry" ON addon_registry TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role::text IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can manage addon configs" ON addon_configs TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role::text IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
