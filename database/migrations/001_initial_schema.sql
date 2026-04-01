@@ -15,7 +15,7 @@ DO $$ BEGIN CREATE TYPE content_status AS ENUM ('draft', 'published', 'archived'
 DO $$ BEGIN CREATE TYPE collection_type AS ENUM ('post', 'page', 'custom'); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- ============================================
--- FUNCTIONS
+-- FUNCTIONS (generic, no table dependencies)
 -- ============================================
 
 -- Auto-update updated_at timestamp
@@ -26,54 +26,6 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
--- Auto-create profile on user signup
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-    INSERT INTO public.profiles (id, email, full_name)
-    VALUES (
-        NEW.id,
-        NEW.email,
-        NEW.raw_user_meta_data->>'full_name'
-    );
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create revision on entry update
-CREATE OR REPLACE FUNCTION create_entry_revision()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF OLD.content IS DISTINCT FROM NEW.content OR
-       OLD.title IS DISTINCT FROM NEW.title OR
-       OLD.excerpt IS DISTINCT FROM NEW.excerpt THEN
-        INSERT INTO entry_revisions (
-            entry_id, version, title, content, excerpt, meta, revised_by
-        ) VALUES (
-            OLD.id, OLD.version, OLD.title, OLD.content, OLD.excerpt, OLD.meta, NEW.author_id
-        );
-        NEW.version = OLD.version + 1;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Helper: check user role
-CREATE OR REPLACE FUNCTION get_user_role(user_id UUID)
-RETURNS user_role AS $$
-    SELECT role FROM profiles WHERE id = user_id;
-$$ LANGUAGE sql SECURITY DEFINER;
-
--- Helper: check if user can edit
-CREATE OR REPLACE FUNCTION can_edit_content(user_id UUID)
-RETURNS BOOLEAN AS $$
-    SELECT EXISTS (
-        SELECT 1 FROM profiles
-        WHERE id = user_id
-        AND role IN ('admin', 'editor')
-    );
-$$ LANGUAGE sql SECURITY DEFINER;
 
 -- ============================================
 -- TABLES
@@ -156,6 +108,58 @@ CREATE TABLE IF NOT EXISTS entry_revisions (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     UNIQUE(entry_id, version)
 );
+
+-- ============================================
+-- FUNCTIONS (depend on tables above)
+-- ============================================
+
+-- Auto-create profile on user signup
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (id, email, full_name)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        NEW.raw_user_meta_data->>'full_name'
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create revision on entry update
+CREATE OR REPLACE FUNCTION create_entry_revision()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.content IS DISTINCT FROM NEW.content OR
+       OLD.title IS DISTINCT FROM NEW.title OR
+       OLD.excerpt IS DISTINCT FROM NEW.excerpt THEN
+        INSERT INTO entry_revisions (
+            entry_id, version, title, content, excerpt, meta, revised_by
+        ) VALUES (
+            OLD.id, OLD.version, OLD.title, OLD.content, OLD.excerpt, OLD.meta, NEW.author_id
+        );
+        NEW.version = OLD.version + 1;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Helper: check user role
+CREATE OR REPLACE FUNCTION get_user_role(user_id UUID)
+RETURNS user_role AS $$
+    SELECT role FROM profiles WHERE id = user_id;
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- Helper: check if user can edit
+CREATE OR REPLACE FUNCTION can_edit_content(user_id UUID)
+RETURNS BOOLEAN AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM profiles
+        WHERE id = user_id
+        AND role IN ('admin', 'editor')
+    );
+$$ LANGUAGE sql SECURITY DEFINER;
 
 -- ============================================
 -- INDEXES
