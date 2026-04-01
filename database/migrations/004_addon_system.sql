@@ -1,7 +1,14 @@
--- kibanCMS Add-on System Migration
+-- ============================================================
+-- kibanCMS - Migration 004: Add-on System
 -- Version: 4.0.0
+-- Description: Add-on registry, configs, and dynamic SQL
+-- REQUIRES: 001 + 002
+-- ============================================================
 
--- Add-on Registry (Stores the state of installed add-ons)
+-- ============================================
+-- TABLES
+-- ============================================
+
 CREATE TABLE IF NOT EXISTS addon_registry (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     addon_id TEXT NOT NULL UNIQUE,
@@ -11,7 +18,6 @@ CREATE TABLE IF NOT EXISTS addon_registry (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- Add-on Configurations (Stores versioned or specific configurations)
 CREATE TABLE IF NOT EXISTS addon_configs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     addon_id TEXT NOT NULL REFERENCES addon_registry(addon_id) ON DELETE CASCADE,
@@ -21,8 +27,12 @@ CREATE TABLE IF NOT EXISTS addon_configs (
     UNIQUE(addon_id)
 );
 
--- RPC Function to execute dynamic SQL (Required for auto-table creation)
--- WARNING: This function should be strictly controlled via RLS or only accessible to service_role
+-- ============================================
+-- FUNCTIONS
+-- ============================================
+
+-- Dynamic SQL execution for auto-table creation
+-- WARNING: Only accessible to service_role
 CREATE OR REPLACE FUNCTION execute_sql(query text)
 RETURNS void AS $$
 BEGIN
@@ -30,33 +40,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Enable RLS
+-- ============================================
+-- ROW LEVEL SECURITY
+-- ============================================
 ALTER TABLE addon_registry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE addon_configs ENABLE ROW LEVEL SECURITY;
 
--- Policies
-DO $$ BEGIN
-    CREATE POLICY "Admins can manage addon registry"
-        ON addon_registry
-        TO authenticated
-        USING (
-            EXISTS (
-                SELECT 1 FROM profiles
-                WHERE profiles.id = auth.uid()
-                AND profiles.role IN ('super_admin', 'admin')
-            )
-        );
-EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-DO $$ BEGIN
-    CREATE POLICY "Admins can manage addon configs"
-        ON addon_configs
-        TO authenticated
-        USING (
-            EXISTS (
-                SELECT 1 FROM profiles
-                WHERE profiles.id = auth.uid()
-                AND profiles.role IN ('super_admin', 'admin')
-            )
-        );
-EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can manage addon registry" ON addon_registry TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Admins can manage addon configs" ON addon_configs TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('super_admin', 'admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
