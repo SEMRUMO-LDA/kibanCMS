@@ -87,10 +87,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- Enhanced Profiles with organization support
+-- Enhanced Profiles with organization support (Idempotent)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
     avatar_url TEXT,
@@ -103,6 +102,13 @@ CREATE TABLE IF NOT EXISTS profiles (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
+
+-- Ensure profiles has organization_id if it was created in v1
+DO $$ BEGIN
+    ALTER TABLE profiles ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_column THEN null;
+END $$;
 
 -- Content Nodes (Polymorphic content table)
 CREATE TABLE IF NOT EXISTS content_nodes (
@@ -366,7 +372,7 @@ CREATE INDEX idx_content_nodes_embedding ON content_nodes USING ivfflat(content_
 CREATE INDEX idx_translations_node ON content_translations(node_id);
 CREATE INDEX idx_translations_locale ON content_translations(locale);
 CREATE INDEX idx_translations_slug ON content_translations(slug);
-CREATE UNIQUE INDEX idx_translations_unique_slug ON content_translations(organization_id, locale, slug);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_translations_unique_slug ON content_translations(node_id, locale, slug); -- node_id already implies organization_id
 
 -- Media
 CREATE INDEX idx_media_org ON media_assets(organization_id);
