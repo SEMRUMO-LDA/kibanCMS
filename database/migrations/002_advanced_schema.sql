@@ -381,13 +381,20 @@ CREATE INDEX idx_media_folder ON media_assets(folder_path);
 CREATE INDEX idx_media_embedding ON media_assets USING ivfflat(content_embedding vector_cosine_ops);
 
 -- Full-text search
-CREATE INDEX idx_content_search ON content_translations USING GIN(
-    to_tsvector('portuguese', unaccent(title) || ' ' || unaccent(excerpt))
+CREATE INDEX IF NOT EXISTS idx_content_search ON content_translations USING GIN(
+    to_tsvector('portuguese'::regconfig, immutable_unaccent(title) || ' ' || immutable_unaccent(excerpt))
 );
 
 -- ============================================
--- FUNCTIONS
+-- FUNCTIONS (Idempotent)
 -- ============================================
+
+-- Immutable wrapper for unaccent (required for indexes)
+CREATE OR REPLACE FUNCTION immutable_unaccent(text)
+RETURNS text AS $$
+    -- Note: unaccent expects a dictionary, we use 'unaccent' by default
+    SELECT unaccent($1);
+$$ LANGUAGE sql IMMUTABLE;
 
 -- Function to generate slug
 CREATE OR REPLACE FUNCTION generate_slug(input_text TEXT)
@@ -396,14 +403,14 @@ BEGIN
     RETURN lower(
         regexp_replace(
             regexp_replace(
-                unaccent(input_text),
+                immutable_unaccent(input_text),
                 '[^a-z0-9\-_]+', '-', 'gi'
             ),
             '\-+', '-', 'g'
         )
     );
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Function to update materialized path
 CREATE OR REPLACE FUNCTION update_content_path()
