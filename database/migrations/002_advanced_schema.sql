@@ -12,8 +12,36 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy text search
 CREATE EXTENSION IF NOT EXISTS "unaccent"; -- For accent-insensitive search
 
 -- ============================================
+-- UTILITY FUNCTIONS (Immutable)
+-- ============================================
+
+-- Immutable wrapper for unaccent (required for indexes)
+CREATE OR REPLACE FUNCTION immutable_unaccent(text)
+RETURNS text AS $$
+    -- Note: unaccent expects a dictionary, we use 'unaccent' by default
+    SELECT unaccent($1);
+$$ LANGUAGE sql IMMUTABLE;
+
+-- Function to generate slug
+CREATE OR REPLACE FUNCTION generate_slug(input_text TEXT)
+RETURNS TEXT AS $$
+BEGIN
+    RETURN lower(
+        regexp_replace(
+            regexp_replace(
+                immutable_unaccent(input_text),
+                '[^a-z0-9\-_]+', '-', 'gi'
+            ),
+            '\-+', '-', 'g'
+        )
+    );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- ============================================
 -- ENUMS (Idempotent)
 -- ============================================
+-- ... (enums already there, I'll keep them)
 
 -- user_role
 DO $$ BEGIN
@@ -386,31 +414,8 @@ CREATE INDEX IF NOT EXISTS idx_content_search ON content_translations USING GIN(
 );
 
 -- ============================================
--- FUNCTIONS (Idempotent)
+-- FUNCTIONS (Dependent on tables)
 -- ============================================
-
--- Immutable wrapper for unaccent (required for indexes)
-CREATE OR REPLACE FUNCTION immutable_unaccent(text)
-RETURNS text AS $$
-    -- Note: unaccent expects a dictionary, we use 'unaccent' by default
-    SELECT unaccent($1);
-$$ LANGUAGE sql IMMUTABLE;
-
--- Function to generate slug
-CREATE OR REPLACE FUNCTION generate_slug(input_text TEXT)
-RETURNS TEXT AS $$
-BEGIN
-    RETURN lower(
-        regexp_replace(
-            regexp_replace(
-                immutable_unaccent(input_text),
-                '[^a-z0-9\-_]+', '-', 'gi'
-            ),
-            '\-+', '-', 'g'
-        )
-    );
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- Function to update materialized path
 CREATE OR REPLACE FUNCTION update_content_path()
