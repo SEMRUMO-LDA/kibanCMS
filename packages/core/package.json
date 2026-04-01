@@ -1,0 +1,81 @@
+{
+  "name": "@kiban/core",
+  "version": "1.0.0",
+  "description": "kibanCMS Core - Data Access Layer and Business Logic",
+  "author": "Kiban Agency <dev@kiban.pt>",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.mjs",
+      "require": "./dist/services/index.js"
+    },
+    "./repositories": {
+      "types": "./dist/repositories/index.d.ts",
+      "import": "./dist/repositories/index.mjs",
+      "require": "./dist/repositories/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "test": "vitest",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint . --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo node_modules"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "dependencies": {
+    "zod": "^3.22.4",
+    "nanoid": "^5.0.4",
+    "slugify": "^1.6.6",
+    "date-fns": "^3.0.0",
+    "p-queue": "^8.0.0",
+    "p-retry": "^6.1.0",
+    "mitt": "^3.0.1"
+  },
+  "devDependencies": {
+    "@kiban/types": "workspace:*",
+    "@supabase/supabase-js": "^2.39.0",
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "@vitest/coverage-v8": "^1.2.0"
+  },
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "keywords": [
+    "kiban",
+    "cms",
+    "headless",
+    "supabase",
+    "dal",
+    "data-layer"
+  ]
+}

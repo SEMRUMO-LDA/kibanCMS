@@ -1,0 +1,66 @@
+{
+  "name": "@kiban/media",
+  "version": "1.0.0",
+  "description": "kibanMedia - Intelligent Asset Management System",
+  "author": "Kiban Agency <dev@kiban.pt>",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.mjs",
+      "require": "./dist/services/index.js"
+    },
+    "./components": {
+      "types": "./dist/components/index.d.ts",
+      "import": "./dist/components/index.mjs",
+      "require": "./dist/components/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo node_modules"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "blurhash": "^2.0.5",
+    "sharp": "^0.33.0",
+    "file-type": "^19.0.0",
+    "image-size": "^1.1.0",
+    "p-queue": "^8.0.0",
+    "p-retry": "^6.1.0",
+    "nanoid": "^5.0.4",
+    "mitt": "^3.0.1",
+    "comlink": "^4.4.1",
+    "idb": "^8.0.0"
+  },
+  "devDependencies": {
+    "@kiban/types": "workspace:*",
+    "@kiban/core": "workspace:*",
+    "@types/react": "^18.2.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}

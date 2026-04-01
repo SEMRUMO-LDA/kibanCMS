@@ -1,0 +1,62 @@
+{
+  "name": "@kiban/addons",
+  "version": "1.0.0",
+  "description": "kibanCMS Add-ons System - Extensible modules",
+  "author": "Kiban Agency <dev@kiban.pt>",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./cookie-notice": {
+      "types": "./dist/addons/cookie-notice/index.d.ts",
+      "import": "./dist/addons/cookie-notice/index.mjs",
+      "require": "./dist/addons/cookie-notice/index.js"
+    },
+    "./contact-form": {
+      "types": "./dist/addons/contact-form/index.d.ts",
+      "import": "./dist/addons/contact-form/index.mjs",
+      "require": "./dist/addons/contact-form/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "tsup --watch",
+    "build": "tsup",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo node_modules"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "zod": "^3.22.4",
+    "nanoid": "^5.0.4",
+    "js-cookie": "^3.0.5",
+    "react-hook-form": "^7.48.0"
+  },
+  "devDependencies": {
+    "@kiban/types": "workspace:*",
+    "@kiban/core": "workspace:*",
+    "@kiban/ui": "workspace:*",
+    "@types/react": "^18.2.0",
+    "@types/js-cookie": "^3.0.6",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}
