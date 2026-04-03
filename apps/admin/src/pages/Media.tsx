@@ -448,6 +448,7 @@ export const Media = () => {
   const [media, setMedia] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<MediaType>('all');
   const [isDragging, setIsDragging] = useState(false);
@@ -496,22 +497,26 @@ export const Media = () => {
     }
 
     setUploading(true);
+    setUploadProgress({ done: 0, total: files.length });
 
-    try {
-      const uploadPromises = files.map(async (file) => {
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const file of files) {
+      try {
         // Generate unique filename
         const fileExt = file.name.split('.').pop();
         const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
         const storagePath = `${user.id}/${uniqueName}`;
 
-        // Upload to Supabase Storage
+        // 1. Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('media')
-          .upload(storagePath, file);
+          .upload(storagePath, file, { contentType: file.type });
 
         if (uploadError) throw uploadError;
 
-        // Save metadata to database with correct column names
+        // 2. Save metadata to database
         const { error: dbError } = await supabase
           .from('media')
           .insert({
@@ -531,18 +536,25 @@ export const Media = () => {
           await supabase.storage.from('media').remove([storagePath]);
           throw dbError;
         }
-      });
 
-      await Promise.all(uploadPromises);
+        successCount++;
+      } catch (error: any) {
+        console.error(`Error uploading "${file.name}":`, error);
+        failCount++;
+      }
 
-      toast.success(`Successfully uploaded ${files.length} file(s)`);
-      loadMedia();
-    } catch (error: any) {
-      console.error('Error uploading files:', error);
-      toast.error('Failed to upload files: ' + error.message);
-    } finally {
-      setUploading(false);
+      setUploadProgress({ done: successCount + failCount, total: files.length });
     }
+
+    if (successCount > 0) {
+      toast.success(`Uploaded ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}`);
+      loadMedia();
+    } else {
+      toast.error(`All ${failCount} upload(s) failed`);
+    }
+
+    setUploading(false);
+    setUploadProgress(null);
   };
 
   const handleDelete = async (id: string, filename: string) => {
@@ -661,12 +673,16 @@ export const Media = () => {
         <div className="drop-icon">
           {uploading ? <Loader className="spin" /> : <Upload />}
         </div>
-        <h3>{uploading ? 'Uploading...' : 'Drop files to upload'}</h3>
+        <h3>{uploading && uploadProgress
+          ? `Uploading ${uploadProgress.done}/${uploadProgress.total}...`
+          : uploading ? 'Uploading...' : 'Drop files to upload'}</h3>
         <p>
-          or <strong>browse</strong> from your computer
+          {uploading
+            ? 'Please wait while your files are being uploaded'
+            : <>or <strong>browse</strong> from your computer</>}
         </p>
         <p className="supported">
-          Supports: Images (JPG, PNG, GIF, WebP), Videos (MP4, WebM), Documents (PDF)
+          Supports: Images (JPG, PNG, GIF, WebP), Videos (MP4, WebM), Documents (PDF) — Max 50MB
         </p>
       </DropZone>
 

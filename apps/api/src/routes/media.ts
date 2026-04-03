@@ -1,4 +1,5 @@
 import { Router, type Response } from 'express';
+import multer from 'multer';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
@@ -12,6 +13,19 @@ const ALLOWED_MIME_TYPES = [
   'audio/mpeg', 'audio/ogg', 'audio/wav',
   'application/pdf',
 ];
+
+// Multer config: store in memory buffer for upload to Supabase Storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported file type: ${file.mimetype}`));
+    }
+  },
+});
 
 /** Escape special ILIKE characters */
 function escapeIlike(str: string): string {
@@ -140,118 +154,190 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 /**
- * POST /api/v1/media/upload
- * Upload a media file via base64
+ * Shared upload logic for both multipart and base64 uploads.
+ * Takes a buffer, metadata, and profile ID, uploads to storage + creates DB record.
  */
-router.post('/upload', async (req: AuthRequest, res: Response) => {
+async function processUpload(
+  buffer: Buffer,
+  originalName: string,
+  mimeType: string,
+  authorId: string,
+  options: { alt_text?: string; caption?: string; folder_path?: string; is_public?: boolean }
+) {
+  const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const ext = safeName.split('.').pop() || '';
+  const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+  const storagePath = `${authorId}/${uniqueName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(storagePath, buffer, {
+      contentType: mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: { publicUrl } } = supabase.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(storagePath);
+
+  const { data: mediaRecord, error: dbError } = await supabase
+    .from('media')
+    .insert({
+      filename: uniqueName,
+      original_name: safeName,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      storage_path: storagePath,
+      bucket_name: BUCKET_NAME,
+      alt_text: options.alt_text || null,
+      caption: options.caption || null,
+      uploaded_by: authorId,
+      folder_path: options.folder_path || '/',
+      is_public: options.is_public || false,
+    })
+    .select()
+    .single();
+
+  if (dbError) {
+    // Cleanup storage on DB failure
+    await supabase.storage.from(BUCKET_NAME).remove([storagePath]);
+    throw dbError;
+  }
+
+  return { ...mediaRecord, url: publicUrl };
+}
+
+/**
+ * POST /api/v1/media/upload
+ * Upload a media file via multipart/form-data (preferred) or base64 JSON.
+ *
+ * Multipart: field name "file", optional fields: alt_text, caption, folder_path, is_public
+ * Base64:    JSON body with { file, filename, mime_type, alt_text?, caption?, folder_path?, is_public? }
+ */
+router.post('/upload', (req: AuthRequest, res: Response, next) => {
+  // Detect content type to route to multipart or base64 handler
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        const status = err.message.includes('Unsupported file type') ? 400 :
+                       err.message.includes('File too large') || (err as any).code === 'LIMIT_FILE_SIZE' ? 413 : 500;
+        return res.status(status).json({
+          error: {
+            message: err.message || 'Upload failed',
+            status,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+      handleMultipartUpload(req, res);
+    });
+  } else {
+    handleBase64Upload(req, res);
+  }
+});
+
+/** Handle multipart/form-data upload */
+async function handleMultipartUpload(req: AuthRequest, res: Response) {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({
+        error: { message: 'No file provided. Use field name "file".', status: 400, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const authorId = req.profileId;
+    if (!authorId) {
+      return res.status(401).json({
+        error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const folderPath = req.body.folder_path;
+    if (folderPath && (folderPath.includes('..') || folderPath.includes('\0'))) {
+      return res.status(400).json({
+        error: { message: 'Invalid folder path', status: 400, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const result = await processUpload(file.buffer, file.originalname, file.mimetype, authorId, {
+      alt_text: req.body.alt_text,
+      caption: req.body.caption,
+      folder_path: folderPath,
+      is_public: req.body.is_public === 'true' || req.body.is_public === true,
+    });
+
+    res.status(201).json({ data: result, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    console.error('Error uploading media (multipart):', error);
+    res.status(500).json({
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+}
+
+/** Handle base64 JSON upload (legacy/programmatic) */
+async function handleBase64Upload(req: AuthRequest, res: Response) {
   try {
     const { file, filename, mime_type, alt_text, caption, folder_path, is_public } = req.body;
 
     if (!file || !filename || !mime_type) {
-      res.status(400).json({
+      return res.status(400).json({
         error: {
           message: 'Missing required fields: file (base64), filename, mime_type',
           status: 400,
           timestamp: new Date().toISOString(),
         },
       });
-      return;
     }
 
     if (!ALLOWED_MIME_TYPES.includes(mime_type)) {
-      res.status(400).json({
-        error: {
-          message: `Unsupported file type: ${mime_type}`,
-          status: 400,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(400).json({
+        error: { message: `Unsupported file type: ${mime_type}`, status: 400, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    // Validate folder_path - no path traversal
     if (folder_path && (folder_path.includes('..') || folder_path.includes('\0'))) {
-      res.status(400).json({
+      return res.status(400).json({
         error: { message: 'Invalid folder path', status: 400, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const base64Data = file.replace(/^data:[^;]+;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');
 
     if (buffer.length > MAX_FILE_SIZE) {
-      res.status(400).json({
+      return res.status(413).json({
         error: {
           message: `File too large. Maximum size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
-          status: 400,
+          status: 413,
           timestamp: new Date().toISOString(),
         },
       });
-      return;
     }
 
     const authorId = req.profileId;
     if (!authorId) {
-      res.status(401).json({
+      return res.status(401).json({
         error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    // Sanitize filename - only allow safe characters
-    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const ext = safeName.split('.').pop() || '';
-    const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
-    const storagePath = `${authorId}/${uniqueName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(storagePath, buffer, {
-        contentType: mime_type,
-        upsert: false,
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(storagePath);
-
-    const { data: mediaRecord, error: dbError } = await supabase
-      .from('media')
-      .insert({
-        filename: uniqueName,
-        original_name: safeName,
-        mime_type,
-        size_bytes: buffer.length,
-        storage_path: storagePath,
-        bucket_name: BUCKET_NAME,
-        alt_text: alt_text || null,
-        caption: caption || null,
-        uploaded_by: authorId,
-        folder_path: folder_path || '/',
-        is_public: is_public || false,
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      await supabase.storage.from(BUCKET_NAME).remove([storagePath]);
-      throw dbError;
-    }
-
-    res.status(201).json({
-      data: { ...mediaRecord, url: publicUrl },
-      timestamp: new Date().toISOString(),
+    const result = await processUpload(buffer, filename, mime_type, authorId, {
+      alt_text, caption, folder_path, is_public,
     });
+
+    res.status(201).json({ data: result, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error uploading media:', error);
+    console.error('Error uploading media (base64):', error);
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
   }
-});
+}
 
 /**
  * PATCH /api/v1/media/:id
@@ -371,6 +457,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     if (dbError) throw dbError;
 
     res.json({
+      data: { id: file.id, filename: file.filename },
       message: 'Media file deleted successfully',
       timestamp: new Date().toISOString(),
     });

@@ -409,8 +409,8 @@ router.delete('/:slug', async (req: AuthRequest, res: Response) => {
     if (error) throw error;
 
     res.json({
+      data: { id: existing.id, slug },
       message: 'Collection deleted successfully',
-      details: { slug },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

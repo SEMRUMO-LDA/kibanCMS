@@ -79,12 +79,15 @@ export async function validateApiKey(
       return;
     }
 
-    // Update last_used_at timestamp (fire and forget)
+    // Update last_used_at timestamp (background, non-blocking)
     supabase
       .from('api_keys')
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', keyRecord.id)
-      .then(() => { /* no-op */ }, (err: any) => console.error('Failed to update last_used_at:', err));
+      .then(({ error: updateErr }) => {
+        if (updateErr) console.error('[Auth] Failed to update last_used_at:', updateErr.message);
+      })
+      .catch(() => { /* swallow - non-critical */ });
 
     // Attach profile ID to request
     req.profileId = keyRecord.profile_id;
@@ -128,9 +131,7 @@ export async function validateJWT(
     const token = authHeader.substring(7);
 
     // Verify JWT with Supabase (admin client needed for server-side token validation)
-    console.log('[JWT] Validating token, length:', token.length);
     const { data, error } = await supabaseAdmin.auth.getUser(token);
-    console.log('[JWT] Result:', error ? `ERROR: ${error.message}` : `OK: ${data.user?.email}`);
 
     if (error || !data.user) {
       res.status(401).json({

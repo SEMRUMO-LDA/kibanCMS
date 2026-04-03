@@ -411,7 +411,7 @@ export const Collections = () => {
     }
 
     return () => { active = false; };
-  }, [user]);
+  }, [user?.id]);
 
   if (loading) {
     return (

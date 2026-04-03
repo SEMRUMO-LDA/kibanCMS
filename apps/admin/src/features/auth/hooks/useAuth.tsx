@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabase';
 
@@ -23,8 +23,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const profileFetchedForId = useRef<string | null>(null);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -40,57 +41,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('[Auth] Profile fetch exception:', err);
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     let active = true;
 
-    async function init() {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error || !data.session) {
-          if (active) setLoading(false);
-          return;
-        }
-
-        if (active) {
-          setSession(data.session);
-          setUser(data.session.user);
-          setLoading(false); // Unblock UI immediately
-
-          // Load profile in background (non-blocking)
-          const profileData = await fetchProfile(data.session.user.id);
-          if (active && profileData) setProfile(profileData);
-        }
-      } catch (err) {
-        console.error('[Auth] Init error:', err);
-        if (active) setLoading(false);
-      }
-    }
-
-    init();
-
+    // Only use onAuthStateChange as the single source of truth.
+    // Supabase fires INITIAL_SESSION immediately when subscribing,
+    // so we don't need a separate getSession() call.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!active) return;
 
+      // Update session and user synchronously
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      setLoading(false);
 
       if (!newSession?.user) {
         setProfile(null);
-      } else if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
+        profileFetchedForId.current = null;
+        return;
+      }
+
+      // Only fetch profile on SIGNED_IN or first load (INITIAL_SESSION).
+      // Skip TOKEN_REFRESHED — profile doesn't change on token refresh.
+      if (_event === 'SIGNED_IN' || (_event === 'INITIAL_SESSION' && profileFetchedForId.current !== newSession.user.id)) {
+        profileFetchedForId.current = newSession.user.id;
         const profileData = await fetchProfile(newSession.user.id);
         if (active && profileData) setProfile(profileData);
       }
-
-      setLoading(false);
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = async () => {
     try {
@@ -101,6 +87,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setSession(null);
       setUser(null);
       setProfile(null);
+      profileFetchedForId.current = null;
       setLoading(false);
     }
   };
