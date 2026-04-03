@@ -1,0 +1,165 @@
+/**
+ * Admin API Client
+ *
+ * All admin data flows through OUR API server (which uses service role key).
+ * This eliminates RLS issues, JWT/token problems, and Supabase direct dependency.
+ *
+ * The API server is the same origin in production (unified server).
+ * Auth: JWT token from Supabase auth (passed in Authorization header).
+ */
+
+import { supabase } from './supabase';
+
+const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1';
+
+interface ApiResponse<T = any> {
+  data: T;
+  meta?: any;
+  message?: string;
+  timestamp: string;
+}
+
+interface ApiError {
+  error: {
+    message: string;
+    status: number;
+  };
+}
+
+class ApiClient {
+  private async getToken(): Promise<string | null> {
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async request<T = any>(
+    method: string,
+    path: string,
+    body?: any,
+    timeout = 10000
+  ): Promise<{ data: T | null; error: string | null; meta?: any }> {
+    const token = await this.getToken();
+    if (!token) {
+      return { data: null, error: 'Not authenticated' };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+      const json = await res.json();
+
+      if (!res.ok) {
+        return { data: null, error: (json as ApiError).error?.message || `HTTP ${res.status}` };
+      }
+
+      const response = json as ApiResponse<T>;
+      return { data: response.data, error: null, meta: response.meta };
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        return { data: null, error: 'Request timeout' };
+      }
+      return { data: null, error: err.message || 'Network error' };
+    }
+  }
+
+  // ── Collections ──
+  async getCollections() {
+    return this.request<any[]>('GET', '/collections');
+  }
+
+  async getCollection(slug: string) {
+    return this.request<any>('GET', `/collections/${slug}`);
+  }
+
+  async createCollection(data: any) {
+    return this.request<any>('POST', '/collections', data);
+  }
+
+  async updateCollection(slug: string, data: any) {
+    return this.request<any>('PUT', `/collections/${slug}`, data);
+  }
+
+  async deleteCollection(slug: string) {
+    return this.request<any>('DELETE', `/collections/${slug}`);
+  }
+
+  // ── Entries ──
+  async getEntries(collectionSlug: string, params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/entries/${collectionSlug}${qs}`);
+  }
+
+  async getEntry(collectionSlug: string, entrySlug: string) {
+    return this.request<any>('GET', `/entries/${collectionSlug}/${entrySlug}`);
+  }
+
+  async createEntry(collectionSlug: string, data: any) {
+    return this.request<any>('POST', `/entries/${collectionSlug}`, data);
+  }
+
+  async updateEntry(collectionSlug: string, entrySlug: string, data: any) {
+    return this.request<any>('PUT', `/entries/${collectionSlug}/${entrySlug}`, data);
+  }
+
+  async deleteEntry(collectionSlug: string, entrySlug: string) {
+    return this.request<any>('DELETE', `/entries/${collectionSlug}/${entrySlug}`);
+  }
+
+  // ── Users ──
+  async getUsers(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/users${qs}`);
+  }
+
+  async updateUser(id: string, data: any) {
+    return this.request<any>('PATCH', `/users/${id}`, data);
+  }
+
+  async deleteUser(id: string) {
+    return this.request<any>('DELETE', `/users/${id}`);
+  }
+
+  // ── Media ──
+  async getMedia(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/media${qs}`);
+  }
+
+  async deleteMedia(id: string) {
+    return this.request<any>('DELETE', `/media/${id}`);
+  }
+
+  // ── Webhooks ──
+  async getWebhooks() {
+    return this.request<any[]>('GET', '/webhooks');
+  }
+
+  // ── AI ──
+  async generateCollection(image: string, context?: string) {
+    return this.request<any>('POST', '/ai/generate-collection', { image, context }, 30000);
+  }
+
+  // ── Dashboard Stats ──
+  async getDashboardStats() {
+    return this.request<any>('GET', '/dashboard/stats');
+  }
+}
+
+export const api = new ApiClient();

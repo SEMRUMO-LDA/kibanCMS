@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -414,12 +415,8 @@ export const Collections = () => {
     if (!confirm(`Delete "${collection.name}" and ALL its entries? This cannot be undone.`)) return;
 
     try {
-      const { error: deleteError } = await supabase
-        .from('collections')
-        .delete()
-        .eq('id', collection.id);
-
-      if (deleteError) throw deleteError;
+      const { error } = await api.deleteCollection(collection.slug);
+      if (error) throw new Error(error);
       setCollections(prev => prev.filter(c => c.id !== collection.id));
     } catch (err: any) {
       alert('Failed to delete: ' + (err.message || 'Unknown error'));
@@ -434,29 +431,14 @@ export const Collections = () => {
         setLoading(true);
         setError(null);
 
-        const { data, error: fetchError } = await supabase
-          .from('collections')
-          .select('id, name, slug, description, type, icon, color, created_at, updated_at')
-          .order('name', { ascending: true });
-
-        if (fetchError) throw new Error(fetchError.message);
+        const { data, error: fetchError } = await api.getCollections();
+        if (fetchError) throw new Error(fetchError);
 
         if (active) {
           setCollections(data || []);
         }
       } catch (err: any) {
-        console.error('[Collections] Error fetching collections:', err);
-        if (active) {
-          const errorMsg = err.message || 'Failed to load collections';
-          setError(errorMsg);
-
-          // Show helpful message based on error type
-          if (errorMsg.includes('JWT')) {
-            setError('Authentication error. Please try logging out and back in.');
-          } else if (errorMsg.includes('timeout') || errorMsg.includes('AbortError')) {
-            setError('Connection timeout. Please check your internet connection or try again.');
-          }
-        }
+        if (active) setError(err.message || 'Failed to load collections');
       } finally {
         if (active) setLoading(false);
       }
