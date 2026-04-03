@@ -14,14 +14,29 @@ import { Media } from './pages/Media';
 import { Users } from './pages/Users';
 import { Settings } from './pages/Settings';
 
-// Protected Route Wrapper
+// Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, loading, profile } = useAuth();
 
   if (loading) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f9fafb 0%, #ffffff 50%, #ecfeff 100%)' }}>
-        <p style={{ color: '#6b7280' }}>Loading kibanCMS...</p>
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #f9fafb 0%, #ffffff 50%, #ecfeff 100%)',
+        gap: '12px',
+      }}>
+        <div style={{
+          width: '40px', height: '40px',
+          border: '3px solid #e5e7eb', borderTopColor: '#0d9488',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading kibanCMS...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -30,7 +45,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Check if onboarding is needed
+  // Onboarding check — only if profile is loaded (non-blocking)
   if (profile && !profile.onboarding_completed && window.location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }

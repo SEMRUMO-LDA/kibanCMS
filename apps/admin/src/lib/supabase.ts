@@ -17,14 +17,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Create Supabase client with type safety
+// Uses implicit flow (not PKCE) to avoid navigator.locks issues that
+// cause the admin to hang with "lock not released within 5000ms".
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    storage: window.localStorage,
-    storageKey: 'kibanCMS-auth',
-    flowType: 'pkce',
+    flowType: 'implicit',
   },
   global: {
     headers: {
@@ -33,11 +33,6 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
   db: {
     schema: 'public',
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
   },
 });
 
