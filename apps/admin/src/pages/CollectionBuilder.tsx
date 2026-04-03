@@ -13,7 +13,7 @@ import { COLLECTION_PRESETS, type CollectionPreset } from '../config/collection-
 import { FieldEditor, type FieldDefinition } from '../components/collection-builder/FieldEditor';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import {
   ArrowLeft,
   ArrowRight,
@@ -603,27 +603,20 @@ export const CollectionBuilder = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from('collections')
-        .insert({
-          name: collection.name,
-          slug: collection.slug,
-          description: collection.description || null,
-          type: collection.type,
-          icon: collection.icon,
-          color: collection.color,
-          fields: collection.fields,
-          created_by: user?.id,
-        })
-        .select('id, slug')
-        .single();
+      const { data, error } = await api.createCollection({
+        name: collection.name,
+        slug: collection.slug,
+        description: collection.description || null,
+        type: collection.type,
+        icon: collection.icon,
+        color: collection.color,
+        fields: collection.fields,
+      });
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(error);
+      if (!data) throw new Error('Failed to create collection');
 
-      // RLS can silently reject inserts (no error, no data)
-      if (!data) throw new Error('Permission denied. Your role may not allow creating collections.');
-
-      navigate(`/content/${data.slug}`);
+      navigate(`/content/${data.slug || collection.slug}`);
     } catch (error: any) {
       console.error('[CollectionBuilder] Error:', error);
       alert(`Failed to create collection: ${error.message}`);

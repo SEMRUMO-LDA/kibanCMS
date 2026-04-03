@@ -146,6 +146,39 @@ class ApiClient {
     return this.request<any>('DELETE', `/media/${id}`);
   }
 
+  /** Upload file via multipart/form-data to API server */
+  async uploadMedia(file: File, options?: { alt_text?: string; folder_path?: string; is_public?: boolean }): Promise<{ data: any | null; error: string | null }> {
+    const token = await this.getToken();
+    if (!token) return { data: null, error: 'Not authenticated' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000); // 60s for uploads
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (options?.alt_text) formData.append('alt_text', options.alt_text);
+      if (options?.folder_path) formData.append('folder_path', options.folder_path);
+      if (options?.is_public !== undefined) formData.append('is_public', String(options.is_public));
+
+      const res = await fetch(`${API_BASE}/media/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+      const json = await res.json();
+
+      if (!res.ok) return { data: null, error: json.error?.message || `HTTP ${res.status}` };
+      return { data: json.data, error: null };
+    } catch (err: any) {
+      clearTimeout(timer);
+      return { data: null, error: err.name === 'AbortError' ? 'Upload timeout' : err.message };
+    }
+  }
+
   // ── Webhooks ──
   async getWebhooks() {
     return this.request<any[]>('GET', '/webhooks');

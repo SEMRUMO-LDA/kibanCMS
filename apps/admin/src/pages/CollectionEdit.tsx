@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import {
@@ -303,8 +303,8 @@ export const CollectionEdit = () => {
     (async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase.from('collections').select('*').eq('slug', slug).single();
-        if (error) throw error;
+        const { data, error: fetchErr } = await api.getCollection(slug);
+        if (fetchErr || !data) throw new Error(fetchErr || 'Not found');
         setCollection({
           id: data.id, name: data.name, slug: data.slug,
           description: data.description || '', type: data.type,
@@ -347,11 +347,10 @@ export const CollectionEdit = () => {
     if (!collection.name) { alert('Name is required'); return; }
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from('collections')
-        .update({ name: collection.name, description: collection.description, type: collection.type, fields: collection.fields })
-        .eq('slug', slug!);
-      if (error) throw error;
+      const { error } = await api.updateCollection(slug!, {
+        name: collection.name, description: collection.description, type: collection.type, fields: collection.fields,
+      });
+      if (error) throw new Error(error);
       navigate(`/content/${collection.slug}`);
     } catch (err: any) {
       alert('Failed to save: ' + err.message);
@@ -364,8 +363,8 @@ export const CollectionEdit = () => {
     if (!confirm(`Delete "${collection.name}" and ALL its entries? This cannot be undone.`)) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('collections').delete().eq('slug', slug!);
-      if (error) throw error;
+      const { error } = await api.deleteCollection(slug!);
+      if (error) throw new Error(error);
       navigate('/content');
     } catch (err: any) {
       alert('Failed to delete: ' + err.message);

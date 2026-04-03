@@ -163,6 +163,34 @@ export async function validateJWT(
 }
 
 /**
+ * Dual Auth Middleware
+ * Accepts EITHER JWT (admin panel) OR API Key (external frontends).
+ * Tries JWT first (starts with eyJ), falls back to API key (starts with kiban_live_).
+ */
+export async function validateAny(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({
+      error: { message: 'Missing Authorization header', status: 401, timestamp: new Date().toISOString() },
+    });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+
+  // Route to appropriate validator
+  if (token.startsWith('kiban_live_')) {
+    return validateApiKey(req, res, next);
+  } else {
+    return validateJWT(req, res, next);
+  }
+}
+
+/**
  * CORS Middleware Helper
  */
 export function configureCors(allowedOrigins: string[]) {

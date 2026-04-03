@@ -11,6 +11,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { EntryEditor, type EntryData } from '../components/EntryEditor';
 import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { ArrowLeft, Loader, Clock } from 'lucide-react';
 import { RevisionHistory } from '../components/RevisionHistory';
@@ -155,29 +156,20 @@ export function EntryEdit() {
         setLoading(true);
         setError(null);
 
-        // Fetch collection
-        const { data: collectionData, error: collectionError } = await supabase
-          .from('collections')
-          .select('*')
-          .eq('slug', collectionSlug)
-          .single();
+        // Fetch collection via API
+        const { data: colData, error: colErr } = await api.getCollection(collectionSlug!);
+        if (colErr || !colData) throw new Error(colErr || 'Collection not found');
+        setCollection(colData);
 
-        if (collectionError) throw collectionError;
-        setCollection(collectionData);
-
-        // Fetch entry if in edit mode
-        if (isEditMode) {
-          const { data: entryData, error: entryError } = await supabase
-            .from('entries')
-            .select('*')
-            .eq('id', entryId)
-            .single();
-
-          if (entryError) throw entryError;
-          setEntry(entryData);
+        // Fetch entry via API if editing
+        if (isEditMode && collectionSlug) {
+          // Need to find entry by ID — use entries list filtered
+          const { data: entriesData } = await api.getEntries(collectionSlug);
+          const found = (entriesData || []).find((e: any) => e.id === entryId);
+          if (found) setEntry(found);
+          else throw new Error('Entry not found');
         }
       } catch (err: any) {
-        console.error('Error fetching data:', err);
         setError(err.message || 'Failed to load data');
       } finally {
         setLoading(false);
@@ -211,40 +203,22 @@ export function EntryEdit() {
       || 'entry';
 
     try {
-      if (isEditMode && entry) {
-        const { error } = await supabase
-          .from('entries')
-          .update({
-            title,
-            slug,
-            content: data,
-            status,
-            published_at: status === 'published' ? new Date().toISOString() : (entry as any).published_at,
-          } as any)
-          .eq('id', entry.id);
-
-        if (error) throw error;
+      if (isEditMode && entry && collectionSlug) {
+        const { error } = await api.updateEntry(collectionSlug, entry.slug, {
+          title, slug, content: data, status,
+        });
+        if (error) throw new Error(error);
         setIsDirty(false);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
       } else {
-        if (!user) throw new Error('User not authenticated');
-
-        const { error } = await supabase
-          .from('entries')
-          .insert({
-            collection_id: collection.id,
-            title,
-            slug,
-            content: data,
-            status,
-            published_at: status === 'published' ? new Date().toISOString() : null,
-            author_id: user.id,
-          } as any);
-
-        if (error) throw error;
+        if (!collectionSlug) throw new Error('No collection selected');
+        const { error } = await api.createEntry(collectionSlug, {
+          title, slug, content: data, status,
+        });
+        if (error) throw new Error(error);
         setIsDirty(false);
-        navigate(`/content/${collection.slug}`);
+        navigate(`/content/${collectionSlug}`);
       }
     } catch (err: any) {
       console.error('Error saving entry:', err);

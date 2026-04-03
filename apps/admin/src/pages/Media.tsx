@@ -496,39 +496,9 @@ export const Media = () => {
 
     for (const file of files) {
       try {
-        // Generate unique filename
-        const fileExt = file.name.split('.').pop();
-        const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-        const storagePath = `${user.id}/${uniqueName}`;
-
-        // 1. Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from('media')
-          .upload(storagePath, file, { contentType: file.type });
-
-        if (uploadError) throw uploadError;
-
-        // 2. Save metadata to database
-        const { error: dbError } = await supabase
-          .from('media')
-          .insert({
-            filename: uniqueName,
-            original_name: file.name,
-            mime_type: file.type,
-            size_bytes: file.size,
-            storage_path: storagePath,
-            bucket_name: 'media',
-            uploaded_by: user.id,
-            folder_path: '/',
-            is_public: false,
-          });
-
-        if (dbError) {
-          // Clean up storage on DB failure
-          await supabase.storage.from('media').remove([storagePath]);
-          throw dbError;
-        }
-
+        // Upload via API server (handles storage + DB in one request)
+        const { error } = await api.uploadMedia(file);
+        if (error) throw new Error(error);
         successCount++;
       } catch (error: any) {
         console.error(`Error uploading "${file.name}":`, error);
@@ -553,29 +523,13 @@ export const Media = () => {
     if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
 
     try {
-      // Get file info for storage cleanup
-      const fileToDelete = media.find(m => m.id === id);
-
-      // Delete from storage first
-      if (fileToDelete?.storage_path) {
-        await supabase.storage
-          .from(fileToDelete.bucket_name || 'media')
-          .remove([fileToDelete.storage_path]);
-      }
-
-      // Delete from database
-      const { error } = await supabase
-        .from('media')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const { error } = await api.deleteMedia(id);
+      if (error) throw new Error(error);
 
       setMedia(prev => prev.filter(m => m.id !== id));
       toast.success('File deleted successfully');
     } catch (error: any) {
-      console.error('Error deleting file:', error);
-      toast.error('Failed to delete file');
+      toast.error('Failed to delete file: ' + error.message);
     }
   };
 

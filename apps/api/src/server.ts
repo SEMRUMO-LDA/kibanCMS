@@ -12,7 +12,7 @@ import mediaRouter from './routes/media.js';
 import usersRouter from './routes/users.js';
 import aiRouter from './routes/ai.js';
 import dashboardRouter from './routes/dashboard.js';
-import { validateApiKey, validateJWT, configureCors } from './middleware/auth.js';
+import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
 // ES Module __dirname equivalent
@@ -93,9 +93,9 @@ app.get('/health', (req, res) => {
 // Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)
 app.use('/api/v1/collections', validateJWT, collectionsRouter);
 app.use('/api/v1/users', validateJWT, usersRouter);
-app.use('/api/v1/entries', validateApiKey, entriesRouter);
-app.use('/api/v1/media', validateApiKey, mediaRouter);
-app.use('/api/v1/webhooks', validateApiKey, webhooksRouter);
+app.use('/api/v1/entries', validateAny, entriesRouter);
+app.use('/api/v1/media', validateAny, mediaRouter);
+app.use('/api/v1/webhooks', validateAny, webhooksRouter);
 app.use('/api/v1/ai', validateJWT, aiRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 
