@@ -24,6 +24,14 @@ COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
 COPY apps/admin/ ./apps/admin/
 COPY packages/types/ ./packages/types/
 
+# Admin needs Supabase env vars at build time (baked into the JS bundle)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_API_URL
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_API_URL=$VITE_API_URL
+
 WORKDIR /app/apps/admin
 RUN pnpm build
 
@@ -60,14 +68,12 @@ COPY packages/types/package.json ./packages/types/
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
-# Environment
 ENV NODE_ENV=production
-ENV PORT=5001
 
-EXPOSE 5001
+EXPOSE ${PORT:-5001}
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:5001/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-5001}/health || exit 1
 
 WORKDIR /app/apps/api
 CMD ["node", "dist/server.js"]

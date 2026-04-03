@@ -129,7 +129,9 @@ export async function validateJWT(
     const token = authHeader.substring(7);
 
     // Verify JWT with Supabase (admin client needed for server-side token validation)
+    console.log('[JWT] Validating token, length:', token.length);
     const { data, error } = await supabaseAdmin.auth.getUser(token);
+    console.log('[JWT] Result:', error ? `ERROR: ${error.message}` : `OK: ${data.user?.email}`);
 
     if (error || !data.user) {
       res.status(401).json({

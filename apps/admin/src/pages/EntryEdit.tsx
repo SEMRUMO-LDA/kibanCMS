@@ -171,46 +171,62 @@ export function EntryEdit() {
     fetchData();
   }, [collectionSlug, entryId, isEditMode]);
 
-  const handleSave = async (data: EntryData) => {
+  const handleSave = async (data: EntryData, status: string) => {
     if (!collection) return;
+
+    // Extract a human-readable title from the data:
+    // 1. Explicit title/name field
+    // 2. First non-empty string value from any field
+    // 3. Fallback to "Untitled"
+    const title =
+      (data.title as string) ||
+      (data.name as string) ||
+      Object.values(data).find(v => typeof v === 'string' && v.trim().length > 0) as string ||
+      'Untitled';
+
+    const slug = title
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      || 'entry';
 
     try {
       if (isEditMode && entry) {
-        // Update existing entry
         const { error } = await supabase
           .from('entries')
           .update({
-            title: (data.title as string) || entry.title || 'Untitled',
-            slug: (data.slug as string) || entry.slug || 'untitled',
+            title,
+            slug,
             content: data,
-            updated_at: new Date().toISOString(),
-          })
+            status,
+            published_at: status === 'published' ? new Date().toISOString() : (entry as any).published_at,
+          } as any)
           .eq('id', entry.id);
 
         if (error) throw error;
       } else {
-        // Create new entry
         if (!user) throw new Error('User not authenticated');
+
 
         const { error } = await supabase
           .from('entries')
           .insert({
             collection_id: collection.id,
-            title: (data.title as string) || 'Untitled',
-            slug: (data.slug as string) || 'untitled',
+            title,
+            slug,
             content: data,
-            status: 'draft',
+            status,
+            published_at: status === 'published' ? new Date().toISOString() : null,
             author_id: user.id,
-          });
+          } as any);
 
         if (error) throw error;
-
-        // Navigate back to collection entries list
         navigate(`/content/${collection.slug}`);
       }
     } catch (err: any) {
       console.error('Error saving entry:', err);
-      throw err; // Re-throw so EntryEditor can handle it
+      throw err;
     }
   };
 
@@ -260,6 +276,7 @@ export function EntryEdit() {
       <EntryEditor
         fields={fields}
         initialData={entry?.content || {}}
+        initialStatus={entry?.status || 'draft'}
         onSave={handleSave}
         onCancel={handleCancel}
         saveButtonText={isEditMode ? 'Update Entry' : 'Create Entry'}

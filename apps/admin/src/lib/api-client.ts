@@ -5,14 +5,28 @@
 
 import { supabase } from './supabase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5001');
 
 /**
- * Get the current auth token from Supabase session
+ * Get the current auth token from Supabase session.
+ * If the session is expired, force a refresh before returning.
  */
 async function getAuthToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token || null;
+  const session = data.session;
+
+  if (!session) return null;
+
+  // If the token expires within 60 seconds, refresh proactively
+  const expiresAt = session.expires_at ?? 0;
+  const nowSecs = Math.floor(Date.now() / 1000);
+
+  if (expiresAt - nowSecs < 60) {
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return refreshed.session?.access_token || session.access_token;
+  }
+
+  return session.access_token;
 }
 
 /**
@@ -31,12 +45,10 @@ async function apiRequest<T = any>(
     }
 
     const url = `${API_URL}${endpoint}`;
-    console.log('[API Client] Request:', {
-      method: options.method || 'GET',
-      url,
-      hasToken: !!token,
-    });
+    console.log('[API Client] Request:', options.method || 'GET', url);
+    console.log('[API Client] Token preview:', token.substring(0, 20) + '...');
 
+    console.log('[API Client] Sending fetch...');
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -46,11 +58,7 @@ async function apiRequest<T = any>(
       },
     });
 
-    console.log('[API Client] Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-    });
+    console.log('[API Client] Response:', response.status, response.statusText);
 
     if (!response.ok) {
       const errorText = await response.text();

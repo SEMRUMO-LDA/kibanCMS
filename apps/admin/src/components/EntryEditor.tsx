@@ -39,7 +39,26 @@ const FormFooter = styled.div`
 
 const ButtonGroup = styled.div`
   display: flex;
+  align-items: center;
   gap: ${spacing[3]};
+`;
+
+const StatusSelect = styled.select`
+  padding: ${spacing[2.5]} ${spacing[4]};
+  border: 1px solid ${colors.gray[300]};
+  border-radius: ${borders.radius.md};
+  font-size: ${typography.fontSize.sm};
+  font-family: ${typography.fontFamily.sans};
+  font-weight: ${typography.fontWeight.medium};
+  color: ${colors.gray[700]};
+  background: ${colors.white};
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: ${colors.accent[500]};
+    box-shadow: 0 0 0 2px ${colors.accent[500]}20;
+  }
 `;
 
 const Button = styled.button<{ $variant?: 'primary' | 'secondary' }>`
@@ -152,10 +171,13 @@ export interface EntryData {
   [key: string]: any;
 }
 
+type ContentStatus = 'draft' | 'review' | 'published' | 'archived';
+
 interface EntryEditorProps {
   fields: FieldDefinition[];
   initialData?: EntryData;
-  onSave: (data: EntryData) => Promise<void>;
+  initialStatus?: ContentStatus;
+  onSave: (data: EntryData, status: ContentStatus) => Promise<void>;
   onCancel?: () => void;
   saveButtonText?: string;
 }
@@ -163,11 +185,13 @@ interface EntryEditorProps {
 export function EntryEditor({
   fields,
   initialData = {},
+  initialStatus = 'draft',
   onSave,
   onCancel,
   saveButtonText = 'Save Entry',
 }: EntryEditorProps) {
   const [data, setData] = useState<EntryData>(initialData);
+  const [status, setStatus] = useState<ContentStatus>(initialStatus);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isDirty, setIsDirty] = useState(false);
@@ -240,7 +264,7 @@ export function EntryEditor({
     setSaveStatus('saving');
 
     try {
-      await onSave(data);
+      await onSave(data, status);
       setSaveStatus('saved');
       setIsDirty(false);
 
@@ -315,13 +339,22 @@ export function EntryEditor({
                 Cancel
               </Button>
             )}
+            <StatusSelect
+              value={status}
+              onChange={(e) => { setStatus(e.target.value as ContentStatus); setIsDirty(true); }}
+            >
+              <option value="draft">Draft</option>
+              <option value="review">Review</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </StatusSelect>
             <Button
               type="submit"
               $variant="primary"
               disabled={saveStatus === 'saving'}
             >
               <Save />
-              {saveButtonText}
+              {status === 'published' ? 'Publish' : saveButtonText}
             </Button>
           </ButtonGroup>
         </FormFooter>

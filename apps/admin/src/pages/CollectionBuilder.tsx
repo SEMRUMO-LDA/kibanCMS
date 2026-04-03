@@ -569,7 +569,7 @@ export const CollectionBuilder = () => {
       return collection.name.trim() && collection.slug.trim() && collection.type;
     }
     if (currentStep === 2) {
-      return collection.fields.length > 0 && collection.fields.every(f => f.name && f.label);
+      return collection.fields.length > 0 && collection.fields.every(f => f.name || f.label);
     }
     return true;
   };
