@@ -83,7 +83,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
-    version: '1.0.0',
+    version: '1.2.0',
     mode: NODE_ENV,
   });
 });
