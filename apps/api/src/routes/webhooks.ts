@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
@@ -27,7 +28,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching webhooks:', error);
+    logger.error('Error fetching webhooks', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -112,7 +113,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error creating webhook:', error);
+    logger.error('Error creating webhook', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -143,7 +144,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
     res.json({ data: webhook, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error fetching webhook:', error);
+    logger.error('Error fetching webhook', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -225,7 +226,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
     res.json({ data: webhook, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error updating webhook:', error);
+    logger.error('Error updating webhook', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -266,7 +267,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 
     res.json({ message: 'Webhook deleted successfully', timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error deleting webhook:', error);
+    logger.error('Error deleting webhook', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -321,7 +322,7 @@ router.get('/:id/deliveries', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching deliveries:', error);
+    logger.error('Error fetching deliveries', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -374,7 +375,7 @@ router.post('/:id/test', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error sending test webhook:', error);
+    logger.error('Error sending test webhook', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });

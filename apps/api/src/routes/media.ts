@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
@@ -101,7 +102,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error listing media:', error);
+    logger.error('Error listing media', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -146,7 +147,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching media:', error);
+    logger.error('Error fetching media', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -272,7 +273,7 @@ async function handleMultipartUpload(req: AuthRequest, res: Response) {
 
     res.status(201).json({ data: result, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error uploading media (multipart):', error);
+    logger.error('Error uploading media (multipart)', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -332,7 +333,7 @@ async function handleBase64Upload(req: AuthRequest, res: Response) {
 
     res.status(201).json({ data: result, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error uploading media (base64):', error);
+    logger.error('Error uploading media (base64)', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -404,7 +405,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
     res.json({ data: file, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    console.error('Error updating media:', error);
+    logger.error('Error updating media', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -446,7 +447,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       .remove([file.storage_path]);
 
     if (storageError) {
-      console.warn('Failed to delete from storage:', storageError);
+      logger.warn('Failed to delete from storage', { detail: storageError });
     }
 
     const { error: dbError } = await supabase
@@ -462,7 +463,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error deleting media:', error);
+    logger.error('Error deleting media', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });

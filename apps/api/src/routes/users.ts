@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
@@ -89,7 +90,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error listing users:', error);
+    logger.error('Error listing users', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -133,7 +134,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching user:', error);
+    logger.error('Error fetching user', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -254,7 +255,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error updating user:', error);
+    logger.error('Error updating user', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -349,7 +350,7 @@ router.post('/invite', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error inviting user:', error);
+    logger.error('Error inviting user', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -412,7 +413,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error deleting user:', error);
+    logger.error('Error deleting user', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',

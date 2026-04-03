@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
@@ -32,7 +33,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching collections:', error);
+    logger.error('Error fetching collections', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -74,7 +75,7 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching collection:', error);
+    logger.error('Error fetching collection', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -190,7 +191,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error creating collection:', error);
+    logger.error('Error creating collection', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -330,7 +331,7 @@ router.put('/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error updating collection:', error);
+    logger.error('Error updating collection', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
@@ -414,7 +415,7 @@ router.delete('/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error deleting collection:', error);
+    logger.error('Error deleting collection', { error: error.message });
     res.status(500).json({
       error: {
         message: 'Internal server error',
