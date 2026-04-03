@@ -228,10 +228,11 @@ export const Dashboard = () => {
   const [scheduled, setScheduled] = useState<ScheduledEntry[]>([]);
   const [apiKeyCount, setApiKeyCount] = useState(0);
   const [activity, setActivity] = useState<any[]>([]);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
-    const timeout = setTimeout(() => setLoading(false), 10000);
-    fetchAll();
+    const timeout = setTimeout(() => { setLoading(false); setFetchError(true); }, 10000);
+    fetchAll().then(() => clearTimeout(timeout));
     return () => clearTimeout(timeout);
   }, []);
 
@@ -264,14 +265,20 @@ export const Dashboard = () => {
 
       setApiKeyCount(keysR.count || 0);
 
-      // Build collection stats (entry count per collection)
+      // Build collection stats — single query, group client-side
       if (colsR.data) {
-        const colIds = colsR.data.map(c => c.id);
-        const stats: CollectionStat[] = [];
-        for (const col of colsR.data) {
-          const { count } = await supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', col.id);
-          stats.push({ name: col.name, slug: col.slug, count: count || 0 });
-        }
+        const { data: allEntries } = await supabase
+          .from('entries')
+          .select('collection_id');
+
+        const countMap = new Map<string, number>();
+        (allEntries || []).forEach(e => {
+          countMap.set(e.collection_id, (countMap.get(e.collection_id) || 0) + 1);
+        });
+
+        const stats: CollectionStat[] = colsR.data.map(col => ({
+          name: col.name, slug: col.slug, count: countMap.get(col.id) || 0,
+        }));
         stats.sort((a, b) => b.count - a.count);
         setCollectionStats(stats);
       }
@@ -318,6 +325,18 @@ export const Dashboard = () => {
 
   return (
     <>
+      {/* Connection error banner */}
+      {fetchError && (
+        <div style={{
+          padding: '12px 16px', marginBottom: spacing[5],
+          background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: borders.radius.lg,
+          fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px',
+        }}>
+          <AlertCircle size={16} />
+          Some data may be incomplete — connection was slow. <button onClick={() => { setFetchError(false); setLoading(true); fetchAll(); }} style={{ background: 'none', border: 'none', color: '#92400e', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>Retry</button>
+        </div>
+      )}
+
       {/* Header */}
       <PageHeader>
         <h1>{getGreeting()}, {profile?.full_name?.split(' ')[0] || 'Admin'}</h1>

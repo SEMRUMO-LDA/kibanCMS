@@ -421,30 +421,28 @@ export const Onboarding = () => {
         manifest.collections_preset.includes(preset.id)
       );
 
-      console.log('[Onboarding] Creating', selectedPresets.length, 'collections');
+      // Create all collections in parallel
+      const results = await Promise.allSettled(
+        selectedPresets.map(preset =>
+          supabase.from('collections').insert({
+            name: preset.name,
+            slug: preset.slug,
+            description: preset.description,
+            type: preset.type,
+            icon: preset.icon,
+            color: preset.color,
+            fields: preset.fields,
+            created_by: user.id,
+          })
+        )
+      );
 
-      for (const preset of selectedPresets) {
-        const { error: collectionError } = await supabase.from('collections').insert({
-          name: preset.name,
-          slug: preset.slug,
-          description: preset.description,
-          type: preset.type,
-          icon: preset.icon,
-          color: preset.color,
-          fields: preset.fields,
-          created_by: user.id,
-        });
-
-        if (collectionError) {
-          console.error('[Onboarding] Collection creation error:', collectionError);
-        } else {
-          console.log('[Onboarding] Created collection:', preset.name);
-        }
+      const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
+      if (failed.length > 0 && failed.length === selectedPresets.length) {
+        throw new Error(`Failed to create collections. Please check your permissions.`);
       }
 
-      console.log('[Onboarding] Onboarding complete! Reloading page...');
-
-      // 3. Force full page reload to refresh auth state
+      // Redirect — partial success is OK (some may already exist)
       window.location.href = '/';
     } catch (err) {
       console.error('[Onboarding] Error:', err);
