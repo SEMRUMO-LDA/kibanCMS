@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 // Load environment variables
 dotenv.config();
 
-const app = express();
+const app: express.Express = express();
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['*'];

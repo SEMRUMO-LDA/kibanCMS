@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
-const router = Router();
+const router: Router = Router();
 
 const BUCKET_NAME = 'media';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB

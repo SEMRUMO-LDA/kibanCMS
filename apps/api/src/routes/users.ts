@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
-const router = Router();
+const router: Router = Router();
 
 /**
  * Helper: Check if current user is admin

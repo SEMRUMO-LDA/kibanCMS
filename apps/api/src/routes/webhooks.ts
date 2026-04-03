@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
-const router = Router();
+const router: Router = Router();
 
 // Fields to return (never expose secret in list/get)
 const WEBHOOK_SELECT = 'id, name, url, events, collections, enabled, total_deliveries, failed_deliveries, last_delivery_at, last_error, profile_id, created_at, updated_at';
