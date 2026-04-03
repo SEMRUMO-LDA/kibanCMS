@@ -441,10 +441,10 @@ export const Collections = () => {
       }
     }
 
-    // Wait for user/profile to be loaded before fetching
-    if (user && profile) {
+    // Fetch when user is available (don't wait for profile)
+    if (user) {
       fetchCollections();
-    } else if (!user) {
+    } else if (!loading) {
       setLoading(false);
       setError('Not authenticated');
     }
@@ -453,7 +453,7 @@ export const Collections = () => {
       active = false;
       clearTimeout(failsafe);
     };
-  }, [user, profile]); // Re-fetch when user/profile changes
+  }, [user]); // Re-fetch when user changes
 
   if (loading) {
     return (

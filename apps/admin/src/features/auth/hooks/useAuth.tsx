@@ -24,37 +24,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      if (error) {
+        console.error('[Auth] Profile fetch error:', error.message);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      console.error('[Auth] Profile fetch exception:', err);
+      return null;
+    }
+  };
+
   useEffect(() => {
     let active = true;
-
-    // Failsafe: Always disable loading after 2 seconds max
-    const failsafe = setTimeout(() => setLoading(false), 2000);
 
     async function init() {
       try {
         const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        if (error || !data.session) {
+          if (active) setLoading(false);
+          return;
+        }
 
-        if (active && data.session) {
+        if (active) {
           setSession(data.session);
           setUser(data.session.user);
-          
-          try {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', data.session.user.id)
-              .single();
-            if (active) setProfile(profileData);
-          } catch (err) {
-            console.error(err);
-          }
+          setLoading(false); // Unblock UI immediately
+
+          // Load profile in background (non-blocking)
+          const profileData = await fetchProfile(data.session.user.id);
+          if (active && profileData) setProfile(profileData);
         }
       } catch (err) {
-        console.error("Init Error:", err);
-      } finally {
+        console.error('[Auth] Init error:', err);
         if (active) setLoading(false);
-        clearTimeout(failsafe);
       }
     }
 
@@ -69,55 +79,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (!newSession?.user) {
         setProfile(null);
       } else if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
-        try {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', newSession.user.id)
-            .single();
-          if (active) setProfile(profileData);
-        } catch (err) {
-          console.error(err);
-        }
+        const profileData = await fetchProfile(newSession.user.id);
+        if (active && profileData) setProfile(profileData);
       }
 
       setLoading(false);
-      clearTimeout(failsafe);
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
-      clearTimeout(failsafe);
     };
   }, []);
 
   const signOut = async () => {
     try {
-      setLoading(true);
-
-      // Timeout protection - force complete after 3 seconds
-      const timeoutId = setTimeout(() => {
-        console.warn('[Auth] SignOut timeout - forcing completion');
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
-      }, 3000);
-
       await supabase.auth.signOut();
-
-      clearTimeout(timeoutId);
-      setSession(null);
-      setUser(null);
-      setProfile(null);
     } catch (error) {
       console.error('[Auth] SignOut error:', error);
-      // Force clear even on error
+    } finally {
       setSession(null);
       setUser(null);
       setProfile(null);
-    } finally {
       setLoading(false);
     }
   };
