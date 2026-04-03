@@ -1,16 +1,24 @@
 /**
  * ImageField Component
  *
- * Image upload and selection
- * For v1.0, using simple URL input
- * Future: Integrate with Media Library for drag-drop upload
+ * Image selection with integrated Media Library picker.
+ * - Browse from existing media library
+ * - Upload new image directly
+ * - Paste URL manually
  */
 
-import { useState } from 'react';
-import styled from 'styled-components';
-import { colors, spacing, typography, borders, animations } from '../../shared/styles/design-tokens';
+import { useState, useRef, useCallback } from 'react';
+import styled, { keyframes } from 'styled-components';
+import { colors, spacing, typography, borders, shadows, animations } from '../../shared/styles/design-tokens';
 import { FieldWrapper } from './FieldWrapper';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, FolderOpen, Link, Loader, Check } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+
+const fadeIn = keyframes`
+  from { opacity: 0; }
+  to { opacity: 1; }
+`;
 
 const ImageContainer = styled.div`
   display: flex;
@@ -30,15 +38,19 @@ const PreviewArea = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   transition: all ${animations.duration.fast} ${animations.easing.out};
 
   &:hover {
-    border-color: ${colors.gray[400]};
+    border-color: ${colors.accent[400]};
+    background: ${colors.accent[50]};
   }
 
   &[data-has-image="true"] {
     border-style: solid;
     border-color: ${colors.gray[300]};
+    cursor: default;
+    &:hover { border-color: ${colors.gray[300]}; background: transparent; }
   }
 `;
 
@@ -57,101 +69,151 @@ const PlaceholderContent = styled.div`
   text-align: center;
   padding: ${spacing[4]};
 
-  svg {
-    width: 48px;
-    height: 48px;
-  }
-
-  p {
-    font-size: ${typography.fontSize.sm};
-    margin: 0;
-  }
+  svg { width: 40px; height: 40px; }
+  p { font-size: ${typography.fontSize.sm}; margin: 0; }
+  .hint { font-size: ${typography.fontSize.xs}; color: ${colors.gray[400]}; }
 `;
 
 const RemoveButton = styled.button`
   position: absolute;
   top: ${spacing[2]};
   right: ${spacing[2]};
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: ${borders.radius.full};
-  background: ${colors.white};
-  border: 1px solid ${colors.gray[300]};
-  color: ${colors.gray[700]};
+  background: rgba(0,0,0,0.6);
+  border: none;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   opacity: 0;
-  transition: all ${animations.duration.fast} ${animations.easing.out};
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: opacity 0.15s;
 
-  ${PreviewArea}:hover & {
-    opacity: 1;
-  }
-
-  &:hover {
-    background: ${colors.gray[100]};
-    border-color: ${colors.gray[400]};
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
+  ${PreviewArea}:hover & { opacity: 1; }
+  &:hover { background: rgba(0,0,0,0.8); }
 `;
 
-const UrlInput = styled.input`
-  width: 100%;
-  padding: ${spacing[3]} ${spacing[4]};
-  font-size: ${typography.fontSize.sm};
-  font-family: ${typography.fontFamily.sans};
-  color: ${colors.gray[900]};
+const ActionButtons = styled.div`
+  display: flex;
+  gap: ${spacing[2]};
+  flex-wrap: wrap;
+`;
+
+const ActionBtn = styled.button`
+  padding: ${spacing[2]} ${spacing[3]};
   background: ${colors.white};
   border: 1px solid ${colors.gray[300]};
   border-radius: ${borders.radius.md};
-  transition: all ${animations.duration.fast} ${animations.easing.out};
-
-  &::placeholder {
-    color: ${colors.gray[400]};
-  }
-
-  &:hover {
-    border-color: ${colors.gray[400]};
-  }
-
-  &:focus {
-    outline: none;
-    border-color: ${colors.accent[500]};
-    box-shadow: 0 0 0 3px ${colors.focus};
-  }
-`;
-
-const UploadButton = styled.button`
-  padding: ${spacing[2]} ${spacing[4]};
-  background: ${colors.accent[500]};
-  color: ${colors.white};
-  border: none;
-  border-radius: ${borders.radius.md};
-  font-size: ${typography.fontSize.sm};
-  font-weight: ${typography.fontWeight.semibold};
+  font-size: ${typography.fontSize.xs};
+  font-weight: ${typography.fontWeight.medium};
+  color: ${colors.gray[700]};
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: ${spacing[2]};
-  transition: all ${animations.duration.fast} ${animations.easing.out};
+  transition: all 0.15s;
+  font-family: ${typography.fontFamily.sans};
 
-  &:hover {
-    background: ${colors.accent[600]};
+  &:hover { background: ${colors.gray[50]}; border-color: ${colors.gray[400]}; }
+  &.primary {
+    background: ${colors.accent[500]};
+    border-color: ${colors.accent[500]};
+    color: #fff;
+    &:hover { background: ${colors.accent[600]}; }
+  }
+  svg { width: 14px; height: 14px; }
+`;
+
+// Media picker modal styles
+const PickerOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${spacing[4]};
+  animation: ${fadeIn} 0.15s;
+`;
+
+const PickerModal = styled.div`
+  width: 100%;
+  max-width: 800px;
+  max-height: 80vh;
+  background: ${colors.white};
+  border-radius: ${borders.radius['2xl']};
+  box-shadow: ${shadows['2xl']};
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+`;
+
+const PickerHeader = styled.div`
+  padding: ${spacing[5]} ${spacing[5]} ${spacing[4]};
+  border-bottom: 1px solid ${colors.gray[200]};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 { margin: 0; font-size: ${typography.fontSize.lg}; font-weight: ${typography.fontWeight.semibold}; }
+  button {
+    background: none; border: none; cursor: pointer; color: ${colors.gray[400]};
+    padding: ${spacing[1]}; border-radius: ${borders.radius.md};
+    &:hover { color: ${colors.gray[600]}; background: ${colors.gray[100]}; }
+  }
+`;
+
+const PickerGrid = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding: ${spacing[4]};
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: ${spacing[3]};
+`;
+
+const PickerItem = styled.div<{ $selected?: boolean }>`
+  aspect-ratio: 1;
+  border-radius: ${borders.radius.lg};
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid ${props => props.$selected ? colors.accent[500] : colors.gray[200]};
+  position: relative;
+  transition: all 0.15s;
+
+  &:hover { border-color: ${colors.accent[400]}; }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
-  &:active {
-    transform: scale(0.98);
+  .check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: ${colors.accent[500]};
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+`;
 
-  svg {
-    width: 16px;
-    height: 16px;
-  }
+const PickerEmpty = styled.div`
+  grid-column: 1 / -1;
+  padding: ${spacing[10]};
+  text-align: center;
+  color: ${colors.gray[500]};
+  font-size: ${typography.fontSize.sm};
 `;
 
 interface ImageFieldProps {
@@ -175,16 +237,83 @@ export function ImageField({
   helpText,
   error,
 }: ImageFieldProps) {
-  const [urlInput, setUrlInput] = useState(value);
+  const { user } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const handleUrlChange = (newUrl: string) => {
-    setUrlInput(newUrl);
-    onChange(newUrl);
+  const openPicker = useCallback(async () => {
+    setShowPicker(true);
+    setPickerLoading(true);
+    try {
+      const { data } = await supabase
+        .from('media')
+        .select('*')
+        .ilike('mime_type', 'image/%')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const files = (data || []).map((f: any) => {
+        const { data: { publicUrl } } = supabase.storage
+          .from(f.bucket_name || 'media')
+          .getPublicUrl(f.storage_path);
+        return { ...f, url: publicUrl };
+      });
+      setMediaFiles(files);
+    } catch {
+      // Silently fail
+    } finally {
+      setPickerLoading(false);
+    }
+  }, []);
+
+  const handleUpload = async (file: File) => {
+    if (!user) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+      const storagePath = `${user.id}/${uniqueName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(storagePath, file, { contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(storagePath);
+
+      await supabase.from('media').insert({
+        filename: uniqueName,
+        original_name: file.name,
+        mime_type: file.type,
+        size_bytes: file.size,
+        storage_path: storagePath,
+        bucket_name: 'media',
+        uploaded_by: user.id,
+        folder_path: '/',
+        is_public: false,
+      });
+
+      onChange(publicUrl);
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const handleRemove = () => {
-    setUrlInput('');
-    onChange('');
+  const handleRemove = () => onChange('');
+
+  const handleUrlSubmit = () => {
+    if (urlInput.trim()) {
+      onChange(urlInput.trim());
+      setShowUrlInput(false);
+      setUrlInput('');
+    }
   };
 
   return (
@@ -192,43 +321,107 @@ export function ImageField({
       label={label}
       name={name}
       required={required}
-      helpText={helpText || 'Enter an image URL or upload an image'}
+      helpText={helpText || 'Select from media library, upload, or paste a URL'}
       error={error}
     >
       <ImageContainer>
-        <PreviewArea data-has-image={!!value}>
+        <PreviewArea
+          data-has-image={!!value}
+          onClick={() => !value && openPicker()}
+        >
           {value ? (
             <>
               <PreviewImage src={value} alt="Preview" />
-              <RemoveButton
-                type="button"
-                onClick={handleRemove}
-                title="Remove image"
-              >
-                <X size={16} />
+              <RemoveButton type="button" onClick={handleRemove}>
+                <X size={14} />
               </RemoveButton>
             </>
           ) : (
             <PlaceholderContent>
               <ImageIcon />
-              <p>No image selected</p>
+              <p>Click to select an image</p>
+              <span className="hint">or use the buttons below</span>
             </PlaceholderContent>
           )}
         </PreviewArea>
 
-        <UrlInput
-          type="url"
-          value={urlInput}
-          onChange={(e) => handleUrlChange(e.target.value)}
-          placeholder="https://example.com/image.jpg"
-          disabled={disabled}
-        />
+        {showUrlInput ? (
+          <div style={{ display: 'flex', gap: spacing[2] }}>
+            <input
+              type="url"
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
+              placeholder="https://example.com/image.jpg"
+              style={{
+                flex: 1, padding: `${spacing[2]} ${spacing[3]}`,
+                border: `1px solid ${colors.gray[300]}`, borderRadius: borders.radius.md,
+                fontSize: typography.fontSize.sm, fontFamily: typography.fontFamily.sans,
+              }}
+              autoFocus
+            />
+            <ActionBtn onClick={handleUrlSubmit}><Check size={14} /></ActionBtn>
+            <ActionBtn onClick={() => setShowUrlInput(false)}><X size={14} /></ActionBtn>
+          </div>
+        ) : (
+          <ActionButtons>
+            <ActionBtn className="primary" onClick={openPicker} disabled={disabled}>
+              <FolderOpen /> Media Library
+            </ActionBtn>
+            <ActionBtn onClick={() => fileRef.current?.click()} disabled={disabled || uploading}>
+              <Upload /> {uploading ? 'Uploading...' : 'Upload'}
+            </ActionBtn>
+            <ActionBtn onClick={() => setShowUrlInput(true)} disabled={disabled}>
+              <Link /> Paste URL
+            </ActionBtn>
+          </ActionButtons>
+        )}
 
-        <UploadButton type="button" disabled={disabled}>
-          <Upload />
-          Upload Image (Coming Soon)
-        </UploadButton>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) handleUpload(file);
+          }}
+        />
       </ImageContainer>
+
+      {/* Media Library Picker Modal */}
+      {showPicker && (
+        <PickerOverlay onClick={() => setShowPicker(false)}>
+          <PickerModal onClick={e => e.stopPropagation()}>
+            <PickerHeader>
+              <h3>Select Image</h3>
+              <button onClick={() => setShowPicker(false)}><X size={20} /></button>
+            </PickerHeader>
+            <PickerGrid>
+              {pickerLoading ? (
+                <PickerEmpty>
+                  <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                </PickerEmpty>
+              ) : mediaFiles.length === 0 ? (
+                <PickerEmpty>No images in media library. Upload one first.</PickerEmpty>
+              ) : (
+                mediaFiles.map(file => (
+                  <PickerItem
+                    key={file.id}
+                    $selected={value === file.url}
+                    onClick={() => { onChange(file.url); setShowPicker(false); }}
+                  >
+                    <img src={file.url} alt={file.original_name || file.filename} />
+                    {value === file.url && (
+                      <div className="check"><Check size={14} /></div>
+                    )}
+                  </PickerItem>
+                ))
+              )}
+            </PickerGrid>
+          </PickerModal>
+        </PickerOverlay>
+      )}
     </FieldWrapper>
   );
 }

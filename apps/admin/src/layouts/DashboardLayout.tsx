@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { CommandPalette } from '../components/CommandPalette';
 import {
   Building2,
   LayoutDashboard,
@@ -405,9 +406,22 @@ const SearchHint = styled.div`
 
 export const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Cmd+K / Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -446,7 +460,7 @@ export const DashboardLayout = () => {
           <h1>kibanCMS</h1>
         </LogoSection>
 
-        <SearchHint>
+        <SearchHint onClick={() => setCommandPaletteOpen(true)}>
           <Command size={14} />
           <span>Quick search</span>
           <kbd>⌘K</kbd>
@@ -524,6 +538,11 @@ export const DashboardLayout = () => {
           <Outlet />
         </ContentWrapper>
       </MainContent>
+
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
     </Container>
   );
 };
