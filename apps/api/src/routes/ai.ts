@@ -79,7 +79,7 @@ router.post('/generate-collection', async (req: AuthRequest, res: Response) => {
     const base64Data = base64Match ? base64Match[2] : image.replace(/^data:[^;]+;base64,/, '');
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const userPrompt = context
       ? `Analyze this image and generate a CMS collection schema. Additional context: "${context}"`
@@ -131,7 +131,7 @@ router.post('/generate-collection', async (req: AuthRequest, res: Response) => {
 
     res.json({
       data: schema,
-      meta: { model: 'gemini-2.0-flash' },
+      meta: { model: 'gemini-2.5-flash' },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
