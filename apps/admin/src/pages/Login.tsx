@@ -318,7 +318,7 @@ export const Login = () => {
 
         <Footer>
           <p>
-            Powered by <strong>kibanCMS</strong> v1.0
+            Powered by <strong>kibanCMS</strong> v1.2
           </p>
         </Footer>
       </FormBox>
