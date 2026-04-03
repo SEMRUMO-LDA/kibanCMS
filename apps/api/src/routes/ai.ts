@@ -1,11 +1,11 @@
 import { Router, type Response } from 'express';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const SYSTEM_PROMPT = `You are kibanCMS AI — an expert CMS schema designer.
 
@@ -22,7 +22,7 @@ RULES:
 8. If you see a form, each input becomes a field.
 9. Group related content logically.
 
-OUTPUT FORMAT (strict JSON):
+OUTPUT FORMAT (strict JSON, nothing else):
 {
   "name": "Collection Name",
   "slug": "collection-name",
@@ -45,82 +45,67 @@ OUTPUT FORMAT (strict JSON):
 
 /**
  * POST /api/v1/ai/generate-collection
- * Accepts an image (base64 or URL) and returns a collection schema.
+ * Accepts an image (base64) and returns a collection schema.
+ * Uses Google Gemini (free tier: 15 RPM).
  * Requires JWT auth (admin only).
  */
 router.post('/generate-collection', async (req: AuthRequest, res: Response) => {
   try {
-    if (!ANTHROPIC_API_KEY) {
+    if (!GEMINI_API_KEY) {
       return res.status(503).json({
         error: {
-          message: 'AI features are not configured. Set ANTHROPIC_API_KEY in environment.',
+          message: 'AI features are not configured. Set GEMINI_API_KEY in environment variables.',
           status: 503,
           timestamp: new Date().toISOString(),
         },
       });
     }
 
-    const { image, image_url, context } = req.body;
+    const { image, context } = req.body;
 
-    if (!image && !image_url) {
+    if (!image) {
       return res.status(400).json({
         error: {
-          message: 'Provide either "image" (base64) or "image_url"',
+          message: 'Provide "image" as base64 encoded string',
           status: 400,
           timestamp: new Date().toISOString(),
         },
       });
     }
 
-    // Build the image content block
-    const imageContent: Anthropic.ImageBlockParam = image_url
-      ? { type: 'image', source: { type: 'url', url: image_url } }
-      : {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: detectMediaType(image),
-            data: image.replace(/^data:[^;]+;base64,/, ''),
-          },
-        };
+    // Extract base64 data and mime type
+    const base64Match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+    const mimeType = base64Match ? base64Match[1] : 'image/jpeg';
+    const base64Data = base64Match ? base64Match[2] : image.replace(/^data:[^;]+;base64,/, '');
 
-    const userMessage: Anthropic.MessageParam = {
-      role: 'user',
-      content: [
-        imageContent,
-        {
-          type: 'text',
-          text: context
-            ? `Analyze this image and generate a CMS collection schema. Additional context from the user: "${context}"`
-            : 'Analyze this image and generate a CMS collection schema for the content shown.',
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const userPrompt = context
+      ? `Analyze this image and generate a CMS collection schema. Additional context: "${context}"`
+      : 'Analyze this image and generate a CMS collection schema for the content shown.';
+
+    logger.info('AI collection generation requested');
+
+    const result = await model.generateContent([
+      { text: SYSTEM_PROMPT + '\n\n' + userPrompt },
+      {
+        inlineData: {
+          mimeType,
+          data: base64Data,
         },
-      ],
-    };
+      },
+    ]);
 
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-
-    logger.info('AI collection generation requested', { hasImage: !!image, hasUrl: !!image_url });
-
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      system: SYSTEM_PROMPT,
-      messages: [userMessage],
-    });
-
-    // Extract text response
-    const textBlock = response.content.find((b) => b.type === 'text');
-    if (!textBlock || textBlock.type !== 'text') {
-      throw new Error('No text response from AI');
-    }
+    const responseText = result.response.text();
 
     // Parse JSON from response (handle potential markdown wrapping)
     let schema;
     try {
-      const jsonStr = textBlock.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const jsonStr = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       schema = JSON.parse(jsonStr);
     } catch {
-      throw new Error('AI returned invalid JSON: ' + textBlock.text.substring(0, 200));
+      throw new Error('AI returned invalid JSON: ' + responseText.substring(0, 200));
     }
 
     // Validate minimum schema structure
@@ -146,13 +131,7 @@ router.post('/generate-collection', async (req: AuthRequest, res: Response) => {
 
     res.json({
       data: schema,
-      meta: {
-        model: 'claude-sonnet-4-20250514',
-        usage: {
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
-        },
-      },
+      meta: { model: 'gemini-2.0-flash' },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -166,12 +145,5 @@ router.post('/generate-collection', async (req: AuthRequest, res: Response) => {
     });
   }
 });
-
-function detectMediaType(base64: string): 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' {
-  if (base64.startsWith('data:image/png')) return 'image/png';
-  if (base64.startsWith('data:image/gif')) return 'image/gif';
-  if (base64.startsWith('data:image/webp')) return 'image/webp';
-  return 'image/jpeg';
-}
 
 export default router;
