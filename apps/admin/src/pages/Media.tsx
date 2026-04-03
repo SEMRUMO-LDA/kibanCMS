@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useToast } from '../components/Toast';
 
@@ -463,22 +464,11 @@ export const Media = () => {
   const loadMedia = async () => {
     try {
       setLoading(true);
-      const { data, error } = await Promise.race([
-        supabase.from('media').select('*').order('created_at', { ascending: false }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 8000)),
-      ]);
-
-      if (error) throw error;
-
-      // Generate public URLs for each file
-      const filesWithUrls = (data || []).map((file: any) => {
-        const { data: { publicUrl } } = supabase.storage
-          .from(file.bucket_name || 'media')
-          .getPublicUrl(file.storage_path);
-        return { ...file, url: publicUrl };
-      });
-
-      setMedia(filesWithUrls);
+      const { data: apiData, error: apiError } = await api.getMedia();
+      if (apiError) throw new Error(apiError);
+      const data = apiData;
+      // API already returns URLs
+      setMedia(data || []);
     } catch (error: any) {
       console.error('Error loading media:', error);
       toast.error('Failed to load media files');

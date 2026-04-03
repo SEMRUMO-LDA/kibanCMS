@@ -11,6 +11,7 @@ import webhooksRouter from './routes/webhooks.js';
 import mediaRouter from './routes/media.js';
 import usersRouter from './routes/users.js';
 import aiRouter from './routes/ai.js';
+import dashboardRouter from './routes/dashboard.js';
 import { validateApiKey, validateJWT, configureCors } from './middleware/auth.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
@@ -96,6 +97,7 @@ app.use('/api/v1/entries', validateApiKey, entriesRouter);
 app.use('/api/v1/media', validateApiKey, mediaRouter);
 app.use('/api/v1/webhooks', validateApiKey, webhooksRouter);
 app.use('/api/v1/ai', validateJWT, aiRouter);
+app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 
 // Serve Admin UI (static files from admin build)
 if (NODE_ENV === 'production') {

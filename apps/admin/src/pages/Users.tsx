@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useToast } from '../components/Toast';
 
@@ -531,16 +532,12 @@ export const Users = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const result = await Promise.race([
-        supabase.from('profiles').select('id, email, full_name, role, created_at, updated_at').order('created_at', { ascending: false }),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 8000)),
-      ]);
-
-      if (result.error) throw result.error;
-      setUsers(result.data || []);
+      const { data, error } = await api.getUsers();
+      if (error) throw new Error(error);
+      setUsers(data || []);
     } catch (error: any) {
       console.error('Error loading users:', error);
-      toast.error('Failed to load users: ' + (error.message || 'timeout'));
+      toast.error('Failed to load users: ' + (error.message || 'unknown'));
     } finally {
       setLoading(false);
     }
