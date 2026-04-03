@@ -16,6 +16,7 @@
     "test:smoke": "node --import tsx --test src/__tests__/smoke.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@supabase/supabase-js": "^2.39.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
