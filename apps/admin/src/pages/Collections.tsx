@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { api } from '../lib/api-client';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { FileText, ArrowRight, Loader, Code, Plus } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -372,51 +372,20 @@ export const Collections = () => {
 
   useEffect(() => {
     let active = true;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
-
-    // Failsafe: Stop loading after 10 seconds
-    const failsafe = setTimeout(() => {
-      if (active) {
-        console.warn('[Collections] Failsafe triggered - stopping loading');
-        setLoading(false);
-        setError('Request timeout. Please refresh the page or check your connection.');
-      }
-    }, 10000);
 
     async function fetchCollections() {
       try {
         setLoading(true);
         setError(null);
 
-        console.log('[Collections] Fetching collections... (attempt', retryCount + 1, ')');
-        console.log('[Collections] Current user:', user?.email);
-        console.log('[Collections] User role:', profile?.role);
+        const { data, error: fetchError } = await supabase
+          .from('collections')
+          .select('id, name, slug, description, type, icon, color, created_at, updated_at')
+          .order('name', { ascending: true });
 
-        const { data, error: fetchError } = await api.collections.list();
-
-        console.log('[Collections] Response:', {
-          data: data?.slice(0, 3), // Only log first 3 for brevity
-          error: fetchError,
-          count: data?.length
-        });
-
-        if (fetchError) {
-          // Retry on timeout or network errors
-          if (retryCount < MAX_RETRIES && (
-            fetchError.includes('timeout') ||
-            fetchError.includes('network')
-          )) {
-            retryCount++;
-            console.log('[Collections] Retrying...', retryCount, '/', MAX_RETRIES);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-            return fetchCollections();
-          }
-          throw new Error(fetchError);
-        }
+        if (fetchError) throw new Error(fetchError.message);
 
         if (active) {
-          console.log('[Collections] Setting collections:', data?.length || 0);
           setCollections(data || []);
         }
       } catch (err: any) {
@@ -433,27 +402,16 @@ export const Collections = () => {
           }
         }
       } finally {
-        if (active) {
-          setLoading(false);
-          console.log('[Collections] Loading complete');
-        }
-        clearTimeout(failsafe);
+        if (active) setLoading(false);
       }
     }
 
-    // Fetch when user is available (don't wait for profile)
     if (user) {
       fetchCollections();
-    } else if (!loading) {
-      setLoading(false);
-      setError('Not authenticated');
     }
 
-    return () => {
-      active = false;
-      clearTimeout(failsafe);
-    };
-  }, [user]); // Re-fetch when user changes
+    return () => { active = false; };
+  }, [user]);
 
   if (loading) {
     return (

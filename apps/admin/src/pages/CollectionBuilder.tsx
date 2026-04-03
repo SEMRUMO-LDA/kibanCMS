@@ -13,7 +13,7 @@ import { COLLECTION_PRESETS, type CollectionPreset } from '../config/collection-
 import { FieldEditor, type FieldDefinition } from '../components/collection-builder/FieldEditor';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { api } from '../lib/api-client';
+import { supabase } from '../lib/supabase';
 import {
   ArrowLeft,
   ArrowRight,
@@ -527,32 +527,21 @@ export const CollectionBuilder = () => {
     setLoading(true);
 
     try {
-      console.log('[CollectionBuilder] Submitting collection...');
-      console.log('[CollectionBuilder] Session exists:', !!session);
-      console.log('[CollectionBuilder] Collection data:', {
-        name: collection.name,
-        slug: collection.slug,
-        type: collection.type,
-        fieldsCount: collection.fields.length
-      });
+      const { error } = await supabase
+        .from('collections')
+        .insert({
+          name: collection.name,
+          slug: collection.slug,
+          description: collection.description || null,
+          type: collection.type,
+          icon: collection.icon,
+          color: collection.color,
+          fields: collection.fields,
+          created_by: user?.id,
+        });
 
-      const { data, error } = await api.collections.create({
-        name: collection.name,
-        slug: collection.slug,
-        description: collection.description,
-        type: collection.type,
-        icon: collection.icon,
-        color: collection.color,
-        fields: collection.fields,
-      });
+      if (error) throw new Error(error.message);
 
-      if (error) {
-        throw new Error(error);
-      }
-
-      console.log('[CollectionBuilder] Collection created successfully:', data);
-
-      // Navigate to the new collection
       navigate(`/content/${collection.slug}`);
     } catch (error: any) {
       console.error('[CollectionBuilder] Error:', error);

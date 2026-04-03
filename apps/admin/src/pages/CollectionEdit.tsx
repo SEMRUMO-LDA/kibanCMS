@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { api } from '../lib/api-client';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { FieldEditor, type FieldDefinition } from '../components/collection-builder/FieldEditor';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
@@ -378,10 +378,14 @@ export const CollectionEdit = () => {
   const loadCollection = async () => {
     try {
       setLoading(true);
-      const { data, error } = await api.collections.get(slug!);
+      const { data, error } = await supabase
+        .from('collections')
+        .select('*')
+        .eq('slug', slug!)
+        .single();
 
       if (error) {
-        setError(error);
+        setError(error.message);
         return;
       }
 
@@ -456,15 +460,18 @@ export const CollectionEdit = () => {
 
     try {
       setSaving(true);
-      const { data, error } = await api.collections.update(slug!, {
-        name: collection.name,
-        description: collection.description,
-        type: collection.type,
-        fields: collection.fields,
-      });
+      const { error } = await supabase
+        .from('collections')
+        .update({
+          name: collection.name,
+          description: collection.description,
+          type: collection.type,
+          fields: collection.fields,
+        })
+        .eq('slug', slug!);
 
       if (error) {
-        alert(`Failed to update collection: ${error}`);
+        alert(`Failed to update collection: ${error.message}`);
         return;
       }
 
@@ -483,10 +490,13 @@ export const CollectionEdit = () => {
 
     try {
       setSaving(true);
-      const { error } = await api.collections.delete(slug!);
+      const { error } = await supabase
+        .from('collections')
+        .delete()
+        .eq('slug', slug!);
 
       if (error) {
-        alert(`Failed to delete collection: ${error}`);
+        alert(`Failed to delete collection: ${error.message}`);
         return;
       }
 
