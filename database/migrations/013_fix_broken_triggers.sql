@@ -46,8 +46,11 @@ CREATE INDEX IF NOT EXISTS idx_entry_revisions_entry_id ON entry_revisions(entry
 
 ALTER TABLE entry_revisions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "revisions_select" ON entry_revisions
-    FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+    CREATE POLICY "revisions_select" ON entry_revisions
+        FOR SELECT TO authenticated USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- webhooks (referenced by trigger_webhooks_on_entry_change trigger on entries)
 CREATE TABLE IF NOT EXISTS webhooks (
