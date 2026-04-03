@@ -17,7 +17,7 @@ import { ImageField } from './ImageField';
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -131,6 +131,18 @@ export function FieldRenderer({
           {...commonProps}
           value={value || ''}
           onChange={onChange}
+        />
+      );
+
+    case 'url':
+    case 'email':
+    case 'slug':
+      return (
+        <TextField
+          {...commonProps}
+          value={value || ''}
+          onChange={onChange}
+          placeholder={field.placeholder || (field.type === 'url' ? 'https://example.com' : field.type === 'email' ? 'email@example.com' : 'slug-like-this')}
         />
       );
 
