@@ -523,6 +523,9 @@ export const Users = () => {
 
   useEffect(() => {
     loadUsers();
+    // Safety: never hang on loading
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
   }, []);
 
   const loadUsers = async () => {

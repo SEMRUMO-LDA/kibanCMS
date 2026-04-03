@@ -405,6 +405,7 @@ export const Dashboard = () => {
   const [activityLoading, setActivityLoading] = useState(true);
 
   useEffect(() => {
+    const timeout = setTimeout(() => { setLoading(false); setActivityLoading(false); }, 10000);
     async function fetchMetrics() {
       try {
         const [entriesReq, collectionsReq, mediaReq, usersReq] = await Promise.all([
@@ -428,6 +429,7 @@ export const Dashboard = () => {
     }
 
     fetchMetrics();
+    return () => clearTimeout(timeout);
   }, []);
 
   useEffect(() => {

@@ -464,9 +464,12 @@ export const Collections = () => {
 
     if (user) {
       fetchCollections();
+    } else {
+      setLoading(false);
     }
 
-    return () => { active = false; };
+    const timeout = setTimeout(() => { if (active) setLoading(false); }, 10000);
+    return () => { active = false; clearTimeout(timeout); };
   }, [user?.id]);
 
   if (loading) {

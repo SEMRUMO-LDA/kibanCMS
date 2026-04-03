@@ -185,6 +185,8 @@ export function EntryEdit() {
     }
 
     fetchData();
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
   }, [collectionSlug, entryId, isEditMode]);
 
   const handleSave = async (data: EntryData, status: string) => {

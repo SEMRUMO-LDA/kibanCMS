@@ -727,6 +727,8 @@ export const CollectionEntries = () => {
     }
 
     loadData();
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
   }, [collectionSlug]);
 
   const handleDelete = async (id: string, title: string) => {
