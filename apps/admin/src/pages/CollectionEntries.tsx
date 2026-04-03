@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { ArrowLeft, Plus, Search, Filter, Edit2, Trash2, Loader, Code } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
@@ -695,29 +696,16 @@ export const CollectionEntries = () => {
         setLoading(true);
         setError(null);
 
-        // Get collection by slug
-        const { data: collection, error: collectionError } = await supabase
-          .from('collections')
-          .select('id, name')
-          .eq('slug', collectionSlug)
-          .single();
+        // Get collection name
+        const { data: colData } = await api.getCollection(collectionSlug);
+        if (colData) setCollectionName(colData.name);
 
-        if (collectionError) throw collectionError;
+        // Get entries via API
+        const { data: entriesData, error: entriesErr, meta } = await api.getEntries(collectionSlug);
+        if (entriesErr) throw new Error(entriesErr);
 
-        if (collection) {
-          setCollectionName(collection.name);
-        }
-
-        // Get entries using collection_id
-        const { data, error: entriesError } = await supabase
-          .from('entries')
-          .select('*')
-          .eq('collection_id', collection.id)
-          .order('created_at', { ascending: false });
-
-        if (entriesError) throw entriesError;
-
-        setEntries(data || []);
+        setEntries(entriesData || []);
+        if (meta?.collection?.name) setCollectionName(meta.collection.name);
       } catch (err: any) {
         console.error('Error loading entries:', err);
         setError(err.message || 'Failed to load entries');
@@ -732,18 +720,17 @@ export const CollectionEntries = () => {
   }, [collectionSlug]);
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete "${title || 'this entry'}"? This action cannot be undone.`)) {
-      return;
-    }
+    if (!confirm(`Are you sure you want to delete "${title || 'this entry'}"? This action cannot be undone.`)) return;
 
     try {
-      const { error } = await supabase.from('entries').delete().eq('id', id);
+      const entry = entries.find(e => e.id === id);
+      if (!entry || !collectionSlug) return;
 
-      if (error) throw error;
+      const { error } = await api.deleteEntry(collectionSlug, entry.slug);
+      if (error) throw new Error(error);
 
-      setEntries(entries.filter(e => e.id !== id));
+      setEntries(prev => prev.filter(e => e.id !== id));
     } catch (err: any) {
-      console.error('Error deleting entry:', err);
       alert('Failed to delete entry: ' + (err.message || 'Unknown error'));
     }
   };
