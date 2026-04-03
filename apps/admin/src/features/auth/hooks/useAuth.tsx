@@ -136,8 +136,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     // ── Safety net: NEVER hang longer than 5 seconds ──
+    // Uses initialised ref (not loading state) to avoid stale closure.
     const timeout = setTimeout(() => {
-      if (active && loading) {
+      if (active && !initialised.current) {
         console.warn('[Auth] Safety timeout — forcing UI unblock');
         initialised.current = true;
         setLoading(false);

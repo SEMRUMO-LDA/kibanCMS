@@ -1,35 +1,52 @@
 /**
  * Collection Edit Page
- * Allows editing existing collections
+ * Clean, functional editor for collection settings and fields.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { FieldEditor, type FieldDefinition } from '../components/collection-builder/FieldEditor';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import {
-  ArrowLeft,
-  Save,
-  Plus,
-  Trash2,
-  GripVertical,
-  Loader,
-  AlertCircle,
+  ArrowLeft, Save, Plus, Trash2, GripVertical, Loader, AlertCircle,
+  ChevronDown, ChevronUp, Pencil,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+
+// ============================================
+// TYPES
+// ============================================
+
+interface FieldDef {
+  id: string;
+  name: string;
+  label?: string;
+  type: string;
+  required?: boolean;
+  maxLength?: number;
+  helpText?: string;
+  placeholder?: string;
+  unique?: boolean;
+  searchable?: boolean;
+  options?: Array<{ label: string; value: string }>;
+}
+
+interface CollectionData {
+  id?: string;
+  name: string;
+  slug: string;
+  description: string;
+  type: 'post' | 'page' | 'custom';
+  fields: FieldDef[];
+}
 
 // ============================================
 // STYLED COMPONENTS
 // ============================================
 
-const Container = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: ${spacing[6]};
-`;
+const Container = styled.div`max-width: 900px; margin: 0 auto;`;
 
 const Header = styled.header`
   margin-bottom: ${spacing[8]};
@@ -37,45 +54,20 @@ const Header = styled.header`
   align-items: center;
   gap: ${spacing[4]};
 
-  button.back-btn {
+  .back-btn {
     background: none;
     border: 1px solid ${colors.gray[300]};
     border-radius: ${borders.radius.md};
-    padding: ${spacing[3]};
+    padding: ${spacing[2.5]};
     cursor: pointer;
     display: flex;
-    align-items: center;
-    justify-content: center;
     color: ${colors.gray[600]};
-    transition: all ${animations.duration.fast} ${animations.easing.out};
-
-    &:hover {
-      background: ${colors.gray[100]};
-      border-color: ${colors.gray[400]};
-    }
-
-    svg {
-      width: 20px;
-      height: 20px;
-    }
+    transition: all 0.15s;
+    &:hover { background: ${colors.gray[50]}; border-color: ${colors.gray[400]}; }
   }
 
-  .header-content {
-    flex: 1;
-
-    h1 {
-      font-size: ${typography.fontSize['2xl']};
-      font-weight: ${typography.fontWeight.bold};
-      margin: 0 0 ${spacing[2]} 0;
-      color: ${colors.gray[900]};
-    }
-
-    p {
-      font-size: ${typography.fontSize.sm};
-      color: ${colors.gray[600]};
-      margin: 0;
-    }
-  }
+  h1 { font-size: ${typography.fontSize['2xl']}; font-weight: ${typography.fontWeight.bold}; margin: 0; }
+  p { font-size: ${typography.fontSize.sm}; color: ${colors.gray[500]}; margin: ${spacing[1]} 0 0; }
 `;
 
 const Card = styled.div`
@@ -83,28 +75,28 @@ const Card = styled.div`
   border: 1px solid ${colors.gray[200]};
   border-radius: ${borders.radius.xl};
   padding: ${spacing[6]};
-  margin-bottom: ${spacing[6]};
+  margin-bottom: ${spacing[5]};
 
   h2 {
-    font-size: ${typography.fontSize.lg};
+    font-size: ${typography.fontSize.base};
     font-weight: ${typography.fontWeight.semibold};
-    margin: 0 0 ${spacing[4]} 0;
+    margin: 0 0 ${spacing[5]} 0;
     color: ${colors.gray[900]};
+    padding-bottom: ${spacing[4]};
+    border-bottom: 1px solid ${colors.gray[100]};
   }
 `;
 
 const FormGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: ${spacing[4]};
-  margin-bottom: ${spacing[6]};
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  @media (max-width: 640px) { grid-template-columns: 1fr; }
 `;
 
 const FormGroup = styled.div`
+  &.full { grid-column: 1 / -1; }
+
   label {
     display: block;
     font-size: ${typography.fontSize.sm};
@@ -113,228 +105,180 @@ const FormGroup = styled.div`
     margin-bottom: ${spacing[2]};
   }
 
-  input,
-  textarea,
-  select {
+  input, textarea, select {
     width: 100%;
     padding: ${spacing[3]};
     border: 1px solid ${colors.gray[300]};
     border-radius: ${borders.radius.md};
     font-size: ${typography.fontSize.sm};
-    transition: all ${animations.duration.fast} ${animations.easing.out};
-
-    &:focus {
-      outline: none;
-      border-color: ${colors.accent[500]};
-      box-shadow: 0 0 0 3px ${colors.accent[100]};
-    }
-
-    &:disabled {
-      background: ${colors.gray[100]};
-      cursor: not-allowed;
-    }
+    font-family: ${typography.fontFamily.sans};
+    transition: border-color 0.15s;
+    &:focus { outline: none; border-color: ${colors.accent[500]}; box-shadow: 0 0 0 3px ${colors.accent[100]}; }
+    &:disabled { background: ${colors.gray[50]}; color: ${colors.gray[500]}; }
   }
-
-  textarea {
-    min-height: 100px;
-    resize: vertical;
-  }
-
-  .help-text {
-    font-size: ${typography.fontSize.xs};
-    color: ${colors.gray[500]};
-    margin-top: ${spacing[1]};
-  }
+  textarea { min-height: 80px; resize: vertical; }
+  .help { font-size: 12px; color: ${colors.gray[400]}; margin-top: ${spacing[1]}; }
 `;
 
-const FieldsList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${spacing[3]};
+const FieldCard = styled.div<{ $expanded?: boolean }>`
+  border: 1px solid ${colors.gray[200]};
+  border-radius: ${borders.radius.lg};
+  margin-bottom: ${spacing[2]};
+  overflow: hidden;
+  transition: all 0.15s;
+  &:hover { border-color: ${colors.gray[300]}; }
 `;
 
-const FieldItem = styled.div`
+const FieldHeader = styled.div`
   display: flex;
   align-items: center;
   gap: ${spacing[3]};
-  padding: ${spacing[4]};
-  background: ${colors.gray[50]};
-  border: 1px solid ${colors.gray[200]};
-  border-radius: ${borders.radius.lg};
-  cursor: move;
-  transition: all ${animations.duration.fast} ${animations.easing.out};
+  padding: ${spacing[3]} ${spacing[4]};
+  cursor: pointer;
+  user-select: none;
 
-  &:hover {
-    background: ${colors.white};
-    box-shadow: ${shadows.sm};
+  .drag { color: ${colors.gray[300]}; cursor: grab; &:active { cursor: grabbing; } }
+
+  .info { flex: 1; display: flex; align-items: center; gap: ${spacing[3]}; }
+
+  .field-name {
+    font-weight: ${typography.fontWeight.medium};
+    font-size: ${typography.fontSize.sm};
+    color: ${colors.gray[900]};
   }
 
-  .drag-handle {
+  .field-type {
+    padding: 2px 8px;
+    background: ${colors.accent[50]};
+    color: ${colors.accent[700]};
+    border-radius: ${borders.radius.full};
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .field-id {
+    font-size: 11px;
     color: ${colors.gray[400]};
-    cursor: grab;
-
-    &:active {
-      cursor: grabbing;
-    }
+    font-family: ${typography.fontFamily.mono};
   }
 
-  .field-info {
-    flex: 1;
-
-    .field-name {
-      font-weight: ${typography.fontWeight.medium};
-      color: ${colors.gray[900]};
-      margin-bottom: ${spacing[1]};
-    }
-
-    .field-type {
-      font-size: ${typography.fontSize.xs};
-      color: ${colors.gray[600]};
-    }
-  }
-
-  .field-actions {
+  .actions {
     display: flex;
-    gap: ${spacing[2]};
+    align-items: center;
+    gap: ${spacing[1]};
+  }
 
-    button {
-      padding: ${spacing[2]};
-      background: none;
-      border: 1px solid ${colors.gray[300]};
-      border-radius: ${borders.radius.md};
-      cursor: pointer;
-      color: ${colors.gray[600]};
-      transition: all ${animations.duration.fast} ${animations.easing.out};
-
-      &:hover {
-        background: ${colors.white};
-        border-color: ${colors.gray[400]};
-      }
-
-      &.delete:hover {
-        color: ${colors.red[600]};
-        border-color: ${colors.red[300]};
-        background: ${colors.red[50]};
-      }
-
-      svg {
-        width: 16px;
-        height: 16px;
-      }
-    }
+  .icon-btn {
+    padding: ${spacing[1.5]};
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: ${colors.gray[400]};
+    border-radius: ${borders.radius.md};
+    display: flex;
+    transition: all 0.15s;
+    &:hover { background: ${colors.gray[100]}; color: ${colors.gray[700]}; }
+    &.delete:hover { background: ${colors.red[50]}; color: ${colors.red[600]}; }
+    svg { width: 16px; height: 16px; }
   }
 `;
 
-const Actions = styled.div`
+const FieldBody = styled.div`
+  padding: ${spacing[4]} ${spacing[5]};
+  border-top: 1px solid ${colors.gray[100]};
+  background: ${colors.gray[50]};
+`;
+
+const FieldFormGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${spacing[3]};
+  margin-bottom: ${spacing[3]};
+  @media (max-width: 640px) { grid-template-columns: 1fr; }
+`;
+
+const CheckboxRow = styled.label`
+  display: flex;
+  align-items: center;
+  gap: ${spacing[2]};
+  font-size: ${typography.fontSize.sm};
+  color: ${colors.gray[700]};
+  cursor: pointer;
+  input { accent-color: ${colors.accent[500]}; }
+`;
+
+const AddFieldBtn = styled.button`
+  margin-top: ${spacing[3]};
+  padding: ${spacing[3]};
+  background: transparent;
+  color: ${colors.accent[600]};
+  border: 2px dashed ${colors.accent[200]};
+  border-radius: ${borders.radius.lg};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing[2]};
+  width: 100%;
+  font-size: ${typography.fontSize.sm};
+  font-weight: ${typography.fontWeight.medium};
+  font-family: ${typography.fontFamily.sans};
+  transition: all 0.15s;
+  &:hover { background: ${colors.accent[50]}; border-color: ${colors.accent[400]}; }
+`;
+
+const Footer = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding-top: ${spacing[6]};
-  border-top: 1px solid ${colors.gray[200]};
 
-  .left-actions {
-    button {
-      padding: ${spacing[3]} ${spacing[5]};
-      background: none;
-      color: ${colors.red[600]};
-      border: 1px solid ${colors.red[300]};
-      border-radius: ${borders.radius.md};
-      font-size: ${typography.fontSize.sm};
-      font-weight: ${typography.fontWeight.medium};
-      cursor: pointer;
-      transition: all ${animations.duration.fast} ${animations.easing.out};
-
-      &:hover {
-        background: ${colors.red[50]};
-      }
-    }
+  .delete-btn {
+    padding: ${spacing[3]} ${spacing[5]};
+    background: none;
+    color: ${colors.red[600]};
+    border: 1px solid ${colors.red[200]};
+    border-radius: ${borders.radius.md};
+    font-size: ${typography.fontSize.sm};
+    font-weight: ${typography.fontWeight.medium};
+    cursor: pointer;
+    font-family: ${typography.fontFamily.sans};
+    transition: all 0.15s;
+    &:hover { background: ${colors.red[50]}; border-color: ${colors.red[300]}; }
   }
 
-  .right-actions {
+  .right { display: flex; gap: ${spacing[3]}; }
+
+  .cancel-btn {
+    padding: ${spacing[3]} ${spacing[5]};
+    background: ${colors.white};
+    color: ${colors.gray[700]};
+    border: 1px solid ${colors.gray[300]};
+    border-radius: ${borders.radius.md};
+    font-size: ${typography.fontSize.sm};
+    font-weight: ${typography.fontWeight.medium};
+    cursor: pointer;
+    font-family: ${typography.fontFamily.sans};
+    &:hover { background: ${colors.gray[50]}; }
+  }
+
+  .save-btn {
+    padding: ${spacing[3]} ${spacing[5]};
+    background: ${colors.accent[500]};
+    color: #fff;
+    border: none;
+    border-radius: ${borders.radius.md};
+    font-size: ${typography.fontSize.sm};
+    font-weight: ${typography.fontWeight.semibold};
+    cursor: pointer;
     display: flex;
-    gap: ${spacing[3]};
-
-    button {
-      padding: ${spacing[3]} ${spacing[5]};
-      border-radius: ${borders.radius.md};
-      font-size: ${typography.fontSize.sm};
-      font-weight: ${typography.fontWeight.medium};
-      cursor: pointer;
-      transition: all ${animations.duration.fast} ${animations.easing.out};
-      display: flex;
-      align-items: center;
-      gap: ${spacing[2]};
-
-      &.cancel {
-        background: none;
-        color: ${colors.gray[700]};
-        border: 1px solid ${colors.gray[300]};
-
-        &:hover {
-          background: ${colors.gray[100]};
-        }
-      }
-
-      &.save {
-        background: ${colors.accent[500]};
-        color: ${colors.white};
-        border: 1px solid ${colors.accent[500]};
-
-        &:hover:not(:disabled) {
-          background: ${colors.accent[600]};
-        }
-
-        &:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      }
-
-      svg {
-        width: 18px;
-        height: 18px;
-      }
-    }
-  }
-`;
-
-const LoadingState = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: ${spacing[16]};
-
-  svg {
-    animation: spin 1s linear infinite;
-    color: ${colors.accent[500]};
-    margin-bottom: ${spacing[4]};
-  }
-
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-`;
-
-const ErrorState = styled.div`
-  padding: ${spacing[8]};
-  text-align: center;
-
-  svg {
-    color: ${colors.red[500]};
-    margin-bottom: ${spacing[4]};
-  }
-
-  h3 {
-    font-size: ${typography.fontSize.lg};
-    color: ${colors.gray[900]};
-    margin: 0 0 ${spacing[2]} 0;
-  }
-
-  p {
-    color: ${colors.gray[600]};
-    margin: 0;
+    align-items: center;
+    gap: ${spacing[2]};
+    font-family: ${typography.fontFamily.sans};
+    transition: background 0.15s;
+    &:hover:not(:disabled) { background: ${colors.accent[600]}; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
+    svg { width: 18px; height: 18px; }
   }
 `;
 
@@ -342,356 +286,239 @@ const ErrorState = styled.div`
 // COMPONENT
 // ============================================
 
-interface CollectionData {
-  id?: string;
-  name: string;
-  slug: string;
-  description: string;
-  type: 'post' | 'page' | 'custom';
-  fields: FieldDefinition[];
-}
-
 export const CollectionEdit = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [collection, setCollection] = useState<CollectionData>({
-    name: '',
-    slug: '',
-    description: '',
-    type: 'post',
-    fields: [],
-  });
-  const [editingField, setEditingField] = useState<FieldDefinition | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
+  const [expandedField, setExpandedField] = useState<string | null>(null);
+  const [collection, setCollection] = useState<CollectionData>({
+    name: '', slug: '', description: '', type: 'custom', fields: [],
+  });
 
-  // Load collection data
   useEffect(() => {
-    if (slug) {
-      loadCollection();
-    }
+    if (!slug) return;
+    (async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase.from('collections').select('*').eq('slug', slug).single();
+        if (error) throw error;
+        setCollection({
+          id: data.id, name: data.name, slug: data.slug,
+          description: data.description || '', type: data.type,
+          fields: (data.fields || []).map((f: any, i: number) => ({ ...f, id: f.id || `field_${i}` })),
+        });
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [slug]);
 
-  const loadCollection = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('collections')
-        .select('*')
-        .eq('slug', slug!)
-        .single();
+  const updateField = useCallback((fieldId: string, updates: Partial<FieldDef>) => {
+    setCollection(prev => ({
+      ...prev,
+      fields: prev.fields.map(f => f.id === fieldId ? { ...f, ...updates } : f),
+    }));
+  }, []);
 
-      if (error) {
-        setError(error.message);
-        return;
-      }
-
-      if (data) {
-        setCollection({
-          id: data.id,
-          name: data.name,
-          slug: data.slug,
-          description: data.description || '',
-          type: data.type,
-          fields: data.fields || [],
-        });
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load collection');
-    } finally {
-      setLoading(false);
-    }
+  const deleteField = (fieldId: string) => {
+    if (!confirm('Delete this field?')) return;
+    setCollection(prev => ({ ...prev, fields: prev.fields.filter(f => f.id !== fieldId) }));
   };
 
-  // Handle field operations
-  const handleAddField = (type: string) => {
-    const newField: FieldDefinition = {
+  const addField = (type: string) => {
+    const newField: FieldDef = {
       id: `field_${Date.now()}`,
       name: '',
       label: '',
       type,
       required: false,
     };
-    setEditingField(newField);
+    setCollection(prev => ({ ...prev, fields: [...prev.fields, newField] }));
+    setExpandedField(newField.id);
     setShowFieldSelector(false);
   };
 
-  const handleSaveField = (field: FieldDefinition) => {
-    if (editingField && collection.fields.find(f => f.id === editingField.id)) {
-      // Update existing field
-      setCollection({
-        ...collection,
-        fields: collection.fields.map(f =>
-          f.id === field.id ? field : f
-        ),
-      });
-    } else {
-      // Add new field
-      setCollection({
-        ...collection,
-        fields: [...collection.fields, field],
-      });
-    }
-    setEditingField(null);
-  };
-
-  const handleDeleteField = (fieldId: string) => {
-    if (confirm('Are you sure you want to delete this field?')) {
-      setCollection({
-        ...collection,
-        fields: collection.fields.filter(f => f.id !== fieldId),
-      });
-    }
-  };
-
-  const handleEditField = (field: FieldDefinition) => {
-    setEditingField(field);
-  };
-
-  // Save collection
   const handleSave = async () => {
-    if (!collection.name || !collection.slug) {
-      alert('Name and slug are required');
-      return;
-    }
-
+    if (!collection.name) { alert('Name is required'); return; }
+    setSaving(true);
     try {
-      setSaving(true);
       const { error } = await supabase
         .from('collections')
-        .update({
-          name: collection.name,
-          description: collection.description,
-          type: collection.type,
-          fields: collection.fields,
-        })
+        .update({ name: collection.name, description: collection.description, type: collection.type, fields: collection.fields })
         .eq('slug', slug!);
-
-      if (error) {
-        alert(`Failed to update collection: ${error.message}`);
-        return;
-      }
-
+      if (error) throw error;
       navigate(`/content/${collection.slug}`);
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      alert('Failed to save: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this collection? All entries will be deleted.')) {
-      return;
-    }
-
+    if (!confirm(`Delete "${collection.name}" and ALL its entries? This cannot be undone.`)) return;
+    setSaving(true);
     try {
-      setSaving(true);
-      const { error } = await supabase
-        .from('collections')
-        .delete()
-        .eq('slug', slug!);
-
-      if (error) {
-        alert(`Failed to delete collection: ${error.message}`);
-        return;
-      }
-
+      const { error } = await supabase.from('collections').delete().eq('slug', slug!);
+      if (error) throw error;
       navigate('/content');
     } catch (err: any) {
-      alert(`Error: ${err.message}`);
+      alert('Failed to delete: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return (
-      <Container>
-        <LoadingState>
-          <Loader size={40} />
-          <p>Loading collection...</p>
-        </LoadingState>
-      </Container>
-    );
+    return <Container><div style={{ padding: '80px 0', textAlign: 'center' }}><Loader size={32} style={{ animation: 'spin 1s linear infinite' }} /><p style={{ color: colors.gray[500], marginTop: 12 }}>Loading...</p><style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style></div></Container>;
   }
 
   if (error) {
-    return (
-      <Container>
-        <ErrorState>
-          <AlertCircle size={48} />
-          <h3>Error loading collection</h3>
-          <p>{error}</p>
-        </ErrorState>
-      </Container>
-    );
+    return <Container><div style={{ padding: '80px 0', textAlign: 'center' }}><AlertCircle size={40} color={colors.red[500]} /><h3 style={{ marginTop: 12 }}>Error</h3><p style={{ color: colors.gray[500] }}>{error}</p></div></Container>;
   }
 
   return (
     <Container>
       <Header>
-        <button className="back-btn" onClick={() => navigate('/content')}>
-          <ArrowLeft />
-        </button>
-        <div className="header-content">
+        <button className="back-btn" onClick={() => navigate('/content')}><ArrowLeft size={20} /></button>
+        <div>
           <h1>Edit Collection</h1>
-          <p>Modify collection settings and fields</p>
+          <p>{collection.slug}</p>
         </div>
       </Header>
 
+      {/* Basic Info */}
       <Card>
         <h2>Basic Information</h2>
         <FormGrid>
           <FormGroup>
-            <label>Collection Name</label>
-            <input
-              type="text"
-              value={collection.name}
-              onChange={(e) => setCollection({ ...collection, name: e.target.value })}
-              placeholder="e.g., Blog Posts"
-            />
+            <label>Name</label>
+            <input value={collection.name} onChange={e => setCollection(prev => ({ ...prev, name: e.target.value }))} placeholder="Collection name" />
           </FormGroup>
-
           <FormGroup>
             <label>Slug</label>
-            <input
-              type="text"
-              value={collection.slug}
-              disabled
-              title="Slug cannot be changed"
-            />
-            <p className="help-text">URL identifier (cannot be changed)</p>
+            <input value={collection.slug} disabled />
+            <p className="help">Cannot be changed after creation</p>
           </FormGroup>
-
-          <FormGroup style={{ gridColumn: 'span 2' }}>
+          <FormGroup className="full">
             <label>Description</label>
-            <textarea
-              value={collection.description}
-              onChange={(e) => setCollection({ ...collection, description: e.target.value })}
-              placeholder="Describe what this collection is for..."
-            />
+            <textarea value={collection.description} onChange={e => setCollection(prev => ({ ...prev, description: e.target.value }))} placeholder="What is this collection for?" />
           </FormGroup>
-
           <FormGroup>
             <label>Type</label>
-            <select
-              value={collection.type}
-              onChange={(e) => setCollection({ ...collection, type: e.target.value as any })}
-            >
+            <select value={collection.type} onChange={e => setCollection(prev => ({ ...prev, type: e.target.value as any }))}>
+              <option value="custom">Custom</option>
               <option value="post">Post</option>
               <option value="page">Page</option>
-              <option value="custom">Custom</option>
             </select>
           </FormGroup>
         </FormGrid>
       </Card>
 
+      {/* Fields */}
       <Card>
-        <h2>Fields</h2>
-        <FieldsList>
-          {collection.fields.length === 0 ? (
-            <p style={{ color: colors.gray[500], textAlign: 'center', padding: spacing[8] }}>
-              No fields defined. Add your first field below.
-            </p>
-          ) : (
-            collection.fields.map((field) => (
-              <FieldItem key={field.id}>
-                <div className="drag-handle">
-                  <GripVertical />
-                </div>
-                <div className="field-info">
-                  <div className="field-name">{field.label || field.name}</div>
-                  <div className="field-type">Type: {field.type}</div>
-                </div>
-                <div className="field-actions">
-                  <button onClick={() => handleEditField(field)} title="Edit field">
-                    ✏️
-                  </button>
-                  <button
-                    className="delete"
-                    onClick={() => handleDeleteField(field.id)}
-                    title="Delete field"
-                  >
-                    <Trash2 />
-                  </button>
-                </div>
-              </FieldItem>
-            ))
-          )}
-        </FieldsList>
+        <h2>Fields ({collection.fields.length})</h2>
 
-        <button
-          onClick={() => setShowFieldSelector(true)}
-          style={{
-            marginTop: spacing[4],
-            padding: `${spacing[3]} ${spacing[5]}`,
-            background: colors.accent[50],
-            color: colors.accent[700],
-            border: `1px dashed ${colors.accent[300]}`,
-            borderRadius: borders.radius.md,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: spacing[2],
-            width: '100%',
-            justifyContent: 'center',
-          }}
-        >
-          <Plus size={18} />
-          Add Field
-        </button>
+        {collection.fields.length === 0 ? (
+          <p style={{ color: colors.gray[400], textAlign: 'center', padding: spacing[8], fontSize: typography.fontSize.sm }}>
+            No fields yet. Add your first field below.
+          </p>
+        ) : (
+          collection.fields.map(field => {
+            const isExpanded = expandedField === field.id;
+            return (
+              <FieldCard key={field.id} $expanded={isExpanded}>
+                <FieldHeader onClick={() => setExpandedField(isExpanded ? null : field.id)}>
+                  <div className="drag"><GripVertical size={16} /></div>
+                  <div className="info">
+                    <span className="field-name">{field.label || field.name || 'Untitled field'}</span>
+                    <span className="field-type">{field.type}</span>
+                    <span className="field-id">{field.name || field.id}</span>
+                  </div>
+                  <div className="actions">
+                    <button className="icon-btn delete" onClick={e => { e.stopPropagation(); deleteField(field.id); }}><Trash2 /></button>
+                    <button className="icon-btn">{isExpanded ? <ChevronUp /> : <ChevronDown />}</button>
+                  </div>
+                </FieldHeader>
+
+                {isExpanded && (
+                  <FieldBody>
+                    <FieldFormGrid>
+                      <FormGroup>
+                        <label>Field Label</label>
+                        <input value={field.label || ''} onChange={e => updateField(field.id, { label: e.target.value })} placeholder="Display name" />
+                      </FormGroup>
+                      <FormGroup>
+                        <label>Field Name (API)</label>
+                        <input
+                          value={field.name}
+                          onChange={e => updateField(field.id, { name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                          placeholder="api_field_name"
+                        />
+                        <p className="help">Lowercase, underscores only</p>
+                      </FormGroup>
+                      <FormGroup>
+                        <label>Placeholder</label>
+                        <input value={field.placeholder || ''} onChange={e => updateField(field.id, { placeholder: e.target.value })} placeholder="Placeholder text" />
+                      </FormGroup>
+                      <FormGroup>
+                        <label>Help Text</label>
+                        <input value={field.helpText || ''} onChange={e => updateField(field.id, { helpText: e.target.value })} placeholder="Additional instructions" />
+                      </FormGroup>
+                      {(field.type === 'text' || field.type === 'textarea') && (
+                        <FormGroup>
+                          <label>Max Length</label>
+                          <input type="number" value={field.maxLength || ''} onChange={e => updateField(field.id, { maxLength: e.target.value ? parseInt(e.target.value) : undefined })} placeholder="No limit" />
+                        </FormGroup>
+                      )}
+                    </FieldFormGrid>
+                    <div style={{ display: 'flex', gap: spacing[5], flexWrap: 'wrap' }}>
+                      <CheckboxRow>
+                        <input type="checkbox" checked={field.required || false} onChange={e => updateField(field.id, { required: e.target.checked })} />
+                        Required
+                      </CheckboxRow>
+                      <CheckboxRow>
+                        <input type="checkbox" checked={field.unique || false} onChange={e => updateField(field.id, { unique: e.target.checked })} />
+                        Unique
+                      </CheckboxRow>
+                      <CheckboxRow>
+                        <input type="checkbox" checked={field.searchable || false} onChange={e => updateField(field.id, { searchable: e.target.checked })} />
+                        Searchable
+                      </CheckboxRow>
+                    </div>
+                  </FieldBody>
+                )}
+              </FieldCard>
+            );
+          })
+        )}
+
+        <AddFieldBtn onClick={() => setShowFieldSelector(true)}>
+          <Plus size={18} /> Add Field
+        </AddFieldBtn>
       </Card>
 
-      <Actions>
-        <div className="left-actions">
-          <button onClick={handleDelete}>
-            Delete Collection
+      {/* Footer Actions */}
+      <Footer>
+        <button className="delete-btn" onClick={handleDelete}>Delete Collection</button>
+        <div className="right">
+          <button className="cancel-btn" onClick={() => navigate('/content')}>Cancel</button>
+          <button className="save-btn" onClick={handleSave} disabled={saving || !collection.name}>
+            {saving ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><Save size={18} /> Save Changes</>}
           </button>
         </div>
-        <div className="right-actions">
-          <button className="cancel" onClick={() => navigate('/content')}>
-            Cancel
-          </button>
-          <button
-            className="save"
-            onClick={handleSave}
-            disabled={saving || !collection.name || !collection.slug}
-          >
-            {saving ? (
-              <>
-                <Loader size={18} />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save size={18} />
-                Save Changes
-              </>
-            )}
-          </button>
-        </div>
-      </Actions>
+      </Footer>
 
-      {/* Field Selector Modal */}
       {showFieldSelector && (
-        <FieldTypeSelector
-          onSelect={handleAddField}
-          onClose={() => setShowFieldSelector(false)}
-        />
+        <FieldTypeSelector onSelect={addField} onClose={() => setShowFieldSelector(false)} />
       )}
 
-      {/* Field Editor Modal */}
-      {editingField && (
-        <FieldEditor
-          field={editingField}
-          onSave={handleSaveField}
-          onCancel={() => setEditingField(null)}
-        />
-      )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </Container>
   );
 };
