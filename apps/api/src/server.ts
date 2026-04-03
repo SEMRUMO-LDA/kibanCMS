@@ -97,7 +97,9 @@ app.use('/api/v1/webhooks', validateApiKey, webhooksRouter);
 
 // Serve Admin UI (static files from admin build)
 if (NODE_ENV === 'production') {
-  const adminBuildPath = path.join(__dirname, '../../../admin/dist');
+  // In Docker: __dirname = /app/apps/api/dist → admin is at /app/apps/admin/dist
+  // In local prod: __dirname = apps/api/dist → admin is at apps/admin/dist
+  const adminBuildPath = path.join(__dirname, '../../admin/dist');
 
   // Serve static files
   app.use(express.static(adminBuildPath));
