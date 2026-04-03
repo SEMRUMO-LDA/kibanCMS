@@ -24,15 +24,12 @@ COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
 COPY apps/admin/ ./apps/admin/
 COPY packages/types/ ./packages/types/
 
-# Admin needs Supabase env vars at build time (baked into the JS bundle)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_API_URL
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV VITE_API_URL=$VITE_API_URL
-
 WORKDIR /app/apps/admin
+
+# Write .env for Vite build (anon key is public by design)
+RUN echo "VITE_SUPABASE_URL=https://tzlpqzrhnifsclxegnfa.supabase.co" > .env && \
+    echo "VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6bHBxenJobmlmc2NseGVnbmZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNDIwNjUsImV4cCI6MjA5MDYxODA2NX0.WOGBtHE7b4VYULo0I5SpueiJ48NKwdDIzFUvs26C-cs" >> .env
+
 RUN pnpm build
 
 # Stage 3: Build API
