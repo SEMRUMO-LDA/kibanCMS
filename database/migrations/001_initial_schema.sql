@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     full_name TEXT,
     avatar_url TEXT,
     role user_role DEFAULT 'viewer' NOT NULL,
+    onboarding_completed BOOLEAN DEFAULT false NOT NULL,
+    project_manifesto JSONB DEFAULT NULL,
     preferences JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
@@ -219,21 +221,21 @@ DO $$ BEGIN CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE 
 
 -- Collections
 DO $$ BEGIN CREATE POLICY "Collections are viewable by authenticated users" ON collections FOR SELECT TO authenticated USING (true); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Only admins can create collections" ON collections FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Only admins can update collections" ON collections FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Only admins can delete collections" ON collections FOR DELETE TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Only admins can create collections" ON collections FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Only admins can update collections" ON collections FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Only admins can delete collections" ON collections FOR DELETE TO authenticated USING (EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- Entries
 DO $$ BEGIN CREATE POLICY "Published entries are viewable by everyone" ON entries FOR SELECT USING (status = 'published' OR auth.uid() IS NOT NULL); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Authenticated users can create entries" ON entries FOR INSERT TO authenticated WITH CHECK (auth.uid() = author_id AND EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'editor'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Users can update their own entries" ON entries FOR UPDATE TO authenticated USING (auth.uid() = author_id OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Authors and admins can delete entries" ON entries FOR DELETE TO authenticated USING (auth.uid() = author_id OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Authenticated users can create entries" ON entries FOR INSERT TO authenticated WITH CHECK (auth.uid() = author_id AND EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin', 'editor'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Users can update their own entries" ON entries FOR UPDATE TO authenticated USING (auth.uid() = author_id OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Authors and admins can delete entries" ON entries FOR DELETE TO authenticated USING (auth.uid() = author_id OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- Media
 DO $$ BEGIN CREATE POLICY "Media viewable by authenticated users" ON media FOR SELECT TO authenticated USING (true); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Authenticated users can upload media" ON media FOR INSERT TO authenticated WITH CHECK (auth.uid() = uploaded_by AND EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'editor'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Users can update their own media" ON media FOR UPDATE TO authenticated USING (auth.uid() = uploaded_by OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
-DO $$ BEGIN CREATE POLICY "Users can delete their own media" ON media FOR DELETE TO authenticated USING (auth.uid() = uploaded_by OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin')); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Authenticated users can upload media" ON media FOR INSERT TO authenticated WITH CHECK (auth.uid() = uploaded_by AND EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin', 'editor'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Users can update their own media" ON media FOR UPDATE TO authenticated USING (auth.uid() = uploaded_by OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN CREATE POLICY "Users can delete their own media" ON media FOR DELETE TO authenticated USING (auth.uid() = uploaded_by OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'super_admin'))); EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- Entry Revisions
 DO $$ BEGIN CREATE POLICY "Revisions viewable by authenticated users" ON entry_revisions FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM entries WHERE entries.id = entry_revisions.entry_id AND (entries.author_id = auth.uid() OR EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role IN ('admin', 'editor'))))); EXCEPTION WHEN duplicate_object THEN null; END $$;

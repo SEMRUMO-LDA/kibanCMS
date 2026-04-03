@@ -30,31 +30,80 @@ kibanCMS/
 
 ## 🚀 Quick Start
 
-### 1. Setup Supabase
+### **Automated Setup (Recommended)** ⚡
+
+We've created an interactive onboarding script that will guide you through the entire setup process:
+
+```bash
+# Mac/Linux
+pnpm setup
+
+# Windows
+pnpm setup:windows
+
+# Or run directly:
+bash setup.sh              # Mac/Linux
+powershell -ExecutionPolicy Bypass -File setup.ps1  # Windows
+```
+
+**The script will:**
+1. ✅ Check prerequisites (Node.js, pnpm)
+2. ✅ Guide you through Supabase configuration
+3. ✅ Create your `.env` file automatically
+4. ✅ Install all dependencies
+5. ✅ Provide database migration instructions
+6. ✅ Show you next steps to start developing
+
+**After setup, just run:**
+```bash
+pnpm dev
+```
+
+This starts both the Admin UI (http://localhost:5173) and API Server (http://localhost:5000).
+
+---
+
+### **Manual Setup** 🛠️
+
+If you prefer to set things up manually:
+
+#### 1. Setup Supabase
 
 ```bash
 # Create a new Supabase project
 # Go to SQL Editor and run the migration scripts in order:
 database/migrations/001_initial_schema.sql
-database/migrations/002_advanced_schema.sql
-database/migrations/003_hooks_audit_smart_media.sql
-
-# Create Storage bucket
-# Go to Storage > New Bucket
-# Name: "media"
-# Public: Yes
+database/migrations/005_seed_data.sql
+database/migrations/006_onboarding_manifesto.sql
+database/migrations/007_api_keys.sql
+database/migrations/009_webhooks.sql
 ```
 
-### 2. Install in Your Project
+#### 2. Configure Environment
 
 ```bash
-# Install packages (when published)
-npm install @kiban/core @kiban/ui @kiban/media
+# Copy the example environment file
+cp .env.example .env
 
-# Or for local development
-npm link ./packages/core
-npm link ./packages/ui
-npm link ./packages/media
+# Edit .env and add your Supabase credentials:
+# VITE_SUPABASE_URL=https://your-project.supabase.co
+# VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+#### 3. Install Dependencies
+
+```bash
+# Install pnpm if not already installed
+npm install -g pnpm
+
+# Install all dependencies
+pnpm install
+```
+
+#### 4. Start Development
+
+```bash
+pnpm dev
 ```
 
 ### 3. Create Your Manifest
@@ -356,10 +405,56 @@ VITE_GOOGLE_VISION_API_KEY=xxx
 
 MIT © Kiban Agency
 
+## 🌐 Example Frontend (NEW in v1.0!)
+
+We've included a minimal **Hello World** frontend example to get you started in **under 2 minutes**!
+
+### **Quick Setup (Automated)** ⚡
+
+From the root of the project:
+
+```bash
+# Mac/Linux
+pnpm setup:example
+
+# Windows
+pnpm setup:example:windows
+```
+
+The script will:
+1. ✅ Create `.env.local` automatically
+2. ✅ Ask for your API key (copy from Settings)
+3. ✅ Install dependencies
+4. ✅ You're done! Run `pnpm dev:example`
+
+### **Manual Setup** 🛠️
+
+```bash
+cd apps/example
+cp .env.example .env.local
+# Edit .env.local and add your API key
+pnpm install
+pnpm dev
+```
+
+Visit http://localhost:3000
+
+**Features:**
+- ✅ Next.js 14 with App Router
+- ✅ 3 pages: Home, Blog List, Blog Post
+- ✅ SSG + ISR (Static Generation + Revalidation)
+- ✅ ~200 lines of code
+- ✅ Zero dependencies (pure CSS)
+- ✅ Ready to customize!
+
+See `apps/example/README.md` for full documentation.
+
+---
+
 ## 🤝 Contributing
 
 This is a proprietary project. For bug reports or feature requests, contact: dev@kiban.pt
 
 ---
 
-Built with ❤️ by Tiago Pachec - Pushing the boundaries of what a CMS can be.
+Built with ❤️ by Tiago Pacheco - Pushing the boundaries of what a CMS can be.

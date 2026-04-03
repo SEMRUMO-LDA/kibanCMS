@@ -1,0 +1,35 @@
+{
+  "name": "@kiban/api",
+  "version": "1.0.0",
+  "description": "KibanCMS Unified Server (API + Admin)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "pnpm build:api && pnpm build:admin",
+    "build:api": "tsc",
+    "build:admin": "cd ../admin && pnpm build",
+    "start": "NODE_ENV=production node dist/server.js",
+    "start:prod": "NODE_ENV=production node dist/server.js",
+    "lint": "eslint src --ext .ts",
+    "test": "node --import tsx --test src/__tests__/smoke.test.ts",
+    "test:smoke": "node --import tsx --test src/__tests__/smoke.test.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "methods": "^1.1.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

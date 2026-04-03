@@ -1,0 +1,22 @@
+:root {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: #ffffff;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Base custom utility classes, as the project doesn't use Tailwind */
+.p-8 { padding: 2rem; }
+h1 { font-size: 2rem; font-weight: 600; margin-bottom: 1rem; }

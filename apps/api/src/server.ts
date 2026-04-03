@@ -1,0 +1,213 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import collectionsRouter from './routes/collections.js';
+import entriesRouter from './routes/entries.js';
+import webhooksRouter from './routes/webhooks.js';
+import mediaRouter from './routes/media.js';
+import usersRouter from './routes/users.js';
+import { validateApiKey, validateJWT, configureCors } from './middleware/auth.js';
+import { startWebhookWorker } from './lib/webhook-worker.js';
+
+// ES Module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['*'];
+
+// CORS configuration - MUST BE FIRST, before helmet
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('[CORS] Blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+}));
+
+// Security middleware (AFTER CORS, disabled in dev)
+if (NODE_ENV === 'production') {
+  app.use(helmet({
+    contentSecurityPolicy: false, // Disable CSP for API
+    crossOriginResourcePolicy: false, // Disable CORP for API
+  }));
+}
+
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting - 100 requests per 15 minutes per IP
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: {
+      message: 'Too many requests from this IP, please try again later.',
+      status: 429,
+      timestamp: new Date().toISOString(),
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to API routes only
+app.use('/api/v1', limiter);
+
+// Health check endpoint (no auth required)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'KibanCMS Unified Server',
+    version: '1.0.0',
+    mode: NODE_ENV,
+  });
+});
+
+// API routes
+// Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)
+app.use('/api/v1/collections', validateJWT, collectionsRouter);
+app.use('/api/v1/users', validateJWT, usersRouter);
+app.use('/api/v1/entries', validateApiKey, entriesRouter);
+app.use('/api/v1/media', validateApiKey, mediaRouter);
+app.use('/api/v1/webhooks', validateApiKey, webhooksRouter);
+
+// Serve Admin UI (static files from admin build)
+if (NODE_ENV === 'production') {
+  const adminBuildPath = path.join(__dirname, '../../../admin/dist');
+
+  // Serve static files
+  app.use(express.static(adminBuildPath));
+
+  // SPA fallback - serve index.html for all other routes
+  app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({
+        error: {
+          message: 'API endpoint not found',
+          status: 404,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    res.sendFile(path.join(adminBuildPath, 'index.html'));
+  });
+} else {
+  // Development mode - just handle 404 for non-API routes
+  app.use((req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({
+        error: {
+          message: 'API endpoint not found',
+          status: 404,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    res.status(404).send(`
+      <html>
+        <body>
+          <h1>KibanCMS Unified Server - Development Mode</h1>
+          <p>Admin UI is not served in development. Run it separately:</p>
+          <code>cd apps/admin && pnpm dev</code>
+          <hr>
+          <h2>API Endpoints:</h2>
+          <ul>
+            <li><a href="/health">/health</a> - Health check</li>
+            <li>/api/v1/collections - List collections</li>
+            <li>/api/v1/entries/:collection - List entries</li>
+          </ul>
+        </body>
+      </html>
+    `);
+  });
+}
+
+// Error handler
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({
+    error: {
+      message: err.message || 'Internal server error',
+      status: 500,
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
+// Start webhook worker
+const stopWebhookWorker = startWebhookWorker();
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  stopWebhookWorker();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  stopWebhookWorker();
+  process.exit(0);
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   🚀 KibanCMS Unified Server                             ║
+║                                                           ║
+║   Status:  RUNNING                                       ║
+║   Port:    ${PORT.toString().padEnd(44)}║
+║   Mode:    ${NODE_ENV.padEnd(44)}║
+║   Health:  http://localhost:${PORT}/health${' '.repeat(26)}║
+║                                                           ║
+${NODE_ENV === 'production' ?
+`║   Admin UI: http://localhost:${PORT}${' '.repeat(30)}║
+║                                                           ║` :
+`║   Admin UI: Run separately (dev mode)                    ║
+║             cd apps/admin && pnpm dev                    ║
+║                                                           ║`}
+║   API Endpoints:                                         ║
+║   • CRUD   /api/v1/collections                           ║
+║   • CRUD   /api/v1/entries/:collection                   ║
+║   • CRUD   /api/v1/media                                 ║
+║   • CRUD   /api/v1/users                                 ║
+║   • CRUD   /api/v1/webhooks                              ║
+║                                                           ║
+║   🔄 Webhook Worker: ACTIVE                              ║
+║                                                           ║
+║   Documentation: FRONTEND_INTEGRATION_GUIDE.md           ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+  `);
+});
+
+export default app;

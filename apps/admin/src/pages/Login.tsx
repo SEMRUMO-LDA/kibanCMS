@@ -1,0 +1,327 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import styled, { keyframes } from 'styled-components';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../features/auth/hooks/useAuth';
+import { FileText, ArrowRight } from 'lucide-react';
+import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+
+// ============================================
+// ANIMATIONS
+// ============================================
+
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const float = keyframes`
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+`;
+
+// ============================================
+// STYLED COMPONENTS
+// ============================================
+
+const Container = styled.div`
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, ${colors.gray[50]} 0%, ${colors.white} 50%, ${colors.accent[50]} 100%);
+  padding: ${spacing[8]};
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, ${colors.accent[200]}40 0%, transparent 70%);
+    top: -250px;
+    right: -250px;
+    border-radius: 50%;
+    animation: ${float} 8s ease-in-out infinite;
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, ${colors.accent[300]}30 0%, transparent 70%);
+    bottom: -200px;
+    left: -200px;
+    border-radius: 50%;
+    animation: ${float} 10s ease-in-out infinite;
+    animation-delay: 2s;
+  }
+`;
+
+const FormBox = styled.div`
+  width: 100%;
+  max-width: 440px;
+  background: ${colors.white};
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid ${colors.gray[200]};
+  padding: ${spacing[10]} ${spacing[8]};
+  border-radius: ${borders.radius['2xl']};
+  box-shadow: ${shadows.xl};
+  z-index: 10;
+  animation: ${fadeIn} ${animations.duration.slow} ${animations.easing.out};
+`;
+
+const Header = styled.div`
+  text-align: center;
+  margin-bottom: ${spacing[8]};
+
+  .logo-wrapper {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto ${spacing[4]};
+    background: linear-gradient(135deg, ${colors.accent[400]}, ${colors.accent[600]});
+    border-radius: ${borders.radius.xl};
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: ${shadows.lg};
+
+    svg {
+      color: ${colors.white};
+    }
+  }
+
+  h1 {
+    font-size: ${typography.fontSize['2xl']};
+    font-weight: ${typography.fontWeight.bold};
+    margin: 0 0 ${spacing[2]} 0;
+    letter-spacing: ${typography.letterSpacing.tight};
+    color: ${colors.gray[900]};
+  }
+
+  p {
+    font-size: ${typography.fontSize.sm};
+    color: ${colors.gray[600]};
+    margin: 0;
+    line-height: ${typography.lineHeight.relaxed};
+  }
+`;
+
+const Form = styled.form`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing[5]};
+`;
+
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing[2]};
+`;
+
+const Label = styled.label`
+  font-size: ${typography.fontSize.sm};
+  font-weight: ${typography.fontWeight.semibold};
+  color: ${colors.gray[700]};
+  letter-spacing: ${typography.letterSpacing.wide};
+  text-transform: uppercase;
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: ${spacing[3]} ${spacing[4]};
+  background: ${colors.white};
+  border: 1px solid ${colors.gray[300]};
+  border-radius: ${borders.radius.lg};
+  font-size: ${typography.fontSize.base};
+  color: ${colors.gray[900]};
+  font-family: ${typography.fontFamily.sans};
+  transition: all ${animations.duration.fast} ${animations.easing.out};
+
+  &::placeholder {
+    color: ${colors.gray[400]};
+  }
+
+  &:focus {
+    outline: none;
+    border-color: ${colors.accent[500]};
+    box-shadow: 0 0 0 3px ${colors.accent[500]}20;
+  }
+
+  &:disabled {
+    background: ${colors.gray[50]};
+    cursor: not-allowed;
+  }
+`;
+
+const Button = styled.button`
+  width: 100%;
+  padding: ${spacing[3.5]} ${spacing[4]};
+  background: ${colors.accent[500]};
+  color: ${colors.white};
+  border: none;
+  border-radius: ${borders.radius.lg};
+  font-size: ${typography.fontSize.base};
+  font-weight: ${typography.fontWeight.semibold};
+  font-family: ${typography.fontFamily.sans};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing[2]};
+  transition: all ${animations.duration.fast} ${animations.easing.out};
+  box-shadow: ${shadows.sm};
+
+  &:hover:not(:disabled) {
+    background: ${colors.accent[600]};
+    transform: translateY(-1px);
+    box-shadow: ${shadows.md};
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  svg {
+    transition: transform ${animations.duration.fast} ${animations.easing.out};
+  }
+
+  &:hover:not(:disabled) svg {
+    transform: translateX(2px);
+  }
+`;
+
+const ErrorMsg = styled.div`
+  padding: ${spacing[3]} ${spacing[4]};
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: ${borders.radius.lg};
+  color: #991b1b;
+  font-size: ${typography.fontSize.sm};
+  text-align: center;
+  animation: ${fadeIn} ${animations.duration.fast} ${animations.easing.out};
+`;
+
+const Footer = styled.div`
+  margin-top: ${spacing[6]};
+  padding-top: ${spacing[6]};
+  border-top: 1px solid ${colors.gray[200]};
+  text-align: center;
+
+  p {
+    font-size: ${typography.fontSize.xs};
+    color: ${colors.gray[500]};
+    margin: 0;
+
+    strong {
+      color: ${colors.accent[600]};
+      font-weight: ${typography.fontWeight.semibold};
+    }
+  }
+`;
+
+// ============================================
+// COMPONENT
+// ============================================
+
+export const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { session } = useAuth();
+
+  useEffect(() => {
+    if (session) {
+      navigate('/', { replace: true });
+    }
+  }, [session, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) throw signInError;
+
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Container>
+      <FormBox>
+        <Header>
+          <div className="logo-wrapper">
+            <FileText size={32} />
+          </div>
+          <h1>kibanCMS</h1>
+          <p>Sign in to access your administrative dashboard</p>
+        </Header>
+
+        <Form onSubmit={handleSubmit}>
+          {error && <ErrorMsg>{error}</ErrorMsg>}
+
+          <FormGroup>
+            <Label htmlFor="email">Email Address</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@example.com"
+              required
+              disabled={loading}
+              autoComplete="email"
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••"
+              required
+              disabled={loading}
+              autoComplete="current-password"
+            />
+          </FormGroup>
+
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign In'}
+            {!loading && <ArrowRight size={20} />}
+          </Button>
+        </Form>
+
+        <Footer>
+          <p>
+            Powered by <strong>kibanCMS</strong> v1.0
+          </p>
+        </Footer>
+      </FormBox>
+    </Container>
+  );
+};

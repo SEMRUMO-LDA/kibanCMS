@@ -14,7 +14,14 @@
     "apps/*"
   ],
   "scripts": {
+    "setup": "bash setup.sh",
+    "setup:windows": "powershell -ExecutionPolicy Bypass -File setup.ps1",
     "dev": "turbo dev",
+    "dev:admin": "cd apps/admin && pnpm dev",
+    "dev:api": "cd apps/api && pnpm dev",
+    "dev:example": "cd apps/example && pnpm dev",
+    "setup:example": "cd apps/example && pnpm run setup",
+    "setup:example:windows": "cd apps/example && pnpm run setup:windows",
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
