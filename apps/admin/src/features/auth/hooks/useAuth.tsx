@@ -62,13 +62,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!active) return;
-      
+
       setSession(newSession);
       setUser(newSession?.user ?? null);
-      
+
       if (!newSession?.user) {
         setProfile(null);
-      } else if (_event === 'SIGNED_IN') {
+      } else if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
         try {
           const { data: profileData } = await supabase
             .from('profiles')
@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.error(err);
         }
       }
-      
+
       setLoading(false);
       clearTimeout(failsafe);
     });

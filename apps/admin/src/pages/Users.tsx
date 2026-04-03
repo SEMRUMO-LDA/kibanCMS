@@ -210,8 +210,8 @@ const UserInfo = styled.div`
 const RoleBadge = styled.span<{ $role: UserRole }>`
   display: inline-flex;
   align-items: center;
-  gap: ${spacing[1.5]};
-  padding: ${spacing[1.5]} ${spacing[3]};
+  gap: ${spacing[2]};
+  padding: ${spacing[2]} ${spacing[3]};
   border-radius: ${borders.radius.full};
   font-size: ${typography.fontSize.xs};
   font-weight: ${typography.fontWeight.semibold};
