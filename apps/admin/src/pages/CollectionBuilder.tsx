@@ -527,7 +527,7 @@ export const CollectionBuilder = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('collections')
         .insert({
           name: collection.name,
@@ -538,11 +538,16 @@ export const CollectionBuilder = () => {
           color: collection.color,
           fields: collection.fields,
           created_by: user?.id,
-        });
+        })
+        .select('id, slug')
+        .single();
 
       if (error) throw new Error(error.message);
 
-      navigate(`/content/${collection.slug}`);
+      // RLS can silently reject inserts (no error, no data)
+      if (!data) throw new Error('Permission denied. Your role may not allow creating collections.');
+
+      navigate(`/content/${data.slug}`);
     } catch (error: any) {
       console.error('[CollectionBuilder] Error:', error);
       alert(`Failed to create collection: ${error.message}`);
