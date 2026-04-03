@@ -27,6 +27,10 @@ import {
   Quote,
   Calendar,
   Loader,
+  Upload,
+  Wand2,
+  ImageIcon,
+  X,
 } from 'lucide-react';
 
 // ============================================
@@ -428,6 +432,13 @@ export const CollectionBuilder = () => {
   const [showFieldTypeSelector, setShowFieldTypeSelector] = useState(false);
   const [draggedFieldIndex, setDraggedFieldIndex] = useState<number | null>(null);
 
+  // AI state
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiContext, setAiContext] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const [collection, setCollection] = useState<CollectionData>({
     name: '',
     slug: '',
@@ -522,6 +533,71 @@ export const CollectionBuilder = () => {
     setDraggedFieldIndex(null);
   };
 
+  // AI image upload handler
+  const handleAiImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setAiImage(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  // AI generation handler
+  const handleAiGenerate = async () => {
+    if (!aiImage || !session?.access_token) return;
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || window.location.origin;
+      const res = await fetch(`${apiBase}/api/v1/ai/generate-collection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          image: aiImage,
+          context: aiContext || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || 'AI generation failed');
+
+      const schema = data.data;
+
+      // Apply AI-generated schema to collection
+      setCollection({
+        name: schema.name,
+        slug: schema.slug,
+        description: schema.description || '',
+        type: schema.type || 'custom',
+        icon: null,
+        color: null,
+        fields: schema.fields.map((f: any, i: number) => ({
+          id: `field-${Date.now()}-${i}`,
+          name: f.id || f.name?.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+          label: f.name,
+          type: f.type || 'text',
+          required: f.required || false,
+          maxLength: f.maxLength || undefined,
+          helpText: f.helpText || '',
+          placeholder: f.placeholder || '',
+        })),
+      });
+
+      setShowAiModal(false);
+      setAiImage(null);
+      setAiContext('');
+      setCurrentStep(2); // Jump to fields step to review
+    } catch (err: any) {
+      setAiError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // Submit collection
   const handleSubmit = async () => {
     setLoading(true);
@@ -582,6 +658,19 @@ export const CollectionBuilder = () => {
             </p>
 
             <PresetGrid>
+              {/* AI-powered collection creation */}
+              <PresetCard
+                $selected={false}
+                onClick={() => setShowAiModal(true)}
+                style={{ borderColor: '#8b5cf6', background: 'linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%)' }}
+              >
+                <div className="icon" style={{ background: '#8b5cf6', color: '#fff' }}>
+                  <Wand2 size={20} />
+                </div>
+                <h3 style={{ color: '#7c3aed' }}>AI Generate</h3>
+                <p>Upload a screenshot and let AI create the collection</p>
+              </PresetCard>
+
               <PresetCard
                 $selected={selectedPreset === null}
                 onClick={() => {
@@ -807,6 +896,159 @@ export const CollectionBuilder = () => {
           onSelect={addField}
           onClose={() => setShowFieldTypeSelector(false)}
         />
+      )}
+
+      {/* AI Generation Modal */}
+      {showAiModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: spacing[4],
+        }} onClick={() => !aiLoading && setShowAiModal(false)}>
+          <div style={{
+            background: colors.white, borderRadius: borders.radius['2xl'], boxShadow: shadows['2xl'],
+            width: '100%', maxWidth: 560, maxHeight: '90vh', overflow: 'auto',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div style={{
+              padding: `${spacing[6]} ${spacing[6]} ${spacing[4]}`,
+              borderBottom: `1px solid ${colors.gray[200]}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing[3] }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: borders.radius.lg,
+                  background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+                }}>
+                  <Wand2 size={20} />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold }}>
+                    AI Collection Generator
+                  </h2>
+                  <p style={{ margin: 0, fontSize: typography.fontSize.xs, color: colors.gray[500] }}>
+                    Upload a screenshot and AI will design your collection
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => !aiLoading && setShowAiModal(false)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: spacing[2],
+                color: colors.gray[400], borderRadius: borders.radius.md,
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: spacing[6] }}>
+              {/* Image Upload Area */}
+              {!aiImage ? (
+                <label style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  padding: `${spacing[10]} ${spacing[6]}`,
+                  border: `2px dashed ${colors.gray[300]}`, borderRadius: borders.radius.xl,
+                  cursor: 'pointer', transition: 'all 0.2s', background: colors.gray[50],
+                }}>
+                  <div style={{
+                    width: 64, height: 64, borderRadius: '50%', background: '#ede9fe',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#7c3aed', marginBottom: spacing[4],
+                  }}>
+                    <ImageIcon size={28} />
+                  </div>
+                  <span style={{ fontWeight: typography.fontWeight.semibold, color: colors.gray[900], marginBottom: spacing[1] }}>
+                    Drop screenshot here or click to browse
+                  </span>
+                  <span style={{ fontSize: typography.fontSize.xs, color: colors.gray[500] }}>
+                    PNG, JPG, WebP — any web page, design, or wireframe
+                  </span>
+                  <input type="file" accept="image/*" onChange={handleAiImageSelect} style={{ display: 'none' }} />
+                </label>
+              ) : (
+                <div style={{ position: 'relative', marginBottom: spacing[4] }}>
+                  <img src={aiImage} alt="Preview" style={{
+                    width: '100%', maxHeight: 300, objectFit: 'contain',
+                    borderRadius: borders.radius.lg, border: `1px solid ${colors.gray[200]}`,
+                  }} />
+                  <button onClick={() => setAiImage(null)} style={{
+                    position: 'absolute', top: 8, right: 8,
+                    background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
+                    borderRadius: '50%', width: 28, height: 28,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Context Input */}
+              <div style={{ marginTop: spacing[4] }}>
+                <label style={{ display: 'block', fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium, color: colors.gray[700], marginBottom: spacing[2] }}>
+                  Additional context (optional)
+                </label>
+                <input
+                  type="text"
+                  value={aiContext}
+                  onChange={e => setAiContext(e.target.value)}
+                  placeholder="e.g., This is a testimonials section for a SaaS landing page"
+                  disabled={aiLoading}
+                  style={{
+                    width: '100%', padding: `${spacing[3]} ${spacing[4]}`,
+                    border: `1px solid ${colors.gray[300]}`, borderRadius: borders.radius.lg,
+                    fontSize: typography.fontSize.sm, fontFamily: typography.fontFamily.sans,
+                  }}
+                />
+              </div>
+
+              {/* Error */}
+              {aiError && (
+                <div style={{
+                  marginTop: spacing[4], padding: spacing[3],
+                  background: '#fef2f2', border: '1px solid #fecaca', borderRadius: borders.radius.lg,
+                  fontSize: typography.fontSize.sm, color: '#dc2626',
+                }}>
+                  {aiError}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: `${spacing[4]} ${spacing[6]} ${spacing[6]}`,
+              display: 'flex', gap: spacing[3], justifyContent: 'flex-end',
+            }}>
+              <button onClick={() => setShowAiModal(false)} disabled={aiLoading} style={{
+                padding: `${spacing[3]} ${spacing[5]}`, background: colors.white,
+                border: `1px solid ${colors.gray[300]}`, borderRadius: borders.radius.lg,
+                fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium,
+                cursor: 'pointer', fontFamily: typography.fontFamily.sans,
+              }}>
+                Cancel
+              </button>
+              <button onClick={handleAiGenerate} disabled={!aiImage || aiLoading} style={{
+                padding: `${spacing[3]} ${spacing[5]}`,
+                background: aiLoading ? '#a78bfa' : 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+                color: '#fff', border: 'none', borderRadius: borders.radius.lg,
+                fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold,
+                cursor: !aiImage || aiLoading ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: spacing[2],
+                opacity: !aiImage ? 0.5 : 1, fontFamily: typography.fontFamily.sans,
+              }}>
+                {aiLoading ? (
+                  <>
+                    <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    Analyzing image...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 size={16} />
+                    Generate Collection
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </Container>
   );
