@@ -180,6 +180,7 @@ interface EntryEditorProps {
   onSave: (data: EntryData, status: ContentStatus) => Promise<void>;
   onCancel?: () => void;
   saveButtonText?: string;
+  onChange?: () => void;
 }
 
 export function EntryEditor({
@@ -189,6 +190,7 @@ export function EntryEditor({
   onSave,
   onCancel,
   saveButtonText = 'Save Entry',
+  onChange,
 }: EntryEditorProps) {
   const [data, setData] = useState<EntryData>(initialData);
   const [status, setStatus] = useState<ContentStatus>(initialStatus);
@@ -221,6 +223,7 @@ export function EntryEditor({
     setData(prev => ({ ...prev, [fieldId]: value }));
     setIsDirty(true);
     setSaveStatus('idle');
+    onChange?.();
 
     // Clear error for this field if it exists
     if (errors[fieldId]) {

@@ -337,8 +337,18 @@ const StatusBadge = styled.span<{ $status: string }>`
     switch (props.$status) {
       case 'published':
         return `
-          background: ${colors.accent[100]};
-          color: ${colors.accent[700]};
+          background: #dcfce7;
+          color: #166534;
+        `;
+      case 'review':
+        return `
+          background: #fef3c7;
+          color: #92400e;
+        `;
+      case 'scheduled':
+        return `
+          background: #dbeafe;
+          color: #1e40af;
         `;
       case 'archived':
         return `
@@ -876,22 +886,30 @@ export const CollectionEntries = () => {
             aria-label="Search entries"
           />
         </SearchBox>
-        <FilterButton onClick={() => setShowFilterModal(true)} aria-label="Filter entries">
-          <Filter size={18} />
-          Filter
-          {filterStatus !== 'all' && <span style={{
-            background: colors.accent[500],
-            color: colors.white,
-            borderRadius: '50%',
-            width: '18px',
-            height: '18px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: 600
-          }}>1</span>}
-        </FilterButton>
+        <div style={{ display: 'flex', gap: spacing[1], background: colors.gray[100], borderRadius: borders.radius.lg, padding: '3px' }}>
+          {['all', 'draft', 'published', 'review', 'archived'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilterStatus(status)}
+              style={{
+                padding: `${spacing[2]} ${spacing[3]}`,
+                borderRadius: borders.radius.md,
+                border: 'none',
+                background: filterStatus === status ? colors.white : 'transparent',
+                boxShadow: filterStatus === status ? shadows.sm : 'none',
+                color: filterStatus === status ? colors.gray[900] : colors.gray[500],
+                fontWeight: filterStatus === status ? 600 : 500,
+                fontSize: typography.fontSize.xs,
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+                fontFamily: typography.fontFamily.sans,
+                transition: 'all 0.15s',
+              }}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
       </Controls>
 
       {selectedEntries.size > 0 && (

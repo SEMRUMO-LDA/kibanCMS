@@ -4,7 +4,7 @@
  * Create or edit an entry
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -12,7 +12,8 @@ import { EntryEditor, type EntryData } from '../components/EntryEditor';
 import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { ArrowLeft, Loader } from 'lucide-react';
+import { ArrowLeft, Loader, Clock } from 'lucide-react';
+import { RevisionHistory } from '../components/RevisionHistory';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -130,8 +131,23 @@ export function EntryEdit() {
   const [entry, setEntry] = useState<Entry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showRevisions, setShowRevisions] = useState(false);
 
   const isEditMode = !!entryId;
+
+  // Warn before closing tab with unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   useEffect(() => {
     async function fetchData() {
@@ -173,6 +189,7 @@ export function EntryEdit() {
 
   const handleSave = async (data: EntryData, status: string) => {
     if (!collection) return;
+    setSaveStatus('saving');
 
     // Extract a human-readable title from the data:
     // 1. Explicit title/name field
@@ -205,9 +222,11 @@ export function EntryEdit() {
           .eq('id', entry.id);
 
         if (error) throw error;
+        setIsDirty(false);
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
       } else {
         if (!user) throw new Error('User not authenticated');
-
 
         const { error } = await supabase
           .from('entries')
@@ -222,15 +241,18 @@ export function EntryEdit() {
           } as any);
 
         if (error) throw error;
+        setIsDirty(false);
         navigate(`/content/${collection.slug}`);
       }
     } catch (err: any) {
       console.error('Error saving entry:', err);
+      setSaveStatus('idle');
       throw err;
     }
   };
 
   const handleCancel = () => {
+    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) return;
     navigate(`/content/${collectionSlug}`);
   };
 
@@ -261,10 +283,18 @@ export function EntryEdit() {
   return (
     <>
       <PageHeader>
-        <BackButton onClick={handleCancel}>
-          <ArrowLeft />
-          Back to {collection.name}
-        </BackButton>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <BackButton onClick={handleCancel}>
+            <ArrowLeft />
+            Back to {collection.name}
+          </BackButton>
+          {isEditMode && entry && (
+            <BackButton onClick={() => setShowRevisions(true)} style={{ marginBottom: '16px' }}>
+              <Clock />
+              History
+            </BackButton>
+          )}
+        </div>
         <Title>
           {isEditMode ? 'Edit Entry' : 'Create New Entry'}
         </Title>
@@ -273,6 +303,21 @@ export function EntryEdit() {
         </Subtitle>
       </PageHeader>
 
+      {/* Save status indicator */}
+      {saveStatus !== 'idle' && (
+        <div style={{
+          position: 'fixed', top: 16, right: 16, zIndex: 100,
+          padding: '8px 16px', borderRadius: '8px',
+          background: saveStatus === 'saving' ? colors.gray[800] : '#16a34a',
+          color: '#fff', fontSize: '13px', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: '8px',
+          boxShadow: shadows.lg,
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          {saveStatus === 'saving' ? 'Saving...' : 'Saved'}
+        </div>
+      )}
+
       <EntryEditor
         fields={fields}
         initialData={entry?.content || {}}
@@ -280,7 +325,21 @@ export function EntryEdit() {
         onSave={handleSave}
         onCancel={handleCancel}
         saveButtonText={isEditMode ? 'Update Entry' : 'Create Entry'}
+        onChange={() => setIsDirty(true)}
       />
+
+      {showRevisions && entry && (
+        <RevisionHistory
+          entryId={entry.id}
+          currentVersion={(entry as any).version || 1}
+          onRestore={(content, title) => {
+            // Update entry state so EntryEditor re-renders with restored content
+            setEntry(prev => prev ? { ...prev, content, title } : prev);
+            setIsDirty(true);
+          }}
+          onClose={() => setShowRevisions(false)}
+        />
+      )}
     </>
   );
 }
