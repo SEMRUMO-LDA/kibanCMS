@@ -1,5 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { logger } from '../lib/logger.js';
+import { validateContent } from '../lib/validate-content.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -54,77 +56,6 @@ async function getUserRole(profileId: string): Promise<string | null> {
 
 function isAdminOrEditor(role: string | null): boolean {
   return ['super_admin', 'admin', 'editor'].includes(role || '');
-}
-
-// ============================================
-// CONTENT VALIDATION
-// Validates entry content against collection field definitions.
-// ============================================
-interface FieldDef {
-  id: string;
-  name: string;
-  type: string;
-  required?: boolean;
-  maxLength?: number;
-}
-
-function validateContent(content: Record<string, any>, fields: FieldDef[]): string[] {
-  const errors: string[] = [];
-  if (!fields || fields.length === 0) return errors;
-
-  for (const field of fields) {
-    const value = content[field.id];
-
-    // Required check
-    if (field.required && (value === undefined || value === null || value === '')) {
-      errors.push(`Field "${field.name}" (${field.id}) is required`);
-      continue;
-    }
-
-    // Skip validation if value is empty and not required
-    if (value === undefined || value === null || value === '') continue;
-
-    // Type checks
-    switch (field.type) {
-      case 'number':
-        if (typeof value !== 'number' && isNaN(Number(value))) {
-          errors.push(`Field "${field.name}" must be a number`);
-        }
-        break;
-      case 'boolean':
-        if (typeof value !== 'boolean') {
-          errors.push(`Field "${field.name}" must be a boolean`);
-        }
-        break;
-      case 'text':
-      case 'textarea':
-      case 'richtext':
-      case 'slug':
-        if (typeof value !== 'string') {
-          errors.push(`Field "${field.name}" must be a string`);
-        } else if (field.maxLength && value.length > field.maxLength) {
-          errors.push(`Field "${field.name}" exceeds max length of ${field.maxLength}`);
-        }
-        break;
-      case 'date':
-        if (typeof value === 'string' && isNaN(Date.parse(value))) {
-          errors.push(`Field "${field.name}" must be a valid date`);
-        }
-        break;
-      case 'select':
-        if (typeof value !== 'string') {
-          errors.push(`Field "${field.name}" must be a string`);
-        }
-        break;
-      case 'image':
-        if (typeof value !== 'string') {
-          errors.push(`Field "${field.name}" must be a string (URL or media ID)`);
-        }
-        break;
-    }
-  }
-
-  return errors;
 }
 
 // ============================================
@@ -218,7 +149,7 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching entries:', error);
+    logger.error('Error fetching entries', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -259,7 +190,7 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error fetching entry:', error);
+    logger.error('Error fetching entry', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -368,7 +299,7 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error creating entry:', error);
+    logger.error('Error creating entry', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -493,7 +424,7 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error updating entry:', error);
+    logger.error('Error updating entry', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
@@ -555,7 +486,7 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error deleting entry:', error);
+    logger.error('Error deleting entry', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
