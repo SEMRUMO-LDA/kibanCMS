@@ -81,14 +81,14 @@ export async function validateApiKey(
     }
 
     // Update last_used_at timestamp (background, non-blocking)
-    supabase
-      .from('api_keys')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('id', keyRecord.id)
-      .then(({ error: updateErr }) => {
-        if (updateErr) console.error('[Auth] Failed to update last_used_at:', updateErr.message);
-      })
-      .catch(() => { /* swallow - non-critical */ });
+    Promise.resolve(
+      supabase
+        .from('api_keys')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', keyRecord.id)
+    ).then(({ error: updateErr }) => {
+      if (updateErr) console.error('[Auth] Failed to update last_used_at:', updateErr.message);
+    }).catch(() => { /* swallow - non-critical */ });
 
     // Attach profile ID to request
     req.profileId = keyRecord.profile_id;
