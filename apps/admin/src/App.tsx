@@ -13,6 +13,7 @@ import { EntryEdit } from './pages/EntryEdit';
 import { Media } from './pages/Media';
 import { Users } from './pages/Users';
 import { Settings } from './pages/Settings';
+import { Diagnostics } from './pages/Diagnostics';
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -83,6 +84,7 @@ const AppContent = () => {
         <Route path="media" element={<Media />} />
         <Route path="users" element={<Users />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="diagnostics" element={<Diagnostics />} />
 
         {/* Placeholder for other routes */}
         <Route path="*" element={<Navigate to="/" replace />} />
