@@ -87,9 +87,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!active) return;
 
-      // INITIAL_SESSION is handled by getSession() above — skip to avoid double-processing.
+      console.debug('[Auth] Event:', event, newSession ? 'has session' : 'no session');
+
+      // INITIAL_SESSION — handled by getSession() above, skip unless it didn't resolve.
       if (event === 'INITIAL_SESSION') {
-        // Only use this if getSession() hasn't resolved yet (edge case).
         if (!initialised.current) {
           initialised.current = true;
           setSession(newSession);
@@ -99,10 +100,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // TOKEN_REFRESHED — update session/user refs but don't re-fetch profile.
+      // TOKEN_REFRESHED — update session refs. If refresh failed (null session), keep existing.
       if (event === 'TOKEN_REFRESHED') {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
+        if (newSession) {
+          setSession(newSession);
+          setUser(newSession.user ?? null);
+        }
+        // If newSession is null, the refresh failed — DON'T clear session,
+        // keep the existing one until it truly expires.
         return;
       }
 
@@ -117,12 +122,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // SIGNED_OUT or unknown — clear everything.
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      profileFetchedForId.current = null;
-      setLoading(false);
+      // SIGNED_OUT — clear everything.
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        profileFetchedForId.current = null;
+        setLoading(false);
+        return;
+      }
+
+      // Any other event — ignore, don't clear state.
     });
 
     // ── Safety net: NEVER hang longer than 5 seconds ──

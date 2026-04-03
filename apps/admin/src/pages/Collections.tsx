@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { FileText, ArrowRight, Loader, Code, Plus } from 'lucide-react';
+import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
@@ -244,6 +244,43 @@ const CodeButton = styled.button`
   }
 `;
 
+const CardActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${spacing[2]};
+`;
+
+const ActionBtn = styled.button`
+  background: none;
+  border: 1px solid ${colors.gray[200]};
+  border-radius: ${borders.radius.md};
+  padding: ${spacing[2]};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${colors.gray[500]};
+  transition: all ${animations.duration.fast} ${animations.easing.out};
+  font-family: ${typography.fontFamily.sans};
+
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  &:hover {
+    background: ${colors.gray[50]};
+    border-color: ${colors.gray[300]};
+    color: ${colors.gray[700]};
+  }
+
+  &.delete:hover {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+  }
+`;
+
 const LoadingContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -369,6 +406,25 @@ export const Collections = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+
+  const handleDelete = async (e: React.MouseEvent, collection: Collection) => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${collection.name}" and ALL its entries? This cannot be undone.`)) return;
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', collection.id);
+
+      if (deleteError) throw deleteError;
+      setCollections(prev => prev.filter(c => c.id !== collection.id));
+    } catch (err: any) {
+      alert('Failed to delete: ' + (err.message || 'Unknown error'));
+    }
+  };
 
   useEffect(() => {
     let active = true;
