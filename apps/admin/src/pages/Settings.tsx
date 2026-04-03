@@ -212,12 +212,10 @@ export const Settings = () => {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('api_keys')
-        .select('*')
-        .eq('profile_id', user.id)
-        .is('revoked_at', null)
-        .order('created_at', { ascending: false });
+      const { data, error } = await Promise.race([
+        supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 8000)),
+      ]);
 
       if (error) throw error;
       setApiKeys(data || []);

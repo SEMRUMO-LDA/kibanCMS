@@ -531,16 +531,16 @@ export const Users = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role, created_at, updated_at')
-        .order('created_at', { ascending: false });
+      const result = await Promise.race([
+        supabase.from('profiles').select('id, email, full_name, role, created_at, updated_at').order('created_at', { ascending: false }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 8000)),
+      ]);
 
-      if (error) throw error;
-      setUsers(data || []);
+      if (result.error) throw result.error;
+      setUsers(result.data || []);
     } catch (error: any) {
       console.error('Error loading users:', error);
-      toast.error('Failed to load users');
+      toast.error('Failed to load users: ' + (error.message || 'timeout'));
     } finally {
       setLoading(false);
     }

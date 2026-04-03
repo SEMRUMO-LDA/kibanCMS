@@ -463,10 +463,10 @@ export const Media = () => {
   const loadMedia = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('media')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await Promise.race([
+        supabase.from('media').select('*').order('created_at', { ascending: false }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Request timeout')), 8000)),
+      ]);
 
       if (error) throw error;
 
