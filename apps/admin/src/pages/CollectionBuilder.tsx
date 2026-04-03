@@ -634,12 +634,18 @@ export const CollectionBuilder = () => {
 
   // Validation
   const canProceed = () => {
-    if (currentStep === 0) return true; // Preset selection is optional
+    if (currentStep === 0) return true;
     if (currentStep === 1) {
       return collection.name.trim() && collection.slug.trim() && collection.type;
     }
     if (currentStep === 2) {
-      return collection.fields.length > 0 && collection.fields.every(f => f.name || f.label);
+      // Every field MUST have a name (API identifier). Auto-generate from label if missing.
+      return collection.fields.length > 0 && collection.fields.every(f => {
+        if (!f.name && f.label) {
+          f.name = f.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+        }
+        return !!f.name;
+      });
     }
     return true;
   };

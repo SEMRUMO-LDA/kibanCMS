@@ -196,6 +196,7 @@ export function EntryEditor({
   const [status, setStatus] = useState<ContentStatus>(initialStatus);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
   // Initialize data with default values for required fields
@@ -265,19 +266,20 @@ export function EntryEditor({
     }
 
     setSaveStatus('saving');
+    setSaveError(null);
 
     try {
       await onSave(data, status);
       setSaveStatus('saved');
       setIsDirty(false);
 
-      // Reset to idle after 2 seconds
       setTimeout(() => {
         setSaveStatus('idle');
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving entry:', error);
       setSaveStatus('error');
+      setSaveError(error.message || 'Failed to save. Please try again.');
     }
   };
 
@@ -324,7 +326,7 @@ export function EntryEditor({
             {saveStatus === 'error' && (
               <>
                 <AlertCircle />
-                <span>Error saving</span>
+                <span>{saveError || 'Error saving'}</span>
               </>
             )}
             {saveStatus === 'idle' && isDirty && (
