@@ -12,6 +12,7 @@ import { CollectionEntries } from './pages/CollectionEntries';
 import { EntryEdit } from './pages/EntryEdit';
 import { Media } from './pages/Media';
 import { Users } from './pages/Users';
+import { CollectionEdit } from './pages/CollectionEdit';
 import { Settings } from './pages/Settings';
 import { Diagnostics } from './pages/Diagnostics';
 
@@ -78,6 +79,7 @@ const AppContent = () => {
         <Route index element={<Dashboard />} />
         <Route path="content" element={<Collections />} />
         <Route path="content/builder" element={<CollectionBuilder />} />
+        <Route path="content/:slug/edit-collection" element={<CollectionEdit />} />
         <Route path="content/:collectionSlug" element={<CollectionEntries />} />
         <Route path="content/:collectionSlug/new" element={<EntryEdit />} />
         <Route path="content/:collectionSlug/edit/:entryId" element={<EntryEdit />} />
