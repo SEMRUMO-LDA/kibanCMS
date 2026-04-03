@@ -81,11 +81,13 @@ BEGIN
     LOOP EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON media'; END LOOP;
 END $$;
 
--- entry_revisions
+-- entry_revisions (only if table exists)
 DO $$ DECLARE r RECORD;
 BEGIN
-    FOR r IN SELECT policyname FROM pg_policies WHERE tablename = 'entry_revisions' AND schemaname = 'public'
-    LOOP EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON entry_revisions'; END LOOP;
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'entry_revisions' AND table_schema = 'public') THEN
+        FOR r IN SELECT policyname FROM pg_policies WHERE tablename = 'entry_revisions' AND schemaname = 'public'
+        LOOP EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON entry_revisions'; END LOOP;
+    END IF;
 END $$;
 
 -- ============================================
@@ -96,7 +98,12 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE media ENABLE ROW LEVEL SECURITY;
-ALTER TABLE entry_revisions ENABLE ROW LEVEL SECURITY;
+-- entry_revisions may not exist yet (created by 001 but not always applied)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'entry_revisions' AND table_schema = 'public') THEN
+        ALTER TABLE entry_revisions ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
 -- ============================================
 -- STEP 4: NEW POLICIES — PROFILES
@@ -173,12 +180,15 @@ CREATE POLICY "media_delete" ON media
     FOR DELETE TO authenticated USING (uploaded_by = auth.uid() OR is_admin_or_super());
 
 -- ============================================
--- STEP 8: NEW POLICIES — ENTRY REVISIONS
+-- STEP 8: NEW POLICIES — ENTRY REVISIONS (if table exists)
 -- ============================================
 
--- READ: any authenticated user
-CREATE POLICY "revisions_select" ON entry_revisions
-    FOR SELECT TO authenticated USING (true);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'entry_revisions' AND table_schema = 'public') THEN
+        CREATE POLICY "revisions_select" ON entry_revisions
+            FOR SELECT TO authenticated USING (true);
+    END IF;
+END $$;
 
 COMMIT;
 
