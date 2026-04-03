@@ -9,7 +9,40 @@ function escapeIlike(str: string): string {
   return str.replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
-/** Check if user has admin/editor role */
+// ============================================
+// COLLECTION CACHE (TTL 60s)
+// Avoids repeated DB lookups for the same collection within a short window.
+// ============================================
+interface CachedCollection {
+  id: string;
+  name: string;
+  slug: string;
+  fields: any[];
+  fetchedAt: number;
+}
+const collectionCache = new Map<string, CachedCollection>();
+const CACHE_TTL = 60_000; // 60 seconds
+
+async function getCollection(slug: string): Promise<CachedCollection | null> {
+  const cached = collectionCache.get(slug);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached;
+
+  const { data, error } = await supabase
+    .from('collections')
+    .select('id, name, slug, fields')
+    .eq('slug', slug)
+    .single();
+
+  if (error || !data) return null;
+
+  const entry: CachedCollection = { ...data, fields: data.fields || [], fetchedAt: Date.now() };
+  collectionCache.set(slug, entry);
+  return entry;
+}
+
+// ============================================
+// ROLE HELPER
+// ============================================
 async function getUserRole(profileId: string): Promise<string | null> {
   const { data } = await supabase
     .from('profiles')
@@ -23,6 +56,95 @@ function isAdminOrEditor(role: string | null): boolean {
   return ['super_admin', 'admin', 'editor'].includes(role || '');
 }
 
+// ============================================
+// CONTENT VALIDATION
+// Validates entry content against collection field definitions.
+// ============================================
+interface FieldDef {
+  id: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  maxLength?: number;
+}
+
+function validateContent(content: Record<string, any>, fields: FieldDef[]): string[] {
+  const errors: string[] = [];
+  if (!fields || fields.length === 0) return errors;
+
+  for (const field of fields) {
+    const value = content[field.id];
+
+    // Required check
+    if (field.required && (value === undefined || value === null || value === '')) {
+      errors.push(`Field "${field.name}" (${field.id}) is required`);
+      continue;
+    }
+
+    // Skip validation if value is empty and not required
+    if (value === undefined || value === null || value === '') continue;
+
+    // Type checks
+    switch (field.type) {
+      case 'number':
+        if (typeof value !== 'number' && isNaN(Number(value))) {
+          errors.push(`Field "${field.name}" must be a number`);
+        }
+        break;
+      case 'boolean':
+        if (typeof value !== 'boolean') {
+          errors.push(`Field "${field.name}" must be a boolean`);
+        }
+        break;
+      case 'text':
+      case 'textarea':
+      case 'richtext':
+      case 'slug':
+        if (typeof value !== 'string') {
+          errors.push(`Field "${field.name}" must be a string`);
+        } else if (field.maxLength && value.length > field.maxLength) {
+          errors.push(`Field "${field.name}" exceeds max length of ${field.maxLength}`);
+        }
+        break;
+      case 'date':
+        if (typeof value === 'string' && isNaN(Date.parse(value))) {
+          errors.push(`Field "${field.name}" must be a valid date`);
+        }
+        break;
+      case 'select':
+        if (typeof value !== 'string') {
+          errors.push(`Field "${field.name}" must be a string`);
+        }
+        break;
+      case 'image':
+        if (typeof value !== 'string') {
+          errors.push(`Field "${field.name}" must be a string (URL or media ID)`);
+        }
+        break;
+    }
+  }
+
+  return errors;
+}
+
+// ============================================
+// ENTRY SELECT FIELDS
+// Single source of truth for what we select from entries.
+// Includes author join.
+// ============================================
+const ENTRY_SELECT = `
+  id, title, slug, content, excerpt, status,
+  published_at, created_at, updated_at,
+  author_id, tags, meta, version, featured_image,
+  author:profiles!author_id(id, full_name, email)
+`;
+
+const ENTRY_SELECT_COMPACT = `
+  id, title, slug, content, excerpt, status,
+  published_at, created_at, updated_at,
+  author_id, tags, meta, version, featured_image
+`;
+
 /**
  * GET /api/v1/entries/:collection
  * Returns all entries for a collection
@@ -31,7 +153,7 @@ function isAdminOrEditor(role: string | null): boolean {
  * - status: filter by status (draft, published, archived)
  * - search: full-text search in title/excerpt
  * - tags: comma-separated tag filter
- * - limit: number of results (default 100)
+ * - limit: number of results (default 100, max 500)
  * - offset: pagination offset (default 0)
  * - sort: sort field (default: created_at)
  * - order: asc or desc (default: desc)
@@ -49,29 +171,16 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       order = 'desc',
     } = req.query;
 
-    const { data: collection, error: collectionError } = await supabase
-      .from('collections')
-      .select('id, name, slug')
-      .eq('slug', collectionSlug)
-      .single();
-
-    if (collectionError || !collection) {
-      res.status(404).json({
-        error: {
-          message: 'Collection not found',
-          status: 404,
-          timestamp: new Date().toISOString(),
-        },
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
+        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     let query = supabase
       .from('entries')
-      .select(
-        'id, title, slug, content, excerpt, status, published_at, created_at, updated_at, author_id, tags, meta, version, featured_image',
-        { count: 'exact' }
-      )
+      .select(ENTRY_SELECT, { count: 'exact' })
       .eq('collection_id', collection.id);
 
     if (status && typeof status === 'string') {
@@ -103,27 +212,15 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
     res.json({
       data: entries || [],
       meta: {
-        collection: {
-          id: collection.id,
-          name: collection.name,
-          slug: collection.slug,
-        },
-        pagination: {
-          limit: limitNum,
-          offset: offsetNum,
-          total: count || 0,
-        },
+        collection: { id: collection.id, name: collection.name, slug: collection.slug },
+        pagination: { limit: limitNum, offset: offsetNum, total: count || 0 },
       },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error('Error fetching entries:', error);
     res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        status: 500,
-        timestamp: new Date().toISOString(),
-      },
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });
@@ -136,69 +233,43 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
   try {
     const { collection: collectionSlug, slug: entrySlug } = req.params;
 
-    const { data: collection, error: collectionError } = await supabase
-      .from('collections')
-      .select('id, name, slug')
-      .eq('slug', collectionSlug)
-      .single();
-
-    if (collectionError || !collection) {
-      res.status(404).json({
-        error: {
-          message: 'Collection not found',
-          status: 404,
-          timestamp: new Date().toISOString(),
-        },
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
+        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { data: entry, error } = await supabase
       .from('entries')
-      .select(
-        'id, title, slug, content, excerpt, status, published_at, created_at, updated_at, author_id, tags, meta, version, featured_image'
-      )
+      .select(ENTRY_SELECT)
       .eq('collection_id', collection.id)
       .eq('slug', entrySlug)
       .single();
 
     if (error || !entry) {
-      res.status(404).json({
-        error: {
-          message: 'Entry not found',
-          status: 404,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     res.json({
       data: entry,
-      meta: {
-        collection: {
-          id: collection.id,
-          name: collection.name,
-          slug: collection.slug,
-        },
-      },
+      meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error('Error fetching entry:', error);
     res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        status: 500,
-        timestamp: new Date().toISOString(),
-      },
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });
 
 /**
  * POST /api/v1/entries/:collection
- * Create a new entry in a collection
+ * Create a new entry in a collection.
+ * Content is validated against the collection's field schema.
  */
 router.post('/:collection', async (req: AuthRequest, res: Response) => {
   try {
@@ -206,80 +277,62 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
     const { title, slug, content, excerpt, status, tags, meta, featured_image } = req.body;
 
     if (!title || !slug) {
-      res.status(400).json({
-        error: {
-          message: 'Missing required fields: title, slug',
-          status: 400,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(400).json({
+        error: { message: 'Missing required fields: title, slug', status: 400, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     if (!/^[a-z0-9-]+$/.test(slug)) {
-      res.status(400).json({
+      return res.status(400).json({
         error: {
           message: 'Invalid slug format. Use lowercase letters, numbers, and hyphens only.',
-          status: 400,
-          timestamp: new Date().toISOString(),
+          status: 400, timestamp: new Date().toISOString(),
         },
       });
-      return;
     }
 
     const authorId = req.profileId;
     if (!authorId) {
-      res.status(401).json({
-        error: {
-          message: 'Unauthorized',
-          status: 401,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(401).json({
+        error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    // Check role - only admin/editor/author can create entries
     const role = await getUserRole(authorId);
     if (!['super_admin', 'admin', 'editor', 'author'].includes(role || '')) {
-      res.status(403).json({
-        error: {
-          message: 'Forbidden: Insufficient permissions to create entries',
-          status: 403,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(403).json({
+        error: { message: 'Forbidden: Insufficient permissions to create entries', status: 403, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    const { data: collection, error: collectionError } = await supabase
-      .from('collections')
-      .select('id, name, slug')
-      .eq('slug', collectionSlug)
-      .single();
-
-    if (collectionError || !collection) {
-      res.status(404).json({
-        error: {
-          message: 'Collection not found',
-          status: 404,
-          timestamp: new Date().toISOString(),
-        },
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
+        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
+    }
+
+    // Validate content against collection schema
+    if (content && collection.fields.length > 0) {
+      const validationErrors = validateContent(content, collection.fields);
+      if (validationErrors.length > 0) {
+        return res.status(400).json({
+          error: {
+            message: 'Content validation failed',
+            status: 400,
+            details: { fields: validationErrors },
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
     }
 
     const entryStatus = status || 'draft';
     const validStatuses = ['draft', 'review', 'scheduled', 'published', 'archived'];
     if (!validStatuses.includes(entryStatus)) {
-      res.status(400).json({
-        error: {
-          message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
-          status: 400,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(400).json({
+        error: { message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`, status: 400, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { data: entry, error } = await supabase
@@ -297,50 +350,35 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
         meta: meta || {},
         featured_image: featured_image || null,
       })
-      .select()
+      .select(ENTRY_SELECT_COMPACT)
       .single();
 
     if (error) {
-      // Handle unique constraint violation
       if (error.code === '23505') {
-        res.status(409).json({
-          error: {
-            message: 'An entry with this slug already exists in this collection',
-            status: 409,
-            timestamp: new Date().toISOString(),
-          },
+        return res.status(409).json({
+          error: { message: 'An entry with this slug already exists in this collection', status: 409, timestamp: new Date().toISOString() },
         });
-        return;
       }
       throw error;
     }
 
     res.status(201).json({
       data: entry,
-      meta: {
-        collection: {
-          id: collection.id,
-          name: collection.name,
-          slug: collection.slug,
-        },
-      },
+      meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error('Error creating entry:', error);
     res.status(500).json({
-      error: {
-        message: 'Internal server error',
-        status: 500,
-        timestamp: new Date().toISOString(),
-      },
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });
 
 /**
  * PUT /api/v1/entries/:collection/:slug
- * Update an existing entry
+ * Update an existing entry.
+ * Content is validated against the collection's field schema.
  */
 router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
   try {
@@ -348,23 +386,16 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     const authorId = req.profileId;
 
     if (!authorId) {
-      res.status(401).json({
+      return res.status(401).json({
         error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    const { data: collection, error: collectionError } = await supabase
-      .from('collections')
-      .select('id, name, slug')
-      .eq('slug', collectionSlug)
-      .single();
-
-    if (collectionError || !collection) {
-      res.status(404).json({
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
         error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { data: existing } = await supabase
@@ -375,23 +406,16 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       .single();
 
     if (!existing) {
-      res.status(404).json({
+      return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    // Authorization: only the author or admins can update
     const role = await getUserRole(authorId);
     if (existing.author_id !== authorId && !isAdminOrEditor(role)) {
-      res.status(403).json({
-        error: {
-          message: 'Forbidden: You can only update your own entries',
-          status: 403,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(403).json({
+        error: { message: 'Forbidden: You can only update your own entries', status: 403, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const updateData: Record<string, any> = {};
@@ -406,10 +430,9 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     // Handle slug change
     if (req.body.slug && req.body.slug !== entrySlug) {
       if (!/^[a-z0-9-]+$/.test(req.body.slug)) {
-        res.status(400).json({
+        return res.status(400).json({
           error: { message: 'Invalid slug format.', status: 400, timestamp: new Date().toISOString() },
         });
-        return;
       }
       updateData.slug = req.body.slug;
     }
@@ -418,40 +441,48 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     if (updateData.status) {
       const validStatuses = ['draft', 'review', 'scheduled', 'published', 'archived'];
       if (!validStatuses.includes(updateData.status)) {
-        res.status(400).json({
-          error: {
-            message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
-            status: 400,
-            timestamp: new Date().toISOString(),
-          },
+        return res.status(400).json({
+          error: { message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`, status: 400, timestamp: new Date().toISOString() },
         });
-        return;
       }
       if (updateData.status === 'published') {
         updateData.published_at = new Date().toISOString();
       }
     }
 
+    // Validate content against collection schema
+    if (updateData.content && collection.fields.length > 0) {
+      const validationErrors = validateContent(updateData.content, collection.fields);
+      if (validationErrors.length > 0) {
+        return res.status(400).json({
+          error: {
+            message: 'Content validation failed',
+            status: 400,
+            details: { fields: validationErrors },
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+    }
+
     if (Object.keys(updateData).length === 0) {
-      res.status(400).json({
+      return res.status(400).json({
         error: { message: 'No valid fields to update', status: 400, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { data: entry, error } = await supabase
       .from('entries')
       .update(updateData)
       .eq('id', existing.id)
-      .select()
+      .select(ENTRY_SELECT_COMPACT)
       .single();
 
     if (error) {
       if (error.code === '23505') {
-        res.status(409).json({
+        return res.status(409).json({
           error: { message: 'An entry with this slug already exists', status: 409, timestamp: new Date().toISOString() },
         });
-        return;
       }
       throw error;
     }
@@ -471,7 +502,7 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
 
 /**
  * DELETE /api/v1/entries/:collection/:slug
- * Delete an entry
+ * Delete an entry. Returns the deleted entry data.
  */
 router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
   try {
@@ -479,50 +510,36 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     const authorId = req.profileId;
 
     if (!authorId) {
-      res.status(401).json({
+      return res.status(401).json({
         error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    const { data: collection, error: collectionError } = await supabase
-      .from('collections')
-      .select('id')
-      .eq('slug', collectionSlug)
-      .single();
-
-    if (collectionError || !collection) {
-      res.status(404).json({
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
         error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { data: existing } = await supabase
       .from('entries')
-      .select('id, author_id')
+      .select('id, title, slug, author_id')
       .eq('collection_id', collection.id)
       .eq('slug', entrySlug)
       .single();
 
     if (!existing) {
-      res.status(404).json({
+      return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
-    // Authorization: only the author or admins can delete
     const role = await getUserRole(authorId);
     if (existing.author_id !== authorId && !['super_admin', 'admin'].includes(role || '')) {
-      res.status(403).json({
-        error: {
-          message: 'Forbidden: You can only delete your own entries',
-          status: 403,
-          timestamp: new Date().toISOString(),
-        },
+      return res.status(403).json({
+        error: { message: 'Forbidden: You can only delete your own entries', status: 403, timestamp: new Date().toISOString() },
       });
-      return;
     }
 
     const { error } = await supabase
@@ -533,7 +550,8 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     if (error) throw error;
 
     res.json({
-      message: 'Entry deleted successfully',
+      data: { id: existing.id, title: existing.title, slug: existing.slug },
+      meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

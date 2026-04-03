@@ -201,7 +201,7 @@ export const Settings = () => {
 
   useEffect(() => {
     loadApiKeys();
-  }, [user]);
+  }, [user?.id]);
 
   async function loadApiKeys() {
     if (!user?.id) return;

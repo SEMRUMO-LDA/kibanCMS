@@ -54,9 +54,9 @@ if (NODE_ENV === 'production') {
   }));
 }
 
-// Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsing (limit increased for base64 media uploads)
+app.use(express.json({ limit: '55mb' }));
+app.use(express.urlencoded({ extended: true, limit: '55mb' }));
 
 // Rate limiting - 100 requests per 15 minutes per IP
 const limiter = rateLimit({
