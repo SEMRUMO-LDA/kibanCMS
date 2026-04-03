@@ -232,76 +232,78 @@ export const Dashboard = () => {
 
   useEffect(() => {
     const timeout = setTimeout(() => { setLoading(false); setFetchError(true); }, 10000);
-    fetchAll().then(() => clearTimeout(timeout));
+    fetchAll().finally(() => clearTimeout(timeout));
     return () => clearTimeout(timeout);
   }, []);
 
+  // Safe query helper — never throws, returns null on error
+  const q = async <T,>(promise: PromiseLike<{ data: T; error: any; count?: number | null }>): Promise<{ data: T | null; count: number }> => {
+    try {
+      const res = await promise;
+      if (res.error) { console.warn('[Dashboard] Query error:', res.error.message); return { data: null, count: 0 }; }
+      return { data: res.data, count: (res as any).count || 0 };
+    } catch { return { data: null, count: 0 }; }
+  };
+
   const fetchAll = async () => {
     try {
-      // All queries in parallel
+      // Every query is independent — one failure does NOT kill the others
       const [entriesR, collectionsR, mediaR, usersR, colsR, draftsR, scheduledR, keysR, recentR] = await Promise.all([
-        supabase.from('entries').select('id', { count: 'exact', head: true }),
-        supabase.from('collections').select('id', { count: 'exact', head: true }),
-        supabase.from('media').select('id', { count: 'exact', head: true }),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
-        // Collections with entry counts
-        supabase.from('collections').select('id, name, slug'),
-        // Recent drafts
-        supabase.from('entries').select('id, title, slug, collection_id, updated_at').eq('status', 'draft').order('updated_at', { ascending: false }).limit(5),
-        // Scheduled entries
-        supabase.from('entries').select('id, title, collection_id, published_at').eq('status', 'scheduled').order('published_at', { ascending: true }).limit(5),
-        // API keys count
-        supabase.from('api_keys').select('id', { count: 'exact', head: true }).is('revoked_at', null),
-        // Recent activity
-        supabase.from('entries').select('id, title, status, created_at, updated_at, author_id').order('updated_at', { ascending: false }).limit(8),
+        q(supabase.from('entries').select('id', { count: 'exact', head: true })),
+        q(supabase.from('collections').select('id', { count: 'exact', head: true })),
+        q(supabase.from('media').select('id', { count: 'exact', head: true })),
+        q(supabase.from('profiles').select('id', { count: 'exact', head: true })),
+        q(supabase.from('collections').select('id, name, slug')),
+        q(supabase.from('entries').select('id, title, slug, collection_id, updated_at').eq('status', 'draft').order('updated_at', { ascending: false }).limit(5)),
+        q(supabase.from('entries').select('id, title, collection_id, published_at').eq('status', 'scheduled').order('published_at', { ascending: true }).limit(5)),
+        q(supabase.from('api_keys').select('id', { count: 'exact', head: true }).is('revoked_at', null)),
+        q(supabase.from('entries').select('id, title, status, created_at, updated_at, author_id').order('updated_at', { ascending: false }).limit(8)),
       ]);
 
       setMetrics({
-        entries: entriesR.count || 0,
-        collections: collectionsR.count || 0,
-        media: mediaR.count || 0,
-        users: usersR.count || 0,
+        entries: entriesR.count,
+        collections: collectionsR.count,
+        media: mediaR.count,
+        users: usersR.count,
       });
 
-      setApiKeyCount(keysR.count || 0);
+      setApiKeyCount(keysR.count);
 
-      // Build collection stats — single query, group client-side
-      if (colsR.data) {
-        const { data: allEntries } = await supabase
-          .from('entries')
-          .select('collection_id');
-
+      // Collection stats — single extra query, grouped client-side
+      const cols = colsR.data as any[] || [];
+      if (cols.length > 0) {
+        const { data: allEntries } = await q(supabase.from('entries').select('collection_id'));
         const countMap = new Map<string, number>();
-        (allEntries || []).forEach(e => {
+        ((allEntries as any[]) || []).forEach((e: any) => {
           countMap.set(e.collection_id, (countMap.get(e.collection_id) || 0) + 1);
         });
-
-        const stats: CollectionStat[] = colsR.data.map(col => ({
+        const stats: CollectionStat[] = cols.map((col: any) => ({
           name: col.name, slug: col.slug, count: countMap.get(col.id) || 0,
         }));
         stats.sort((a, b) => b.count - a.count);
         setCollectionStats(stats);
       }
 
-      // Map drafts with collection slugs
-      if (draftsR.data && colsR.data) {
-        const colMap = new Map(colsR.data.map(c => [c.id, c.slug]));
-        setDrafts(draftsR.data.map(d => ({
+      // Map drafts + scheduled with collection slugs
+      const colMap = new Map((cols as any[]).map((c: any) => [c.id, c.slug]));
+
+      if (draftsR.data) {
+        setDrafts((draftsR.data as any[]).map((d: any) => ({
           ...d, collection_slug: colMap.get(d.collection_id) || '',
         })));
       }
 
-      // Map scheduled with collection slugs
-      if (scheduledR.data && colsR.data) {
-        const colMap = new Map(colsR.data.map(c => [c.id, c.slug]));
-        setScheduled(scheduledR.data.map(s => ({
+      if (scheduledR.data) {
+        setScheduled((scheduledR.data as any[]).map((s: any) => ({
           ...s, collection_slug: colMap.get(s.collection_id) || '',
         })));
       }
 
-      setActivity(recentR.data || []);
+      setActivity((recentR.data as any[]) || []);
+      setFetchError(false);
     } catch (err) {
       console.error('[Dashboard]', err);
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
