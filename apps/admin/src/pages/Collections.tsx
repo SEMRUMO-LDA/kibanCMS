@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2, MoreVertical } from 'lucide-react';
+import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
@@ -560,15 +560,37 @@ export const Collections = () => {
               </CardDescription>
 
               <CardFooter>
-                <CodeButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedCollection(collection);
-                  }}
-                >
-                  <Code />
-                  Get Code
-                </CodeButton>
+                <CardActions>
+                  <CodeButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCollection(collection);
+                    }}
+                  >
+                    <Code />
+                    Get Code
+                  </CodeButton>
+                  {isAdmin && (
+                    <>
+                      <ActionBtn
+                        title="Edit collection"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/content/${collection.slug}/edit-collection`);
+                        }}
+                      >
+                        <Pencil />
+                      </ActionBtn>
+                      <ActionBtn
+                        className="delete"
+                        title="Delete collection"
+                        onClick={(e) => handleDelete(e, collection)}
+                      >
+                        <Trash2 />
+                      </ActionBtn>
+                    </>
+                  )}
+                </CardActions>
                 <ArrowRight size={20} className="arrow" />
               </CardFooter>
             </CollectionCard>
