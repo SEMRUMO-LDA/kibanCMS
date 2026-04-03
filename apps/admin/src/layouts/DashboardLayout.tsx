@@ -14,7 +14,6 @@ import {
   Menu,
   Command,
   Puzzle,
-  Globe,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -497,18 +496,6 @@ export const DashboardLayout = () => {
             >
               <ImageIcon size={20} />
               <span>Media</span>
-            </NavItem>
-          </NavSection>
-
-          <NavSection>
-            <NavItem
-              $active={location.pathname === '/site-settings'}
-              onClick={() => handleNavigation('/site-settings')}
-              role="button"
-              tabIndex={0}
-            >
-              <Globe size={20} />
-              <span>Site Settings</span>
             </NavItem>
           </NavSection>
 
