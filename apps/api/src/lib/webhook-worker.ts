@@ -14,6 +14,9 @@ interface Webhook {
   id: string;
   url: string;
   secret: string;
+  enabled: boolean;
+  total_deliveries: number;
+  failed_deliveries: number;
 }
 
 const MAX_RETRIES = 3;

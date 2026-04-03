@@ -84,8 +84,7 @@ export async function validateApiKey(
       .from('api_keys')
       .update({ last_used_at: new Date().toISOString() })
       .eq('id', keyRecord.id)
-      .then(() => {})
-      .catch(console.error);
+      .then(() => { /* no-op */ }, (err: any) => console.error('Failed to update last_used_at:', err));
 
     // Attach profile ID to request
     req.profileId = keyRecord.profile_id;
