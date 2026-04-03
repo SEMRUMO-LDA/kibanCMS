@@ -46,13 +46,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let active = true;
 
-    // Only use onAuthStateChange as the single source of truth.
-    // Supabase fires INITIAL_SESSION immediately when subscribing,
-    // so we don't need a separate getSession() call.
+    // Safety timeout: if onAuthStateChange never fires (e.g. orphaned lock),
+    // unblock the UI after 8 seconds so the user can at least reach the login page.
+    const timeout = setTimeout(() => {
+      if (active && loading) {
+        console.warn('[Auth] Timeout waiting for auth state — unblocking UI');
+        setLoading(false);
+      }
+    }, 8000);
+
+    // Use onAuthStateChange as the single source of truth.
+    // Supabase fires INITIAL_SESSION immediately when subscribing.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!active) return;
 
-      // Update session and user synchronously
       setSession(newSession);
       setUser(newSession?.user ?? null);
       setLoading(false);
@@ -74,6 +81,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     return () => {
       active = false;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
