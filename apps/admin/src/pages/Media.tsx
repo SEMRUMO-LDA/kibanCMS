@@ -456,6 +456,8 @@ export const Media = () => {
 
   useEffect(() => {
     loadMedia();
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
   }, []);
 
   const loadMedia = async () => {

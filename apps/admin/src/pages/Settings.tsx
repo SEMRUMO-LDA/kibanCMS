@@ -201,10 +201,15 @@ export const Settings = () => {
 
   useEffect(() => {
     loadApiKeys();
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
   }, [user?.id]);
 
   async function loadApiKeys() {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase
