@@ -14,6 +14,7 @@ import { Media } from './pages/Media';
 import { Users } from './pages/Users';
 import { CollectionEdit } from './pages/CollectionEdit';
 import { Settings } from './pages/Settings';
+import { Addons } from './pages/Addons';
 import { Diagnostics } from './pages/Diagnostics';
 
 // Protected Route Wrapper — never shows a blank page.
@@ -85,6 +86,7 @@ const AppContent = () => {
         <Route path="content/:collectionSlug/edit/:entryId" element={<EntryEdit />} />
         <Route path="media" element={<Media />} />
         <Route path="users" element={<Users />} />
+        <Route path="addons" element={<Addons />} />
         <Route path="settings" element={<Settings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 
