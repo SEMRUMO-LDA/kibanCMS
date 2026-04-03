@@ -193,7 +193,7 @@ interface ApiKey {
 }
 
 export const Settings = () => {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -201,16 +201,16 @@ export const Settings = () => {
 
   useEffect(() => {
     loadApiKeys();
-  }, [profile]);
+  }, [user]);
 
   async function loadApiKeys() {
-    if (!profile?.id) return;
+    if (!user?.id) return;
 
     try {
       const { data, error } = await supabase
         .from('api_keys')
         .select('*')
-        .eq('profile_id', profile.id)
+        .eq('profile_id', user.id)
         .is('revoked_at', null)
         .order('created_at', { ascending: false });
 
