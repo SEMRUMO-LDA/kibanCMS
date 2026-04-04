@@ -13,8 +13,9 @@ import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { ArrowLeft, Loader, Clock } from 'lucide-react';
+import { ArrowLeft, Loader, Clock, Eye } from 'lucide-react';
 import { RevisionHistory } from '../components/RevisionHistory';
+import { LivePreview } from '../components/LivePreview';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -135,6 +136,8 @@ export function EntryEdit() {
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showRevisions, setShowRevisions] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<any>({});
 
   const isEditMode = !!entryId;
 
@@ -264,12 +267,16 @@ export function EntryEdit() {
             <ArrowLeft />
             Back to {collection.name}
           </BackButton>
-          {isEditMode && entry && (
-            <BackButton onClick={() => setShowRevisions(true)} style={{ marginBottom: '16px' }}>
-              <Clock />
-              History
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {isEditMode && entry && (
+              <BackButton onClick={() => setShowRevisions(true)} style={{ marginBottom: '16px' }}>
+                <Clock /> History
+              </BackButton>
+            )}
+            <BackButton onClick={() => setShowPreview(!showPreview)} style={{ marginBottom: '16px' }}>
+              <Eye /> {showPreview ? 'Hide Preview' : 'Preview'}
             </BackButton>
-          )}
+          </div>
         </div>
         <Title>
           {isEditMode ? 'Edit Entry' : 'Create New Entry'}
@@ -309,11 +316,19 @@ export function EntryEdit() {
           entryId={entry.id}
           currentVersion={(entry as any).version || 1}
           onRestore={(content, title) => {
-            // Update entry state so EntryEditor re-renders with restored content
             setEntry(prev => prev ? { ...prev, content, title } : prev);
             setIsDirty(true);
           }}
           onClose={() => setShowRevisions(false)}
+        />
+      )}
+
+      {showPreview && collection && (
+        <LivePreview
+          previewUrl=""
+          entryData={entry?.content || {}}
+          collectionSlug={collection.slug}
+          onClose={() => setShowPreview(false)}
         />
       )}
     </>
