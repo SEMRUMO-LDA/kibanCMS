@@ -193,6 +193,12 @@ class ApiClient {
   async getDashboardStats() {
     return this.request<any>('GET', '/dashboard/stats');
   }
+
+  // ── Activity ──
+  async getActivity(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/activity${qs}`);
+  }
 }
 
 export const api = new ApiClient();

@@ -14,6 +14,7 @@ import {
   Menu,
   Command,
   Puzzle,
+  Activity,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -509,6 +510,15 @@ export const DashboardLayout = () => {
             >
               <Users size={20} />
               <span>Users</span>
+            </NavItem>
+            <NavItem
+              $active={location.pathname === '/activity'}
+              onClick={() => handleNavigation('/activity')}
+              role="button"
+              tabIndex={0}
+            >
+              <Activity size={20} />
+              <span>Activity</span>
             </NavItem>
             <NavItem
               $active={location.pathname.startsWith('/addons')}

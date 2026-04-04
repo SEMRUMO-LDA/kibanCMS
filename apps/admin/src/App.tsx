@@ -15,6 +15,7 @@ import { Users } from './pages/Users';
 import { CollectionEdit } from './pages/CollectionEdit';
 import { Settings } from './pages/Settings';
 import { Addons } from './pages/Addons';
+import { ActivityLog } from './pages/ActivityLog';
 // SiteSettings merged into unified Settings page
 import { Diagnostics } from './pages/Diagnostics';
 
@@ -89,6 +90,7 @@ const AppContent = () => {
         <Route path="users" element={<Users />} />
         {/* site-settings redirects to unified settings */}
         <Route path="site-settings" element={<Navigate to="/settings?tab=general" replace />} />
+        <Route path="activity" element={<ActivityLog />} />
         <Route path="addons" element={<Addons />} />
         <Route path="settings" element={<Settings />} />
         <Route path="diagnostics" element={<Diagnostics />} />

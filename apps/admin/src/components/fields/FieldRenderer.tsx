@@ -13,11 +13,12 @@ import { DateField } from './DateField';
 import { SelectField } from './SelectField';
 import { RichTextField } from './RichTextField';
 import { ImageField } from './ImageField';
+import { ReferenceField } from './ReferenceField';
 
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -25,6 +26,7 @@ export interface FieldDefinition {
   min?: number; // For number fields
   max?: number; // For number fields
   step?: number; // For number fields
+  referenceCollection?: string; // For reference fields — slug of target collection
 }
 
 interface FieldRendererProps {
@@ -131,6 +133,16 @@ export function FieldRenderer({
           {...commonProps}
           value={value || ''}
           onChange={onChange}
+        />
+      );
+
+    case 'reference':
+      return (
+        <ReferenceField
+          {...commonProps}
+          value={value || ''}
+          onChange={onChange}
+          referenceCollection={field.referenceCollection}
         />
       );
 
