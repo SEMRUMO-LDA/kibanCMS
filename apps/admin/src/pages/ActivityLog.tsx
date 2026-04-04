@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import {
   Clock, Plus, Edit, Trash2, Eye, ArrowRight, Loader, User,
   FileText, Filter, ChevronLeft, ChevronRight,
@@ -94,6 +95,7 @@ const PAGE_SIZE = 30;
 
 export const ActivityLog = () => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -131,7 +133,7 @@ export const ActivityLog = () => {
   return (
     <Container>
       <Header>
-        <h1>Activity Log</h1>
+        <h1>{t('activity.title')}</h1>
         <p>{total} total events • Page {page + 1} of {totalPages || 1}</p>
       </Header>
 
@@ -143,7 +145,7 @@ export const ActivityLog = () => {
       ) : items.length === 0 ? (
         <EmptyState>
           <Clock size={48} />
-          <p>No activity yet. Start creating content!</p>
+          <p>{t('activity.noActivity')}</p>
         </EmptyState>
       ) : (
         <Timeline>
@@ -161,9 +163,9 @@ export const ActivityLog = () => {
                   <div className="card-top">
                     <div className="action-text">
                       <strong>{authorName}</strong>{' '}
-                      {item.action === 'created' ? 'created' : 'updated'}{' '}
+                      {item.action === 'created' ? t('activity.created') : t('activity.updated')}{' '}
                       <span className="entry-link">{item.entry_title}</span>{' '}
-                      <span className="collection">in {item.collection_name}</span>
+                      <span className="collection">{t('activity.in')} {item.collection_name}</span>
                     </div>
                     <span className="time">{timeAgo(item.updated_at)}</span>
                   </div>

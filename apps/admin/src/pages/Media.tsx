@@ -30,6 +30,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useI18n } from '../lib/i18n';
 import { useToast } from '../components/Toast';
 
 // ============================================
@@ -443,6 +444,7 @@ const LoadingContainer = styled.div`
 
 export const Media = () => {
   const { user } = useAuth();
+  const { t } = useI18n();
   const toast = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -605,8 +607,8 @@ export const Media = () => {
   return (
     <Container>
       <Header>
-        <h1>Media Library</h1>
-        <p>Upload and manage images, videos, and files</p>
+        <h1>{t('media.title')}</h1>
+        <p>{t('media.subtitle')}</p>
       </Header>
 
       <DropZone

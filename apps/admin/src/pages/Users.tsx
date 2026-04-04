@@ -25,6 +25,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useI18n } from '../lib/i18n';
 import { useToast } from '../components/Toast';
 
 // ============================================
@@ -511,6 +512,7 @@ const EmptyState = styled.div`
 
 export const Users = () => {
   const { user: currentUser, profile } = useAuth();
+  const { t } = useI18n();
   const toast = useToast();
 
   const [users, setUsers] = useState<User[]>([]);
@@ -656,13 +658,13 @@ export const Users = () => {
     <Container>
       <Header>
         <HeaderLeft>
-          <h1>Users</h1>
-          <p>Manage team members and permissions</p>
+          <h1>{t('users.title')}</h1>
+          <p>{t('users.subtitle')}</p>
         </HeaderLeft>
         {isAdmin && (
           <InviteButton onClick={() => setShowInviteModal(true)}>
             <UserPlus size={20} />
-            Invite User
+            {t('users.inviteUser')}
           </InviteButton>
         )}
       </Header>
@@ -745,7 +747,7 @@ export const Users = () => {
         <Modal onClick={() => setShowInviteModal(false)}>
           <ModalContent onClick={(e) => e.stopPropagation()}>
             <ModalHeader>
-              <h2>Invite User</h2>
+              <h2>{t('users.inviteUser')}</h2>
               <button onClick={() => setShowInviteModal(false)}>
                 <X size={20} />
               </button>
