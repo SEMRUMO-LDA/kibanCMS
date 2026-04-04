@@ -413,7 +413,7 @@ export const DashboardLayout = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [collections, setCollections] = useState<any[]>([]);
   const { user, profile, signOut } = useAuth();
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -530,35 +530,6 @@ export const DashboardLayout = () => {
             </NavItem>
           </NavSection>
         </Nav>
-
-        {/* Language toggle */}
-        <div style={{
-          display: 'flex', gap: spacing[1], padding: `0 ${spacing[4]} ${spacing[3]}`,
-          justifyContent: 'center',
-        }}>
-          <button
-            onClick={() => setLocale('pt')}
-            style={{
-              padding: `${spacing[1.5]} ${spacing[3]}`, borderRadius: borders.radius.md,
-              border: `1px solid ${locale === 'pt' ? colors.accent[300] : colors.gray[200]}`,
-              background: locale === 'pt' ? colors.accent[50] : 'transparent',
-              color: locale === 'pt' ? colors.accent[700] : colors.gray[500],
-              fontSize: typography.fontSize.xs, fontWeight: locale === 'pt' ? 600 : 500,
-              cursor: 'pointer', fontFamily: typography.fontFamily.sans,
-            }}
-          >PT</button>
-          <button
-            onClick={() => setLocale('en')}
-            style={{
-              padding: `${spacing[1.5]} ${spacing[3]}`, borderRadius: borders.radius.md,
-              border: `1px solid ${locale === 'en' ? colors.accent[300] : colors.gray[200]}`,
-              background: locale === 'en' ? colors.accent[50] : 'transparent',
-              color: locale === 'en' ? colors.accent[700] : colors.gray[500],
-              fontSize: typography.fontSize.xs, fontWeight: locale === 'en' ? 600 : 500,
-              cursor: 'pointer', fontFamily: typography.fontFamily.sans,
-            }}
-          >EN</button>
-        </div>
 
         <UserSection>
           <div className="user-avatar">{getUserInitials()}</div>

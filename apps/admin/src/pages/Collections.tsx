@@ -4,6 +4,7 @@ import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useI18n } from '../lib/i18n';
 import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
@@ -402,6 +403,7 @@ interface Collection {
 
 export const Collections = () => {
   const { user, profile } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -496,7 +498,7 @@ export const Collections = () => {
     <Container>
       <Header>
         <div className="header-content">
-          <h1>Content Collections</h1>
+          <h1>{t('collections.title')}</h1>
           <p>
             <strong>{user?.email}</strong> • Role: <strong>{profile?.role || 'viewer'}</strong>
           </p>
@@ -504,7 +506,7 @@ export const Collections = () => {
         {(profile?.role === 'admin' || profile?.role === 'super_admin') && (
           <NewCollectionButton onClick={() => navigate('/content/builder')}>
             <Plus />
-            New Collection
+            {t('collections.newCollection')}
           </NewCollectionButton>
         )}
       </Header>
@@ -514,7 +516,7 @@ export const Collections = () => {
           <div className="empty-icon">
             <FileText />
           </div>
-          <h3>No Collections Found</h3>
+          <h3>{t('collections.noCollections')}</h3>
           <p>
             No content collections have been created yet. Run the seed script in the Supabase SQL
             Editor to create sample collections.

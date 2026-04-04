@@ -13,6 +13,7 @@ import {
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
+import { useI18n, type Locale } from '../lib/i18n';
 import { useAuth } from '../features/auth/hooks/useAuth';
 
 const fadeIn = keyframes`from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); }`;
@@ -144,6 +145,7 @@ interface ApiKey { id: string; name: string; key_prefix: string; created_at: str
 
 export const Settings = () => {
   const { user } = useAuth();
+  const { t, locale, setLocale } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
   const [settings, setSettings] = useState<SiteSettings>(DEFAULTS);
@@ -221,10 +223,10 @@ export const Settings = () => {
       <Toast $v={saved}><CheckCircle size={16} /> Settings saved</Toast>
 
       <Header>
-        <h1>Settings</h1>
+        <h1>{t('settings.title')}</h1>
         {activeTab !== 'api' && (
           <SaveBtn onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</> : <><Save size={18} /> Save</>}
+            {saving ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> {locale === 'pt' ? 'A guardar...' : 'Saving...'}</> : <><Save size={18} /> {t('settings.save')}</>}
           </SaveBtn>
         )}
       </Header>
@@ -232,7 +234,7 @@ export const Settings = () => {
       <TabNav>
         {TABS.map(tab => (
           <Tab key={tab.id} $active={activeTab === tab.id} onClick={() => switchTab(tab.id)}>
-            <tab.icon /> {tab.label}
+            <tab.icon /> {t(`settings.${tab.id}`)}
           </Tab>
         ))}
       </TabNav>
@@ -240,14 +242,29 @@ export const Settings = () => {
       {/* ── GENERAL ── */}
       {activeTab === 'general' && (
         <>
+          {/* Interface Language — affects the entire admin */}
           <Section>
-            <h2>Site Identity</h2>
+            <h2>{t('settings.general')} — {locale === 'pt' ? 'Idioma da Interface' : 'Interface Language'}</h2>
             <Grid>
-              <Field><label>Site Name</label><input value={settings.site_name} onChange={e => update('site_name', e.target.value)} placeholder="My Website" /></Field>
-              <Field><label>Site URL</label><input value={settings.site_url} onChange={e => update('site_url', e.target.value)} placeholder="https://example.com" /></Field>
-              <Field $full><label>Description</label><textarea value={settings.site_description} onChange={e => update('site_description', e.target.value)} placeholder="Brief site description" /></Field>
-              <Field><label>Language</label><select value={settings.language} onChange={e => update('language', e.target.value)}><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option></select></Field>
-              <Field><label>Timezone</label><select value={settings.timezone} onChange={e => update('timezone', e.target.value)}><option value="Europe/Lisbon">Europe/Lisbon</option><option value="Europe/London">Europe/London</option><option value="Europe/Paris">Europe/Paris</option><option value="America/New_York">America/New York</option><option value="America/Sao_Paulo">America/São Paulo</option><option value="UTC">UTC</option></select></Field>
+              <Field>
+                <label>{locale === 'pt' ? 'Idioma do Painel' : 'Admin Language'}</label>
+                <select value={locale} onChange={e => setLocale(e.target.value as Locale)}>
+                  <option value="pt">Português (PT)</option>
+                  <option value="en">English (EN)</option>
+                </select>
+                <p className="help">{locale === 'pt' ? 'Afeta todo o painel de administração' : 'Affects the entire admin panel'}</p>
+              </Field>
+            </Grid>
+          </Section>
+
+          <Section>
+            <h2>{locale === 'pt' ? 'Identidade do Site' : 'Site Identity'}</h2>
+            <Grid>
+              <Field><label>{locale === 'pt' ? 'Nome do Site' : 'Site Name'}</label><input value={settings.site_name} onChange={e => update('site_name', e.target.value)} placeholder="My Website" /></Field>
+              <Field><label>{locale === 'pt' ? 'URL do Site' : 'Site URL'}</label><input value={settings.site_url} onChange={e => update('site_url', e.target.value)} placeholder="https://example.com" /></Field>
+              <Field $full><label>{locale === 'pt' ? 'Descrição' : 'Description'}</label><textarea value={settings.site_description} onChange={e => update('site_description', e.target.value)} placeholder={locale === 'pt' ? 'Breve descrição do site' : 'Brief site description'} /></Field>
+              <Field><label>{locale === 'pt' ? 'Idioma do Conteúdo' : 'Content Language'}</label><select value={settings.language} onChange={e => update('language', e.target.value)}><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option></select></Field>
+              <Field><label>{locale === 'pt' ? 'Fuso Horário' : 'Timezone'}</label><select value={settings.timezone} onChange={e => update('timezone', e.target.value)}><option value="Europe/Lisbon">Europe/Lisbon</option><option value="Europe/London">Europe/London</option><option value="Europe/Paris">Europe/Paris</option><option value="America/New_York">America/New York</option><option value="America/Sao_Paulo">America/São Paulo</option><option value="UTC">UTC</option></select></Field>
             </Grid>
           </Section>
           <Section>

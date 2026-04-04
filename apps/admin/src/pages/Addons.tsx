@@ -15,6 +15,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { ADDONS_REGISTRY, type AddonDefinition } from '../config/addons-registry';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useI18n } from '../lib/i18n';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -185,6 +186,7 @@ const ICON_MAP: Record<string, any> = {
 
 export const Addons = () => {
   const { user } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [tab, setTab] = useState<'all' | 'installed'>('all');
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
@@ -297,13 +299,13 @@ export const Addons = () => {
   return (
     <Container>
       <Header>
-        <h1>Add-ons</h1>
-        <p>Extend kibanCMS with powerful modules — install with one click</p>
+        <h1>{t('addons.title')}</h1>
+        <p>{t('addons.subtitle')}</p>
       </Header>
 
       <Tabs>
-        <Tab $active={tab === 'all'} onClick={() => setTab('all')}>All Add-ons ({ADDONS_REGISTRY.length})</Tab>
-        <Tab $active={tab === 'installed'} onClick={() => setTab('installed')}>Installed ({installedIds.size})</Tab>
+        <Tab $active={tab === 'all'} onClick={() => setTab('all')}>{t('addons.allAddons')} ({ADDONS_REGISTRY.length})</Tab>
+        <Tab $active={tab === 'installed'} onClick={() => setTab('installed')}>{t('addons.installed')} ({installedIds.size})</Tab>
       </Tabs>
 
       <Grid>
