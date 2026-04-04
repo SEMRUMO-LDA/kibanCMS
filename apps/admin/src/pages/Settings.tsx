@@ -175,10 +175,12 @@ export const Settings = () => {
       const globalEntry = (entryData || []).find((e: any) => e.slug === 'global');
       if (globalEntry?.content) setSettings({ ...DEFAULTS, ...globalEntry.content });
 
-      // Load API keys (still direct — no API endpoint for this yet)
+      // Load API keys (Supabase direct — table may not exist)
       if (user?.id) {
-        const { data: keys } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
-        setApiKeys(keys || []);
+        try {
+          const { data: keys } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
+          setApiKeys(keys || []);
+        } catch { /* api_keys table may not exist — ignore */ }
       }
     } catch (err) {
       console.error('Settings load error:', err);

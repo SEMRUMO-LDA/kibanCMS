@@ -15,7 +15,7 @@ import {
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { ADDONS_REGISTRY, type AddonDefinition } from '../config/addons-registry';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 
@@ -207,16 +207,11 @@ export const Addons = () => {
 
   const checkInstalled = async () => {
     try {
-      // Check which addon collections already exist
-      const { data: collections } = await supabase
-        .from('collections')
-        .select('slug');
-
-      const existingSlugs = new Set((collections || []).map(c => c.slug));
+      const { data: collections } = await api.getCollections();
+      const existingSlugs = new Set((collections || []).map((c: any) => c.slug));
       const installed = new Set<string>();
 
       for (const addon of ADDONS_REGISTRY) {
-        // An addon is "installed" if its first collection exists
         if (addon.collections.length > 0 && existingSlugs.has(addon.collections[0].slug)) {
           installed.add(addon.id);
         }
@@ -231,33 +226,16 @@ export const Addons = () => {
   };
 
   const handleInstall = async (addon: AddonDefinition) => {
-    if (!user?.id) return;
     setInstalling(addon.id);
 
     try {
-      // Create all collections for this addon
       for (const col of addon.collections) {
-        // Check if it already exists
-        const { data: existing } = await supabase
-          .from('collections')
-          .select('id')
-          .eq('slug', col.slug)
-          .maybeSingle();
-
-        if (existing) continue; // Skip if already exists
-
-        const { error } = await supabase
-          .from('collections')
-          .insert({
-            name: col.name,
-            slug: col.slug,
-            description: col.description,
-            type: col.type,
-            fields: col.fields,
-            created_by: user.id,
-          });
-
-        if (error) throw error;
+        const { error } = await api.createCollection({
+          name: col.name, slug: col.slug, description: col.description,
+          type: col.type, fields: col.fields,
+        });
+        // Ignore errors for existing collections
+        if (error && !error.includes('already exists')) throw new Error(error);
       }
 
       setInstalledIds(prev => new Set([...prev, addon.id]));
@@ -274,7 +252,7 @@ export const Addons = () => {
 
     try {
       for (const col of addon.collections) {
-        await supabase.from('collections').delete().eq('slug', col.slug);
+        await api.deleteCollection(col.slug);
       }
       setInstalledIds(prev => {
         const next = new Set(prev);
