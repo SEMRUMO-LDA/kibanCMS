@@ -7,6 +7,7 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { useToast } from '../components/Toast';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
 // ============================================
@@ -405,6 +406,7 @@ export const Collections = () => {
   const { user, profile } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
+  const toast = useToast();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -421,7 +423,7 @@ export const Collections = () => {
       if (error) throw new Error(error);
       setCollections(prev => prev.filter(c => c.id !== collection.id));
     } catch (err: any) {
-      alert('Failed to delete: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to delete: ' + (err.message || 'Unknown error'));
     }
   };
 

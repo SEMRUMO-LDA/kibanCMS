@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useI18n } from '../lib/i18n';
 import { FileText, ArrowRight } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 
@@ -240,6 +241,7 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (session) {
@@ -276,50 +278,30 @@ export const Login = () => {
             <FileText size={32} />
           </div>
           <h1>kibanCMS</h1>
-          <p>Sign in to access your administrative dashboard</p>
+          <p>{t('login.title')}</p>
         </Header>
 
         <Form onSubmit={handleSubmit}>
           {error && <ErrorMsg>{error}</ErrorMsg>}
 
           <FormGroup>
-            <Label htmlFor="email">Email Address</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@example.com"
-              required
-              disabled={loading}
-              autoComplete="email"
-            />
+            <Label htmlFor="email">{t('login.email')}</Label>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" required disabled={loading} autoComplete="email" />
           </FormGroup>
 
           <FormGroup>
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••"
-              required
-              disabled={loading}
-              autoComplete="current-password"
-            />
+            <Label htmlFor="password">{t('login.password')}</Label>
+            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••" required disabled={loading} autoComplete="current-password" />
           </FormGroup>
 
           <Button type="submit" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
             {!loading && <ArrowRight size={20} />}
           </Button>
         </Form>
 
         <Footer>
-          <p>
-            Powered by <strong>kibanCMS</strong> v1.2
-          </p>
+          <p>Powered by <strong>kibanCMS</strong> v1.3</p>
         </Footer>
       </FormBox>
     </Container>

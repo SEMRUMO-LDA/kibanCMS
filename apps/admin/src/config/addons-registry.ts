@@ -204,6 +204,89 @@ const bookings: AddonDefinition = {
 };
 
 // ============================================
+// REDIRECTS ADD-ON
+// ============================================
+
+const redirects: AddonDefinition = {
+  id: 'redirects',
+  name: 'Redirects Manager',
+  description: 'URL redirect rules for SEO migration and broken link management',
+  longDescription: 'Manage 301/302 redirects with a simple table interface. Essential for site migrations to preserve SEO rankings. Clients can add redirect rules without touching server config.',
+  icon: 'arrow-right',
+  color: '#059669',
+  category: 'tools',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Redirects',
+      slug: 'redirects',
+      description: 'URL redirect rules (301/302)',
+      type: 'custom',
+      fields: [
+        { id: 'from_path', name: 'from_path', label: 'From Path', type: 'text', required: true, placeholder: '/old-page', helpText: 'The old URL path (without domain)' },
+        { id: 'to_path', name: 'to_path', label: 'To Path', type: 'text', required: true, placeholder: '/new-page', helpText: 'The new URL path or full URL' },
+        { id: 'type', name: 'type', label: 'Redirect Type', type: 'select', required: true },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean' },
+        { id: 'notes', name: 'notes', label: 'Notes', type: 'text', placeholder: 'Reason for redirect' },
+        { id: 'hit_count', name: 'hit_count', label: 'Hit Count', type: 'number' },
+      ],
+    },
+  ],
+};
+
+// ============================================
+// WEBHOOKS VISUAL ADD-ON
+// ============================================
+
+const webhooksVisual: AddonDefinition = {
+  id: 'webhooks-visual',
+  name: 'Automations',
+  description: 'Visual no-code webhook and automation builder',
+  longDescription: 'Create automations without code: "When a form is submitted → Send to Zapier/Make". Visual interface for connecting your CMS to external services like Mailchimp, Slack, and custom webhooks.',
+  icon: 'zap',
+  color: '#8b5cf6',
+  category: 'tools',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Automations',
+      slug: 'automations',
+      description: 'Visual automation rules',
+      type: 'custom',
+      fields: [
+        { id: 'name', name: 'name', label: 'Automation Name', type: 'text', required: true, placeholder: 'New form → Mailchimp' },
+        { id: 'trigger_event', name: 'trigger_event', label: 'Trigger Event', type: 'select', required: true },
+        { id: 'trigger_collection', name: 'trigger_collection', label: 'Trigger Collection', type: 'text', placeholder: 'form-submissions' },
+        { id: 'webhook_url', name: 'webhook_url', label: 'Webhook URL', type: 'url', required: true, placeholder: 'https://hooks.zapier.com/...' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean' },
+        { id: 'last_triggered', name: 'last_triggered', label: 'Last Triggered', type: 'date' },
+        { id: 'total_runs', name: 'total_runs', label: 'Total Runs', type: 'number' },
+        { id: 'last_error', name: 'last_error', label: 'Last Error', type: 'text' },
+      ],
+    },
+  ],
+};
+
+// ============================================
+// AI CONTENT ASSISTANT ADD-ON
+// ============================================
+
+const aiContent: AddonDefinition = {
+  id: 'ai-content',
+  name: 'AI Content Assistant',
+  description: 'AI-powered content tools: alt-text, translation, tone adjustment',
+  longDescription: 'Boost editor productivity with AI tools integrated directly into the content editor. Generate image alt-text automatically, translate entries between languages, and adjust text tone with one click.',
+  icon: 'sparkles',
+  color: '#f59e0b',
+  category: 'tools',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [], // No collections needed — features are integrated into the editor
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -212,6 +295,9 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   seo,
   forms,
   bookings,
+  redirects,
+  webhooksVisual,
+  aiContent,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {

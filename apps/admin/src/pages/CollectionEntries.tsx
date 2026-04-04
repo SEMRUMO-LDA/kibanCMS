@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { ArrowLeft, Plus, Search, Filter, Edit2, Trash2, Loader, Code } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { useToast } from '../components/Toast';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
 // ============================================
@@ -677,6 +678,7 @@ const Checkbox = styled.input.attrs({ type: 'checkbox' })`
 export const CollectionEntries = () => {
   const { collectionSlug } = useParams<{ collectionSlug: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -731,7 +733,7 @@ export const CollectionEntries = () => {
 
       setEntries(prev => prev.filter(e => e.id !== id));
     } catch (err: any) {
-      alert('Failed to delete entry: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to delete: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -793,10 +795,10 @@ export const CollectionEntries = () => {
 
       setSelectedEntries(new Set());
       setBulkAction('');
-      alert(`Successfully ${action}ed ${count} ${count === 1 ? 'entry' : 'entries'}`);
+      toast.success(`${action}ed ${count} ${count === 1 ? 'entry' : 'entries'}`);
     } catch (err: any) {
       console.error('Error with bulk action:', err);
-      alert('Failed to perform bulk action: ' + (err.message || 'Unknown error'));
+      toast.error('Bulk action failed: ' + (err.message || 'Unknown error'));
     }
   };
 

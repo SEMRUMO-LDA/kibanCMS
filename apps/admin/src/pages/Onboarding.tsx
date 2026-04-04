@@ -446,7 +446,7 @@ export const Onboarding = () => {
       window.location.href = '/';
     } catch (err) {
       console.error('[Onboarding] Error:', err);
-      alert('Failed to complete onboarding. Please try again.');
+      console.error('[Onboarding] Failed:', err);
     } finally {
       setLoading(false);
     }

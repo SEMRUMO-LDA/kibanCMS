@@ -189,6 +189,18 @@ class ApiClient {
     return this.request<any>('POST', '/ai/generate-collection', { image, context }, 30000);
   }
 
+  async generateAltText(image: string) {
+    return this.request<any>('POST', '/ai/alt-text', { image }, 15000);
+  }
+
+  async translateContent(content: any, toLang: string, fromLang?: string) {
+    return this.request<any>('POST', '/ai/translate', { content, to_lang: toLang, from_lang: fromLang }, 30000);
+  }
+
+  async adjustTone(text: string, action: 'professional' | 'casual' | 'shorter' | 'longer' | 'fix_grammar' | 'seo_optimize') {
+    return this.request<any>('POST', '/ai/adjust-tone', { text, action }, 15000);
+  }
+
   // ── Media Intelligence ──
   async getMediaUsage(id: string) {
     return this.request<any>('GET', `/media-intel/${id}/usage`);

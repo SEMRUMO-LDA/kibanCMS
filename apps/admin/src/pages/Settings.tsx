@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { useI18n, type Locale } from '../lib/i18n';
 import { useAuth } from '../features/auth/hooks/useAuth';
@@ -145,6 +146,7 @@ interface ApiKey { id: string; name: string; key_prefix: string; created_at: str
 
 export const Settings = () => {
   const { user } = useAuth();
+  const toast = useToast();
   const { t, locale, setLocale } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'general');
@@ -208,7 +210,7 @@ export const Settings = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) {
-      alert('Failed to save: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to save: ' + (err.message || 'Unknown error'));
     } finally {
       setSaving(false);
     }
