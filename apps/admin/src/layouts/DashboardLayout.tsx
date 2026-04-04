@@ -3,6 +3,8 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { CommandPalette } from '../components/CommandPalette';
+import { useI18n } from '../lib/i18n';
+import { api } from '../lib/api';
 import {
   Building2,
   LayoutDashboard,
@@ -409,9 +411,16 @@ const SearchHint = styled.div`
 export const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [collections, setCollections] = useState<any[]>([]);
   const { user, profile, signOut } = useAuth();
+  const { t, locale, setLocale } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Load collections for sidebar
+  useEffect(() => {
+    api.getCollections().then(({ data }) => setCollections(data || [])).catch(() => {});
+  }, []);
 
   // Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -464,70 +473,52 @@ export const DashboardLayout = () => {
 
         <SearchHint onClick={() => setCommandPaletteOpen(true)}>
           <Command size={14} />
-          <span>Quick search</span>
+          <span>{t('nav.quickSearch')}</span>
           <kbd>⌘K</kbd>
         </SearchHint>
 
         <Nav>
           <NavSection>
-            <NavLabel>Main</NavLabel>
-            <NavItem
-              $active={location.pathname === '/'}
-              onClick={() => handleNavigation('/')}
-              role="button"
-              tabIndex={0}
-            >
+            <NavLabel>{t('nav.main')}</NavLabel>
+            <NavItem $active={location.pathname === '/'} onClick={() => handleNavigation('/')} role="button" tabIndex={0}>
               <LayoutDashboard size={20} />
-              <span>Dashboard</span>
+              <span>{t('nav.dashboard')}</span>
             </NavItem>
-            <NavItem
-              $active={location.pathname.startsWith('/content')}
-              onClick={() => handleNavigation('/content')}
-              role="button"
-              tabIndex={0}
-            >
+            <NavItem $active={location.pathname === '/content'} onClick={() => handleNavigation('/content')} role="button" tabIndex={0}>
               <Files size={20} />
-              <span>Content</span>
+              <span>{t('nav.content')}</span>
             </NavItem>
-            <NavItem
-              $active={location.pathname.startsWith('/media')}
-              onClick={() => handleNavigation('/media')}
-              role="button"
-              tabIndex={0}
-            >
+
+            {/* Dynamic collections */}
+            {collections.map(col => (
+              <NavItem
+                key={col.slug}
+                $active={location.pathname === `/content/${col.slug}`}
+                onClick={() => handleNavigation(`/content/${col.slug}`)}
+                role="button" tabIndex={0}
+                style={{ paddingLeft: spacing[8], fontSize: typography.fontSize.xs }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: colors.gray[400], flexShrink: 0 }} />
+                <span>{col.name}</span>
+              </NavItem>
+            ))}
+
+            <NavItem $active={location.pathname.startsWith('/media')} onClick={() => handleNavigation('/media')} role="button" tabIndex={0}>
               <ImageIcon size={20} />
-              <span>Media</span>
+              <span>{t('nav.media')}</span>
             </NavItem>
           </NavSection>
 
           <NavSection>
-            <NavLabel>System</NavLabel>
-            <NavItem
-              $active={location.pathname.startsWith('/users')}
-              onClick={() => handleNavigation('/users')}
-              role="button"
-              tabIndex={0}
-            >
-              <Users size={20} />
-              <span>Users</span>
+            <NavLabel>{t('nav.system')}</NavLabel>
+            <NavItem $active={location.pathname.startsWith('/users')} onClick={() => handleNavigation('/users')} role="button" tabIndex={0}>
+              <Users size={20} /><span>{t('nav.users')}</span>
             </NavItem>
-            <NavItem
-              $active={location.pathname === '/activity'}
-              onClick={() => handleNavigation('/activity')}
-              role="button"
-              tabIndex={0}
-            >
-              <Activity size={20} />
-              <span>Activity</span>
+            <NavItem $active={location.pathname === '/activity'} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0}>
+              <Activity size={20} /><span>{t('nav.activity')}</span>
             </NavItem>
-            <NavItem
-              $active={location.pathname.startsWith('/addons')}
-              onClick={() => handleNavigation('/addons')}
-              role="button"
-              tabIndex={0}
-            >
-              <Puzzle size={20} />
-              <span>Add-ons</span>
+            <NavItem $active={location.pathname.startsWith('/addons')} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0}>
+              <Puzzle size={20} /><span>{t('nav.addons')}</span>
             </NavItem>
             <NavItem
               $active={location.pathname.startsWith('/settings')}
@@ -541,13 +532,42 @@ export const DashboardLayout = () => {
           </NavSection>
         </Nav>
 
+        {/* Language toggle */}
+        <div style={{
+          display: 'flex', gap: spacing[1], padding: `0 ${spacing[4]} ${spacing[3]}`,
+          justifyContent: 'center',
+        }}>
+          <button
+            onClick={() => setLocale('pt')}
+            style={{
+              padding: `${spacing[1.5]} ${spacing[3]}`, borderRadius: borders.radius.md,
+              border: `1px solid ${locale === 'pt' ? colors.accent[300] : colors.gray[200]}`,
+              background: locale === 'pt' ? colors.accent[50] : 'transparent',
+              color: locale === 'pt' ? colors.accent[700] : colors.gray[500],
+              fontSize: typography.fontSize.xs, fontWeight: locale === 'pt' ? 600 : 500,
+              cursor: 'pointer', fontFamily: typography.fontFamily.sans,
+            }}
+          >PT</button>
+          <button
+            onClick={() => setLocale('en')}
+            style={{
+              padding: `${spacing[1.5]} ${spacing[3]}`, borderRadius: borders.radius.md,
+              border: `1px solid ${locale === 'en' ? colors.accent[300] : colors.gray[200]}`,
+              background: locale === 'en' ? colors.accent[50] : 'transparent',
+              color: locale === 'en' ? colors.accent[700] : colors.gray[500],
+              fontSize: typography.fontSize.xs, fontWeight: locale === 'en' ? 600 : 500,
+              cursor: 'pointer', fontFamily: typography.fontFamily.sans,
+            }}
+          >EN</button>
+        </div>
+
         <UserSection>
           <div className="user-avatar">{getUserInitials()}</div>
           <div className="user-info">
             <strong>{profile?.full_name || 'Admin User'}</strong>
             <span>{user?.email}</span>
           </div>
-          <LogoutBtn onClick={handleLogout} title="Sign Out" aria-label="Sign out">
+          <LogoutBtn onClick={handleLogout} title={t('nav.signOut')} aria-label="Sign out">
             <LogOut size={18} />
           </LogoutBtn>
         </UserSection>
