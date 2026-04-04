@@ -8,6 +8,7 @@ import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { X, Clock, RotateCcw, Eye, Loader, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { VisualDiff } from './VisualDiff';
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -321,8 +322,18 @@ export function RevisionHistory({ entryId, currentVersion, onRestore, onClose }:
 
         {selectedRevision && (
           <PreviewPanel>
-            <h4>Version {selectedRevision.version} — Content Preview</h4>
-            <pre>{JSON.stringify(selectedRevision.content, null, 2)}</pre>
+            <h4>Version {selectedRevision.version} — Changes</h4>
+            {(() => {
+              // Find the previous version for diff
+              const idx = revisions.findIndex(r => r.id === selectedRevision.id);
+              const prevRevision = idx < revisions.length - 1 ? revisions[idx + 1] : null;
+              return (
+                <VisualDiff
+                  before={prevRevision?.content || {}}
+                  after={selectedRevision.content || {}}
+                />
+              );
+            })()}
           </PreviewPanel>
         )}
       </Panel>
