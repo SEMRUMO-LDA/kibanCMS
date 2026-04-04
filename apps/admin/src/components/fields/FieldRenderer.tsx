@@ -27,6 +27,9 @@ export interface FieldDefinition {
   max?: number; // For number fields
   step?: number; // For number fields
   referenceCollection?: string; // For reference fields — slug of target collection
+  agencyNote?: string; // Inline help note from the agency
+  agencyVideoUrl?: string; // Tutorial video URL (Loom, YouTube)
+  agencyVideoTitle?: string; // Video link label
 }
 
 interface FieldRendererProps {
@@ -48,6 +51,9 @@ export function FieldRenderer({
     name: field.id,
     label: field.name,
     required: field.required,
+    agencyNote: field.agencyNote,
+    agencyVideoUrl: field.agencyVideoUrl,
+    agencyVideoTitle: field.agencyVideoTitle,
     helpText: field.helpText,
     error,
     disabled,

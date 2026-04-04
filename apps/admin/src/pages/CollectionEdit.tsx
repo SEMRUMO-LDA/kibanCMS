@@ -476,6 +476,27 @@ export const CollectionEdit = () => {
                         </FormGroup>
                       )}
                     </FieldFormGrid>
+
+                    {/* Agency Notes Section */}
+                    <div style={{ marginBottom: spacing[4], padding: `${spacing[3]} 0`, borderTop: `1px solid ${colors.gray[100]}` }}>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: colors.gray[500], textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: spacing[3] }}>Agency Tools</p>
+                      <FieldFormGrid>
+                        <FormGroup className="full">
+                          <label>Agency Note</label>
+                          <textarea value={(field as any).agencyNote || ''} onChange={e => updateField(field.id, { agencyNote: e.target.value } as any)} placeholder="Tip for the client, e.g., 'Use the main keyword in the first 60 characters'" style={{ minHeight: 50 }} />
+                          <p className="help">Shown as a blue callout below this field in the editor</p>
+                        </FormGroup>
+                        <FormGroup>
+                          <label>Tutorial Video URL</label>
+                          <input value={(field as any).agencyVideoUrl || ''} onChange={e => updateField(field.id, { agencyVideoUrl: e.target.value } as any)} placeholder="https://loom.com/share/... or YouTube" />
+                        </FormGroup>
+                        <FormGroup>
+                          <label>Video Label</label>
+                          <input value={(field as any).agencyVideoTitle || ''} onChange={e => updateField(field.id, { agencyVideoTitle: e.target.value } as any)} placeholder="How to fill this field" />
+                        </FormGroup>
+                      </FieldFormGrid>
+                    </div>
+
                     <div style={{ display: 'flex', gap: spacing[5], flexWrap: 'wrap' }}>
                       <CheckboxRow>
                         <input type="checkbox" checked={field.required || false} onChange={e => updateField(field.id, { required: e.target.checked })} />

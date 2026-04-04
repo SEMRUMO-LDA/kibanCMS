@@ -522,7 +522,18 @@ export const Media = () => {
   };
 
   const handleDelete = async (id: string, filename: string) => {
-    if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+    // Check usage before deleting
+    try {
+      const { data: usageData } = await api.getMediaUsage(id);
+      if (usageData && usageData.usage_count > 0) {
+        const entries = usageData.usages.map((u: any) => `• ${u.entry_title} (${u.collection_name})`).join('\n');
+        if (!confirm(`⚠️ "${filename}" is used in ${usageData.usage_count} entries:\n\n${entries}\n\nDelete anyway?`)) return;
+      } else {
+        if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+      }
+    } catch {
+      if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+    }
 
     try {
       const { error } = await api.deleteMedia(id);

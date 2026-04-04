@@ -189,6 +189,15 @@ class ApiClient {
     return this.request<any>('POST', '/ai/generate-collection', { image, context }, 30000);
   }
 
+  // ── Media Intelligence ──
+  async getMediaUsage(id: string) {
+    return this.request<any>('GET', `/media-intel/${id}/usage`);
+  }
+
+  async checkDuplicate(hash: string, filename?: string) {
+    return this.request<any>('POST', '/media-intel/check-duplicate', { hash, filename });
+  }
+
   // ── Dashboard Stats ──
   async getDashboardStats() {
     return this.request<any>('GET', '/dashboard/stats');

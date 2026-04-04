@@ -16,6 +16,7 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { ArrowLeft, Loader, Clock, Eye } from 'lucide-react';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { LivePreview } from '../components/LivePreview';
+import { EditingPresence } from '../components/EditingPresence';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -300,6 +301,8 @@ export function EntryEdit() {
           {saveStatus === 'saving' ? 'Saving...' : 'Saved'}
         </div>
       )}
+
+      {isEditMode && entry && <EditingPresence entryId={entry.id} />}
 
       <EntryEditor
         fields={fields}
