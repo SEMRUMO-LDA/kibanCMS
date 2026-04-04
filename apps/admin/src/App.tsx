@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './features/auth/hooks/useAuth';
 import { ToastProvider } from './components/Toast';
+import { I18nProvider } from './lib/i18n';
 import { Login } from './pages/Login';
 import { Onboarding } from './pages/Onboarding';
 import { DashboardLayout } from './layouts/DashboardLayout';
@@ -104,10 +105,12 @@ const AppContent = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </AuthProvider>
+    </I18nProvider>
   );
 }
