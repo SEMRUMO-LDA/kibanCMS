@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { api } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import {
   FileText, Users, Image as ImageIcon, Box, TrendingUp, Activity,
   Clock, Edit, Plus, Upload, Wand2, ArrowRight, Key, CheckCircle,
@@ -221,6 +222,7 @@ interface ScheduledEntry { id: string; title: string; collection_slug: string; p
 
 export const Dashboard = () => {
   const { user, profile } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({ entries: 0, collections: 0, media: 0, users: 0 });
@@ -256,7 +258,7 @@ export const Dashboard = () => {
 
   const getGreeting = () => {
     const h = new Date().getHours();
-    return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    return h < 12 ? t('dashboard.greeting.morning') : h < 18 ? t('dashboard.greeting.afternoon') : t('dashboard.greeting.evening');
   };
 
   const timeAgo = (ts: string) => {
@@ -280,14 +282,14 @@ export const Dashboard = () => {
           fontSize: '13px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px',
         }}>
           <AlertCircle size={16} />
-          Some data may be incomplete — connection was slow. <button onClick={() => { setFetchError(false); setLoading(true); fetchAll(); }} style={{ background: 'none', border: 'none', color: '#92400e', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>Retry</button>
+          {t('dashboard.slowConnection')} <button onClick={() => { setFetchError(false); setLoading(true); fetchAll(); }} style={{ background: 'none', border: 'none', color: '#92400e', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit' }}>{t('dashboard.retry')}</button>
         </div>
       )}
 
       {/* Header */}
       <PageHeader>
         <h1>{getGreeting()}, {profile?.full_name?.split(' ')[0] || 'Admin'}</h1>
-        <p>Here's what's happening with your content • <b>{user?.email}</b></p>
+        <p>{t('dashboard.subtitle')} • <b>{user?.email}</b></p>
       </PageHeader>
 
       {/* Quick Actions */}
@@ -295,29 +297,29 @@ export const Dashboard = () => {
         <QuickAction onClick={() => navigate('/content')}>
           <div className="qa-icon"><Plus /></div>
           <div className="qa-text">
-            <div className="qa-title">New Entry</div>
-            <div className="qa-desc">Create content</div>
+            <div className="qa-title">{t('dashboard.newEntry')}</div>
+            <div className="qa-desc">{t('dashboard.createContent')}</div>
           </div>
         </QuickAction>
         <QuickAction onClick={() => navigate('/media')} $accent="#2563eb">
           <div className="qa-icon"><Upload /></div>
           <div className="qa-text">
-            <div className="qa-title">Upload Media</div>
-            <div className="qa-desc">Images & files</div>
+            <div className="qa-title">{t('dashboard.uploadMedia')}</div>
+            <div className="qa-desc">{t('dashboard.imagesFiles')}</div>
           </div>
         </QuickAction>
         <QuickAction onClick={() => navigate('/content/builder')} $accent="#7c3aed">
           <div className="qa-icon"><Wand2 /></div>
           <div className="qa-text">
-            <div className="qa-title">New Collection</div>
-            <div className="qa-desc">AI or manual</div>
+            <div className="qa-title">{t('dashboard.newCollection')}</div>
+            <div className="qa-desc">{t('dashboard.aiOrManual')}</div>
           </div>
         </QuickAction>
-        <QuickAction onClick={() => navigate('/settings')} $accent="#d97706">
+        <QuickAction onClick={() => navigate('/settings?tab=api')} $accent="#d97706">
           <div className="qa-icon"><Key /></div>
           <div className="qa-text">
-            <div className="qa-title">API Keys</div>
-            <div className="qa-desc">Integration setup</div>
+            <div className="qa-title">{t('dashboard.apiKeys')}</div>
+            <div className="qa-desc">{t('dashboard.integrationSetup')}</div>
           </div>
         </QuickAction>
       </QuickActionsBar>
@@ -325,24 +327,24 @@ export const Dashboard = () => {
       {/* Metrics */}
       <Grid4>
         <StatCard onClick={() => navigate('/content')}>
-          <div className="stat-label">Entries</div>
+          <div className="stat-label">{t('dashboard.entries')}</div>
           {loading ? <LoadingSkeleton className="h32" /> : <div className="stat-value">{fmt(metrics.entries)}</div>}
-          <div className="stat-footer"><FileText /> Content items</div>
+          <div className="stat-footer"><FileText /> {t('dashboard.contentItems')}</div>
         </StatCard>
         <StatCard onClick={() => navigate('/content')}>
-          <div className="stat-label">Collections</div>
+          <div className="stat-label">{t('dashboard.collections')}</div>
           {loading ? <LoadingSkeleton className="h32" /> : <div className="stat-value">{fmt(metrics.collections)}</div>}
-          <div className="stat-footer"><Box /> Schemas</div>
+          <div className="stat-footer"><Box /> {t('dashboard.schemas')}</div>
         </StatCard>
         <StatCard onClick={() => navigate('/media')}>
-          <div className="stat-label">Media</div>
+          <div className="stat-label">{t('dashboard.media')}</div>
           {loading ? <LoadingSkeleton className="h32" /> : <div className="stat-value">{fmt(metrics.media)}</div>}
-          <div className="stat-footer"><ImageIcon /> Files uploaded</div>
+          <div className="stat-footer"><ImageIcon /> {t('dashboard.filesUploaded')}</div>
         </StatCard>
         <StatCard onClick={() => navigate('/users')}>
-          <div className="stat-label">Team</div>
+          <div className="stat-label">{t('dashboard.team')}</div>
           {loading ? <LoadingSkeleton className="h32" /> : <div className="stat-value">{fmt(metrics.users)}</div>}
-          <div className="stat-footer"><Users /> Members</div>
+          <div className="stat-footer"><Users /> {t('dashboard.members')}</div>
         </StatCard>
       </Grid4>
 
@@ -353,11 +355,11 @@ export const Dashboard = () => {
           {/* Drafts */}
           <Card>
             <CardHeader>
-              <h3>Recent Drafts</h3>
-              <button onClick={() => navigate('/content')}>View all <ArrowRight size={14} /></button>
+              <h3>{t('dashboard.recentDrafts')}</h3>
+              <button onClick={() => navigate('/content')}>{t('dashboard.viewAll')} <ArrowRight size={14} /></button>
             </CardHeader>
             {drafts.length === 0 ? (
-              <EmptyList>No drafts — all content is published</EmptyList>
+              <EmptyList>{t('dashboard.noDrafts')}</EmptyList>
             ) : (
               drafts.map(d => (
                 <ListItem key={d.id} onClick={() => navigate(`/content/${d.collection_slug}/edit/${d.id}`)}>
@@ -375,11 +377,11 @@ export const Dashboard = () => {
           {/* Recent Activity */}
           <Card>
             <CardHeader>
-              <h3>Recent Activity</h3>
-              <button onClick={() => navigate('/content')}>View all <ArrowRight size={14} /></button>
+              <h3>{t('dashboard.recentActivity')}</h3>
+              <button onClick={() => navigate('/content')}>{t('dashboard.viewAll')} <ArrowRight size={14} /></button>
             </CardHeader>
             {activity.length === 0 ? (
-              <EmptyList>No activity yet</EmptyList>
+              <EmptyList>{t('dashboard.noActivity')}</EmptyList>
             ) : (
               activity.map(entry => {
                 const isNew = new Date(entry.created_at).getTime() === new Date(entry.updated_at).getTime();
@@ -413,10 +415,10 @@ export const Dashboard = () => {
           {/* Entries per Collection */}
           <Card>
             <CardHeader>
-              <h3>Entries by Collection</h3>
+              <h3>{t('dashboard.entriesByCollection')}</h3>
             </CardHeader>
             {collectionStats.length === 0 ? (
-              <EmptyList>No collections yet</EmptyList>
+              <EmptyList>{t('dashboard.noCollections')}</EmptyList>
             ) : (
               collectionStats.map(c => (
                 <CollectionBar key={c.slug} onClick={() => navigate(`/content/${c.slug}`)}>
@@ -433,10 +435,10 @@ export const Dashboard = () => {
           {/* Scheduled Content */}
           <Card>
             <CardHeader>
-              <h3>Scheduled</h3>
+              <h3>{t('dashboard.scheduled')}</h3>
             </CardHeader>
             {scheduled.length === 0 ? (
-              <EmptyList>No scheduled content</EmptyList>
+              <EmptyList>{t('dashboard.noScheduled')}</EmptyList>
             ) : (
               scheduled.map(s => (
                 <ListItem key={s.id} onClick={() => navigate(`/content/${s.collection_slug}/edit/${s.id}`)}>
@@ -454,12 +456,12 @@ export const Dashboard = () => {
           {/* System Health */}
           <Card>
             <CardHeader>
-              <h3>System Status</h3>
+              <h3>{t('dashboard.systemStatus')}</h3>
             </CardHeader>
             <HealthGrid>
               <div className="health-item">
                 <CheckCircle className="ok" />
-                Database connected
+                {t('dashboard.dbConnected')}
               </div>
               <div className="health-item">
                 <CheckCircle className="ok" />

@@ -496,9 +496,8 @@ export const DashboardLayout = () => {
                 $active={location.pathname === `/content/${col.slug}`}
                 onClick={() => handleNavigation(`/content/${col.slug}`)}
                 role="button" tabIndex={0}
-                style={{ paddingLeft: spacing[8], fontSize: typography.fontSize.xs }}
               >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: colors.gray[400], flexShrink: 0 }} />
+                <span style={{ width: 8, height: 8, borderRadius: '50%', border: `2px solid ${location.pathname === `/content/${col.slug}` ? colors.accent[500] : colors.gray[300]}`, flexShrink: 0, marginLeft: spacing[2] }} />
                 <span>{col.name}</span>
               </NavItem>
             ))}
