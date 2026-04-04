@@ -10,8 +10,10 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
+  Zap, Sparkles,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { useToast } from '../components/Toast';
 import { ADDONS_REGISTRY, type AddonDefinition } from '../config/addons-registry';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
@@ -178,6 +180,9 @@ const ICON_MAP: Record<string, any> = {
   'search': Search,
   'file-input': FileInput,
   'calendar-check': CalendarCheck,
+  'arrow-right': ArrowRight,
+  'zap': Zap,
+  'sparkles': Sparkles,
 };
 
 // ============================================
@@ -187,6 +192,7 @@ const ICON_MAP: Record<string, any> = {
 export const Addons = () => {
   const { user } = useAuth();
   const { t } = useI18n();
+  const toast = useToast();
   const navigate = useNavigate();
   const [tab, setTab] = useState<'all' | 'installed'>('all');
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
@@ -256,7 +262,7 @@ export const Addons = () => {
 
       setInstalledIds(prev => new Set([...prev, addon.id]));
     } catch (err: any) {
-      alert('Failed to install: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to install: ' + (err.message || 'Unknown error'));
     } finally {
       setInstalling(null);
     }
@@ -276,7 +282,7 @@ export const Addons = () => {
         return next;
       });
     } catch (err: any) {
-      alert('Failed to uninstall: ' + (err.message || 'Unknown error'));
+      toast.error('Failed to uninstall: ' + (err.message || 'Unknown error'));
     } finally {
       setInstalling(null);
     }

@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
+import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
@@ -290,6 +291,7 @@ export const CollectionEdit = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
@@ -344,7 +346,7 @@ export const CollectionEdit = () => {
   };
 
   const handleSave = async () => {
-    if (!collection.name) { alert('Name is required'); return; }
+    if (!collection.name) { toast.error('Name is required'); return; }
     setSaving(true);
     try {
       const { error } = await api.updateCollection(slug!, {
@@ -353,7 +355,7 @@ export const CollectionEdit = () => {
       if (error) throw new Error(error);
       navigate(`/content/${collection.slug}`);
     } catch (err: any) {
-      alert('Failed to save: ' + err.message);
+      toast.error('Failed to save: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -367,7 +369,7 @@ export const CollectionEdit = () => {
       if (error) throw new Error(error);
       navigate('/content');
     } catch (err: any) {
-      alert('Failed to delete: ' + err.message);
+      toast.error('Failed to delete: ' + err.message);
     } finally {
       setSaving(false);
     }

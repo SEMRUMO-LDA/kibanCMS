@@ -11,9 +11,11 @@ import webhooksRouter from './routes/webhooks.js';
 import mediaRouter from './routes/media.js';
 import usersRouter from './routes/users.js';
 import aiRouter from './routes/ai.js';
+import aiContentRouter from './routes/ai-content.js';
 import dashboardRouter from './routes/dashboard.js';
 import activityRouter from './routes/activity.js';
 import mediaIntelRouter from './routes/media-intelligence.js';
+import redirectsRouter from './routes/redirects.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
@@ -86,7 +88,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
-    version: '1.2.0',
+    version: '1.3.0',
     mode: NODE_ENV,
   });
 });
@@ -99,9 +101,11 @@ app.use('/api/v1/entries', validateAny, entriesRouter);
 app.use('/api/v1/media', validateAny, mediaRouter);
 app.use('/api/v1/webhooks', validateAny, webhooksRouter);
 app.use('/api/v1/ai', validateJWT, aiRouter);
+app.use('/api/v1/ai', validateJWT, aiContentRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
+app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)
 if (NODE_ENV === 'production') {

@@ -13,6 +13,7 @@ import { COLLECTION_PRESETS, type CollectionPreset } from '../config/collection-
 import { FieldEditor, type FieldDefinition } from '../components/collection-builder/FieldEditor';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import { useAuth } from '../features/auth/hooks/useAuth';
+import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import {
   ArrowLeft,
@@ -426,6 +427,7 @@ const ICON_MAP: Record<string, any> = {
 export const CollectionBuilder = () => {
   const navigate = useNavigate();
   const { user, session } = useAuth();
+  const toast = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<CollectionPreset | null>(null);
@@ -619,7 +621,7 @@ export const CollectionBuilder = () => {
       navigate(`/content/${data.slug || collection.slug}`);
     } catch (error: any) {
       console.error('[CollectionBuilder] Error:', error);
-      alert(`Failed to create collection: ${error.message}`);
+      toast.error('Failed to create: ' + error.message);
     } finally {
       setLoading(false);
     }
