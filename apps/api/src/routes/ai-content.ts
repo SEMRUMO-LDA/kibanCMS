@@ -5,9 +5,16 @@ import type { AuthRequest } from '../middleware/auth.js';
 const router: Router = Router();
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
+function checkKey(res: Response): boolean {
+  if (!GEMINI_KEY) {
+    res.status(503).json({ error: { message: 'AI not configured. Set GEMINI_API_KEY in environment.', status: 503 } });
+    return false;
+  }
+  return true;
+}
+
 function getModel() {
-  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not configured');
-  return new GoogleGenerativeAI(GEMINI_KEY).getGenerativeModel({ model: 'gemini-2.5-flash' });
+  return new GoogleGenerativeAI(GEMINI_KEY!).getGenerativeModel({ model: 'gemini-2.5-flash' });
 }
 
 /**
@@ -15,6 +22,7 @@ function getModel() {
  * Generate alt-text for an image (base64)
  */
 router.post('/alt-text', async (req: AuthRequest, res: Response) => {
+  if (!checkKey(res)) return;
   try {
     const { image } = req.body;
     if (!image) return res.status(400).json({ error: { message: 'image (base64) required', status: 400 } });
@@ -39,6 +47,7 @@ router.post('/alt-text', async (req: AuthRequest, res: Response) => {
  * Translate structured content (all fields) to target language
  */
 router.post('/translate', async (req: AuthRequest, res: Response) => {
+  if (!checkKey(res)) return;
   try {
     const { content, from_lang, to_lang } = req.body;
     if (!content || !to_lang) return res.status(400).json({ error: { message: 'content and to_lang required', status: 400 } });
@@ -66,6 +75,7 @@ ${JSON.stringify(content, null, 2)}`;
  * Adjust the tone of text content
  */
 router.post('/adjust-tone', async (req: AuthRequest, res: Response) => {
+  if (!checkKey(res)) return;
   try {
     const { text, action } = req.body;
     if (!text || !action) return res.status(400).json({ error: { message: 'text and action required', status: 400 } });
