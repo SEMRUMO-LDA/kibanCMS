@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Filter, Edit2, Trash2, Loader, Code } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Filter, Edit2, Trash2, Loader, Code, Eye, X } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
@@ -30,7 +30,10 @@ interface Entry {
   id: string;
   title: string;
   slug: string;
+  content?: Record<string, any>;
   status: string;
+  tags?: string[];
+  meta?: Record<string, any>;
   created_at: string;
   updated_at: string;
 }
@@ -671,6 +674,99 @@ const Checkbox = styled.input.attrs({ type: 'checkbox' })`
   accent-color: ${colors.accent[500]};
 `;
 
+const ViewModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: ${colors.backdrop};
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: ${spacing[4]};
+`;
+
+const ViewModalBox = styled.div`
+  background: ${colors.white};
+  border-radius: ${borders.radius.xl};
+  box-shadow: ${shadows['2xl']};
+  width: 100%;
+  max-width: 700px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+`;
+
+const ViewModalHeader = styled.div`
+  padding: ${spacing[5]} ${spacing[6]};
+  border-bottom: 1px solid ${colors.gray[200]};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+
+  h3 {
+    font-size: ${typography.fontSize.lg};
+    font-weight: ${typography.fontWeight.semibold};
+    color: ${colors.gray[900]};
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions {
+    display: flex;
+    gap: ${spacing[2]};
+    flex-shrink: 0;
+  }
+`;
+
+const ViewModalBody = styled.div`
+  padding: ${spacing[6]};
+  overflow-y: auto;
+  flex: 1;
+`;
+
+const ViewField = styled.div`
+  margin-bottom: ${spacing[5]};
+
+  &:last-child { margin-bottom: 0; }
+
+  .label {
+    font-size: ${typography.fontSize.xs};
+    font-weight: ${typography.fontWeight.semibold};
+    color: ${colors.gray[500]};
+    text-transform: uppercase;
+    letter-spacing: ${typography.letterSpacing.wider};
+    margin-bottom: ${spacing[1]};
+  }
+
+  .value {
+    font-size: ${typography.fontSize.sm};
+    color: ${colors.gray[900]};
+    line-height: ${typography.lineHeight.relaxed};
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .empty {
+    font-size: ${typography.fontSize.sm};
+    color: ${colors.gray[400]};
+    font-style: italic;
+  }
+`;
+
+const ViewFieldGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: ${spacing[4]};
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -689,6 +785,7 @@ export const CollectionEntries = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string>('');
+  const [viewEntry, setViewEntry] = useState<Entry | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -979,6 +1076,13 @@ export const CollectionEntries = () => {
                   <td>
                     <Actions>
                       <ActionButton
+                        onClick={() => setViewEntry(entry)}
+                        aria-label="View entry"
+                        title="View"
+                      >
+                        <Eye size={16} />
+                      </ActionButton>
+                      <ActionButton
                         onClick={() => navigate(`/content/${collectionSlug}/edit/${entry.id}`)}
                         aria-label="Edit entry"
                         title="Edit"
@@ -1008,6 +1112,97 @@ export const CollectionEntries = () => {
           collectionName={collectionName || collectionSlug}
           onClose={() => setShowCodeModal(false)}
         />
+      )}
+
+      {viewEntry && (
+        <ViewModalOverlay onClick={() => setViewEntry(null)}>
+          <ViewModalBox onClick={(e) => e.stopPropagation()}>
+            <ViewModalHeader>
+              <h3>{viewEntry.title || 'Untitled'}</h3>
+              <div className="actions">
+                <ActionButton
+                  onClick={() => {
+                    setViewEntry(null);
+                    navigate(`/content/${collectionSlug}/edit/${viewEntry.id}`);
+                  }}
+                  title="Edit"
+                >
+                  <Edit2 size={16} />
+                </ActionButton>
+                <ActionButton onClick={() => setViewEntry(null)} title="Close">
+                  <X size={16} />
+                </ActionButton>
+              </div>
+            </ViewModalHeader>
+            <ViewModalBody>
+              <ViewFieldGrid>
+                <ViewField>
+                  <div className="label">Status</div>
+                  <div className="value">
+                    <StatusBadge $status={viewEntry.status || 'draft'}>{viewEntry.status || 'draft'}</StatusBadge>
+                  </div>
+                </ViewField>
+                <ViewField>
+                  <div className="label">Slug</div>
+                  <div className="value" style={{ fontFamily: typography.fontFamily.mono, fontSize: typography.fontSize.xs }}>{viewEntry.slug}</div>
+                </ViewField>
+                <ViewField>
+                  <div className="label">Created</div>
+                  <div className="value">{formatDate(viewEntry.created_at)}</div>
+                </ViewField>
+                <ViewField>
+                  <div className="label">Updated</div>
+                  <div className="value">{formatDate(viewEntry.updated_at)}</div>
+                </ViewField>
+              </ViewFieldGrid>
+
+              {viewEntry.tags && viewEntry.tags.length > 0 && (
+                <ViewField style={{ marginTop: spacing[5] }}>
+                  <div className="label">Tags</div>
+                  <div className="value" style={{ display: 'flex', gap: spacing[2], flexWrap: 'wrap' }}>
+                    {viewEntry.tags.map(tag => (
+                      <span key={tag} style={{
+                        padding: `${spacing[1]} ${spacing[3]}`,
+                        background: colors.gray[100],
+                        borderRadius: borders.radius.full,
+                        fontSize: typography.fontSize.xs,
+                        color: colors.gray[700],
+                      }}>{tag}</span>
+                    ))}
+                  </div>
+                </ViewField>
+              )}
+
+              {viewEntry.content && Object.keys(viewEntry.content).length > 0 && (
+                <div style={{ marginTop: spacing[6], borderTop: `1px solid ${colors.gray[200]}`, paddingTop: spacing[6] }}>
+                  {Object.entries(viewEntry.content).map(([key, value]) => (
+                    <ViewField key={key}>
+                      <div className="label">{key.replace(/_/g, ' ')}</div>
+                      {value === null || value === undefined || value === '' ? (
+                        <div className="empty">—</div>
+                      ) : typeof value === 'boolean' ? (
+                        <div className="value">{value ? 'Yes' : 'No'}</div>
+                      ) : typeof value === 'object' ? (
+                        <pre style={{
+                          fontSize: typography.fontSize.xs,
+                          fontFamily: typography.fontFamily.mono,
+                          background: colors.gray[50],
+                          padding: spacing[3],
+                          borderRadius: borders.radius.md,
+                          overflow: 'auto',
+                          margin: 0,
+                          color: colors.gray[800],
+                        }}>{JSON.stringify(value, null, 2)}</pre>
+                      ) : (
+                        <div className="value">{String(value)}</div>
+                      )}
+                    </ViewField>
+                  ))}
+                </div>
+              )}
+            </ViewModalBody>
+          </ViewModalBox>
+        </ViewModalOverlay>
       )}
 
       {showFilterModal && (
