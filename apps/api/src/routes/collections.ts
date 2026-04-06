@@ -5,6 +5,9 @@ import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
+/** System collections hidden from public listing */
+const SYSTEM_COLLECTIONS = ['site-settings'];
+
 /**
  * Helper: Check if user has admin privileges
  */
@@ -21,6 +24,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     const { data: collections, error } = await supabase
       .from('collections')
       .select('id, name, slug, description, type, icon, created_at, updated_at')
+      .not('slug', 'in', `(${SYSTEM_COLLECTIONS.join(',')})`)
       .order('name', { ascending: true });
 
     if (error) throw error;

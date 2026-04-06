@@ -16,6 +16,7 @@ import dashboardRouter from './routes/dashboard.js';
 import activityRouter from './routes/activity.js';
 import mediaIntelRouter from './routes/media-intelligence.js';
 import redirectsRouter from './routes/redirects.js';
+import formsRouter from './routes/forms.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
@@ -82,6 +83,21 @@ const limiter = rateLimit({
 // Apply rate limiting to API routes only
 app.use('/api/v1', limiter);
 
+// Stricter rate limit for form submissions (anti-spam)
+const formsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // 20 submissions per 15 min per IP
+  message: {
+    error: {
+      message: 'Too many form submissions. Please try again later.',
+      status: 429,
+      timestamp: new Date().toISOString(),
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Health check endpoint (no auth required)
 app.get('/health', (req, res) => {
   res.json({
@@ -105,6 +121,7 @@ app.use('/api/v1/ai', validateJWT, aiContentRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
+app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key + stricter rate limit
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)

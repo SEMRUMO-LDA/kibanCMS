@@ -123,18 +123,18 @@ const seo: AddonDefinition = {
 const forms: AddonDefinition = {
   id: 'forms',
   name: 'Forms',
-  description: 'Contact forms, surveys, and submission management',
-  longDescription: 'Create custom forms for contact pages, surveys, and feedback collection. All submissions are stored in your CMS and accessible via API. Includes embed code for any website.',
+  description: 'Contact forms, leads, and email notifications via webhook',
+  longDescription: 'Receive form submissions from any frontend via API. Leads are stored in the CMS and can trigger email notifications through webhooks (Resend, Mailgun, Zapier, Make). Includes ready-to-use integration snippets.',
   icon: 'file-input',
   color: '#9333ea',
   category: 'content',
-  version: '1.0.0',
+  version: '2.0.0',
   author: 'kibanCMS',
   collections: [
     {
       name: 'Form Submissions',
       slug: 'form-submissions',
-      description: 'Incoming form submissions from your website',
+      description: 'Incoming form submissions and leads from your websites',
       type: 'custom',
       fields: [
         { id: 'form_name', name: 'form_name', label: 'Form Name', type: 'text', required: true, helpText: 'Which form was submitted (contact, feedback, etc.)' },
@@ -148,6 +148,25 @@ const forms: AddonDefinition = {
         { id: 'source_url', name: 'source_url', label: 'Source Page', type: 'url', helpText: 'Page where the form was submitted from' },
       ],
     },
+    {
+      name: 'Forms Config',
+      slug: 'forms-config',
+      description: 'Email notification settings per form',
+      type: 'custom',
+      fields: [
+        { id: 'form_name', name: 'form_name', label: 'Form Name', type: 'text', required: true, helpText: 'Must match the form_name sent from the frontend (e.g. "contact")' },
+        { id: 'notification_emails', name: 'notification_emails', label: 'Notification Emails', type: 'text', required: true, helpText: 'Comma-separated emails to receive notifications' },
+        { id: 'email_subject_template', name: 'email_subject_template', label: 'Email Subject', type: 'text', placeholder: 'New {form_name} from {name}', helpText: 'Variables: {form_name}, {name}, {email}, {subject}' },
+        { id: 'webhook_url', name: 'webhook_url', label: 'Webhook URL', type: 'url', helpText: 'External webhook for email dispatch (Resend, Zapier, Make, etc.)' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Enable/disable notifications for this form' },
+        { id: 'auto_reply', name: 'auto_reply', label: 'Auto-reply Message', type: 'textarea', helpText: 'Optional message sent to the person who submitted the form' },
+      ],
+    },
+  ],
+  configFields: [
+    { id: 'default_notification_email', name: 'default_notification_email', label: 'Default Notification Email', type: 'email', helpText: 'Fallback email for forms without specific config' },
+    { id: 'webhook_url', name: 'webhook_url', label: 'Global Webhook URL', type: 'url', helpText: 'Webhook called on every form submission (e.g. Zapier, Make, Resend)' },
+    { id: 'webhook_secret', name: 'webhook_secret', label: 'Webhook Secret', type: 'text', helpText: 'HMAC secret for verifying webhook authenticity' },
   ],
 };
 

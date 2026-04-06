@@ -396,17 +396,30 @@ export const Onboarding = () => {
 
       console.log('[Onboarding] Starting completion for user:', user.id);
 
-      // 1. Save manifesto to profile
+      // 1. Ensure user has admin role (first user = super_admin) and save manifesto
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single() as { data: { role: string | null } | null; error: any };
+
+      const updateData: Record<string, any> = {
+        onboarding_completed: true,
+        project_manifesto: {
+          ...manifest,
+          created_at: new Date().toISOString(),
+          version: '1.0',
+        },
+      };
+
+      // Assign super_admin if no role set yet (first user doing onboarding)
+      if (!existingProfile?.role || existingProfile.role === 'viewer') {
+        updateData.role = 'super_admin';
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({
-          onboarding_completed: true,
-          project_manifesto: {
-            ...manifest,
-            created_at: new Date().toISOString(),
-            version: '1.0',
-          },
-        })
+        .update(updateData as any)
         .eq('id', user.id);
 
       if (profileError) {
@@ -440,6 +453,37 @@ export const Onboarding = () => {
       const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
       if (failed.length > 0 && failed.length === selectedPresets.length) {
         throw new Error(`Failed to create collections. Please check your permissions.`);
+      }
+
+      // 3. Ensure API key exists (create if missing)
+      try {
+        const { data: existingKeys } = await supabase
+          .from('api_keys')
+          .select('id')
+          .eq('profile_id', user.id)
+          .is('revoked_at', null)
+          .limit(1);
+
+        if (!existingKeys || existingKeys.length === 0) {
+          const { data: keyResult } = await supabase.rpc('generate_api_key') as { data: string | null; error: any };
+          if (keyResult) {
+            const { data: hashResult } = await supabase.rpc('hash_api_key', { key_value: keyResult }) as { data: string | null; error: any };
+            const { data: prefixResult } = await supabase.rpc('get_key_prefix', { key_value: keyResult }) as { data: string | null; error: any };
+            if (hashResult && prefixResult) {
+              await supabase.from('api_keys').insert({
+                profile_id: user.id,
+                name: 'Default API Key',
+                key_hash: hashResult,
+                key_prefix: prefixResult,
+              } as any);
+              console.log('[Onboarding] API key created successfully');
+            }
+          }
+        } else {
+          console.log('[Onboarding] API key already exists, skipping');
+        }
+      } catch (keyErr) {
+        console.warn('[Onboarding] API key creation failed (non-blocking):', keyErr);
       }
 
       // Redirect — partial success is OK (some may already exist)
