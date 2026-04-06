@@ -8,7 +8,8 @@ import { useSearchParams } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import {
   Globe, Key, Image as ImageIcon, Link2, Shield, Mail,
-  Copy, Check, Eye, EyeOff, AlertCircle, Save, Loader, CheckCircle,
+  Copy, Check, Save, Loader, CheckCircle,
+  Plus, Trash2, X,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
@@ -93,6 +94,48 @@ const IconBtn = styled.button`
   svg { width: 16px; height: 16px; }
 `;
 
+const GenerateBtn = styled.button`
+  padding: ${spacing[3]} ${spacing[5]};
+  background: ${colors.accent[500]}; color: #fff; border: none;
+  border-radius: ${borders.radius.lg}; font-size: ${typography.fontSize.sm}; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: ${spacing[2]};
+  font-family: ${typography.fontFamily.sans};
+  &:hover:not(:disabled) { background: ${colors.accent[600]}; }
+  &:disabled { opacity: 0.6; cursor: not-allowed; }
+  svg { width: 18px; height: 18px; }
+`;
+
+const RevokeBtn = styled.button`
+  padding: ${spacing[1]} ${spacing[3]};
+  background: none; color: ${colors.gray[400]}; border: 1px solid ${colors.gray[200]};
+  border-radius: ${borders.radius.md}; font-size: 12px; font-weight: 500;
+  cursor: pointer; display: flex; align-items: center; gap: ${spacing[1]};
+  font-family: ${typography.fontFamily.sans};
+  &:hover { color: #dc2626; border-color: #fca5a5; background: #fef2f2; }
+  svg { width: 14px; height: 14px; }
+`;
+
+const ModalOverlay = styled.div`
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  animation: ${fadeIn} 0.2s ease-out;
+`;
+
+const ModalBox = styled.div`
+  background: ${colors.white}; border-radius: ${borders.radius.xl};
+  padding: ${spacing[6]}; max-width: 560px; width: 90%;
+  box-shadow: ${shadows.xl};
+  h3 { font-size: ${typography.fontSize.lg}; font-weight: 600; margin: 0 0 ${spacing[4]}; }
+`;
+
+const NewKeyDisplay = styled.div`
+  background: #f0fdf4; border: 2px solid #86efac; border-radius: ${borders.radius.lg};
+  padding: ${spacing[4]}; margin: ${spacing[4]} 0;
+  code { display: block; font-family: ${typography.fontFamily.mono}; font-size: 14px;
+    word-break: break-all; color: #166534; line-height: 1.6; user-select: all; }
+`;
+
 const Toast = styled.div<{ $v: boolean }>`
   position: fixed; top: 16px; right: 16px; z-index: 100;
   padding: 10px 20px; background: #16a34a; color: #fff; border-radius: ${borders.radius.lg};
@@ -156,9 +199,60 @@ export const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const switchTab = (id: string) => { setActiveTab(id); setSearchParams({ tab: id }); };
+
+  const handleGenerateKey = async () => {
+    if (!user?.id) return;
+    setGenerating(true);
+    try {
+      const { data, error } = await supabase.rpc('generate_new_api_key_for_user', {
+        user_profile_id: user.id,
+        key_name: newKeyName.trim() || 'API Key',
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.api_key) {
+        setGeneratedKey(row.api_key);
+        await loadAll();
+      } else {
+        throw new Error('No key returned. Ensure migration 008 has been applied.');
+      }
+    } catch (err: any) {
+      toast.error('Failed to generate key: ' + (err.message || 'Unknown error'));
+      setShowGenerateModal(false);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRevokeKey = async (keyId: string) => {
+    setRevokingId(keyId);
+    try {
+      const { error } = await supabase
+        .from('api_keys')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', keyId);
+      if (error) throw error;
+      setApiKeys((prev: ApiKey[]) => prev.filter((k: ApiKey) => k.id !== keyId));
+      toast.success('API key revoked');
+    } catch (err: any) {
+      toast.error('Failed to revoke: ' + (err.message || 'Unknown error'));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const closeGenerateModal = () => {
+    setShowGenerateModal(false);
+    setGeneratedKey(null);
+    setNewKeyName('');
+  };
   const update = (key: keyof SiteSettings, value: string) => setSettings(prev => ({ ...prev, [key]: value }));
   const fmt = (d: string | null) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never';
 
@@ -318,26 +412,102 @@ export const Settings = () => {
 
       {/* ── API ── */}
       {activeTab === 'api' && (
-        <Section>
-          <h2>API Keys</h2>
-          <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#1e40af' }}>
-            <strong style={{ display: 'block', marginBottom: 4 }}>Keep your API keys secure</strong>
-            API keys allow frontend apps to fetch content. Never expose them in client-side code.
-          </div>
-          {apiKeys.length === 0 ? (
-            <p style={{ color: colors.gray[500], textAlign: 'center', padding: spacing[8] }}>No API keys found. Run migration <code>007_api_keys.sql</code> to generate one.</p>
-          ) : apiKeys.map(key => (
-            <KeyCard key={key.id}>
-              <h3>{key.name}</h3>
-              <div className="key-row">
-                <code>{visibleKeys.has(key.id) ? key.key_prefix.replace('...', '_'.repeat(32)) : key.key_prefix}</code>
-                <IconBtn onClick={() => setVisibleKeys(prev => { const n = new Set(prev); n.has(key.id) ? n.delete(key.id) : n.add(key.id); return n; })}>{visibleKeys.has(key.id) ? <EyeOff /> : <Eye />}</IconBtn>
-                <IconBtn onClick={() => { navigator.clipboard.writeText(key.key_prefix); setCopiedId(key.id); setTimeout(() => setCopiedId(null), 2000); }}>{copiedId === key.id ? <Check /> : <Copy />}</IconBtn>
-              </div>
-              <div className="key-meta"><span>Created: {fmt(key.created_at)}</span><span>Last used: {fmt(key.last_used_at)}</span></div>
-            </KeyCard>
-          ))}
-        </Section>
+        <>
+          <Section>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[5], paddingBottom: spacing[4], borderBottom: `1px solid ${colors.gray[100]}` }}>
+              <h2 style={{ margin: 0, border: 'none', padding: 0 }}>API Keys</h2>
+              <GenerateBtn onClick={() => setShowGenerateModal(true)}>
+                <Plus /> {locale === 'pt' ? 'Gerar Nova Key' : 'Generate New Key'}
+              </GenerateBtn>
+            </div>
+            <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#1e40af' }}>
+              <strong style={{ display: 'block', marginBottom: 4 }}>{locale === 'pt' ? 'Mantenha as suas API keys seguras' : 'Keep your API keys secure'}</strong>
+              {locale === 'pt'
+                ? 'As API keys permitem que apps frontend acedam ao conteúdo. Nunca as exponha em código client-side.'
+                : 'API keys allow frontend apps to fetch content. Never expose them in client-side code.'}
+            </div>
+            {apiKeys.length === 0 ? (
+              <p style={{ color: colors.gray[500], textAlign: 'center', padding: spacing[8] }}>
+                {locale === 'pt' ? 'Nenhuma API key encontrada. Clique em "Gerar Nova Key" para criar uma.' : 'No API keys found. Click "Generate New Key" to create one.'}
+              </p>
+            ) : apiKeys.map(key => (
+              <KeyCard key={key.id}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[2] }}>
+                  <h3 style={{ margin: 0 }}>{key.name}</h3>
+                  <RevokeBtn
+                    onClick={() => { if (window.confirm(locale === 'pt' ? `Revogar a key "${key.name}"? Esta ação é irreversível.` : `Revoke key "${key.name}"? This cannot be undone.`)) handleRevokeKey(key.id); }}
+                    disabled={revokingId === key.id}
+                  >
+                    {revokingId === key.id ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 />}
+                    {locale === 'pt' ? 'Revogar' : 'Revoke'}
+                  </RevokeBtn>
+                </div>
+                <div className="key-row">
+                  <code>{key.key_prefix}</code>
+                  <IconBtn onClick={() => { navigator.clipboard.writeText(key.key_prefix); setCopiedId(key.id); setTimeout(() => setCopiedId(null), 2000); }}>{copiedId === key.id ? <Check /> : <Copy />}</IconBtn>
+                </div>
+                <div className="key-meta"><span>{locale === 'pt' ? 'Criada' : 'Created'}: {fmt(key.created_at)}</span><span>{locale === 'pt' ? 'Última utilização' : 'Last used'}: {fmt(key.last_used_at)}</span></div>
+              </KeyCard>
+            ))}
+          </Section>
+
+          {/* Generate Key Modal */}
+          {showGenerateModal && (
+            <ModalOverlay onClick={() => { if (!generatedKey) closeGenerateModal(); }}>
+              <ModalBox onClick={e => e.stopPropagation()}>
+                {generatedKey ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3 style={{ color: '#166534' }}>{locale === 'pt' ? 'Key Gerada com Sucesso!' : 'Key Generated Successfully!'}</h3>
+                      <IconBtn onClick={closeGenerateModal}><X /></IconBtn>
+                    </div>
+                    <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: borders.radius.lg, marginBottom: spacing[3], fontSize: typography.fontSize.sm, color: '#92400e' }}>
+                      <strong>{locale === 'pt' ? 'Copie agora!' : 'Copy it now!'}</strong>{' '}
+                      {locale === 'pt'
+                        ? 'Esta é a ÚNICA vez que a key completa será mostrada. Não é possível recuperá-la depois.'
+                        : 'This is the ONLY time the full key will be shown. It cannot be recovered later.'}
+                    </div>
+                    <NewKeyDisplay>
+                      <code>{generatedKey}</code>
+                    </NewKeyDisplay>
+                    <div style={{ display: 'flex', gap: spacing[3] }}>
+                      <GenerateBtn
+                        onClick={() => { navigator.clipboard.writeText(generatedKey); setCopiedId('new'); setTimeout(() => setCopiedId(null), 2000); }}
+                        style={{ flex: 1, justifyContent: 'center' }}
+                      >
+                        {copiedId === 'new' ? <><Check /> {locale === 'pt' ? 'Copiada!' : 'Copied!'}</> : <><Copy /> {locale === 'pt' ? 'Copiar Key' : 'Copy Key'}</>}
+                      </GenerateBtn>
+                      <SaveBtn onClick={closeGenerateModal} style={{ flex: 1, justifyContent: 'center', background: colors.gray[600] }}>
+                        {locale === 'pt' ? 'Fechar' : 'Close'}
+                      </SaveBtn>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3>{locale === 'pt' ? 'Gerar Nova API Key' : 'Generate New API Key'}</h3>
+                      <IconBtn onClick={closeGenerateModal}><X /></IconBtn>
+                    </div>
+                    <Field style={{ marginBottom: spacing[4] }}>
+                      <label>{locale === 'pt' ? 'Nome da Key' : 'Key Name'}</label>
+                      <input
+                        value={newKeyName}
+                        onChange={e => setNewKeyName(e.target.value)}
+                        placeholder={locale === 'pt' ? 'Ex: Website Solfil' : 'E.g.: My Frontend App'}
+                        autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') handleGenerateKey(); }}
+                      />
+                      <p className="help">{locale === 'pt' ? 'Um nome descritivo para identificar onde esta key é usada.' : 'A descriptive name to identify where this key is used.'}</p>
+                    </Field>
+                    <GenerateBtn onClick={handleGenerateKey} disabled={generating} style={{ width: '100%', justifyContent: 'center' }}>
+                      {generating ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> {locale === 'pt' ? 'A gerar...' : 'Generating...'}</> : <><Key /> {locale === 'pt' ? 'Gerar API Key' : 'Generate API Key'}</>}
+                    </GenerateBtn>
+                  </>
+                )}
+              </ModalBox>
+            </ModalOverlay>
+          )}
+        </>
       )}
 
       {/* ── MEDIA ── */}
