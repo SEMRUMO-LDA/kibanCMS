@@ -26,17 +26,15 @@ router.get('/resolve', async (req: Request, res: Response) => {
       return res.status(404).json({ error: { message: 'No redirect rules configured', status: 404 } });
     }
 
-    // Search for a matching redirect
-    const { data: entries } = await supabase
+    // Search for matching redirect directly in DB (no full table scan)
+    const { data: match } = await supabase
       .from('entries')
-      .select('content, status')
+      .select('id, content')
       .eq('collection_id', col.id)
-      .eq('status', 'published');
-
-    const match = (entries || []).find(e => {
-      const content = e.content as any;
-      return content?.from_path === path && content?.is_active !== false;
-    });
+      .eq('status', 'published')
+      .filter('content->>from_path', 'eq', path)
+      .limit(1)
+      .maybeSingle();
 
     if (!match) {
       return res.status(404).json({ data: null, message: 'No redirect found' });
@@ -44,8 +42,17 @@ router.get('/resolve', async (req: Request, res: Response) => {
 
     const content = match.content as any;
 
+    if (content?.is_active === false) {
+      return res.status(404).json({ data: null, message: 'No redirect found' });
+    }
+
     // Increment hit count (fire and forget)
-    // This would need entry ID — simplified for now
+    const currentCount = parseInt(content.hit_count || '0', 10);
+    supabase
+      .from('entries')
+      .update({ content: { ...content, hit_count: currentCount + 1 } })
+      .eq('id', match.id)
+      .then(() => {});
 
     res.json({
       data: {
