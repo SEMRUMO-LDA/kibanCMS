@@ -340,9 +340,8 @@ export const Settings = () => {
       {/* ── GENERAL ── */}
       {activeTab === 'general' && (
         <>
-          {/* Interface Language — affects the entire admin */}
           <Section>
-            <h2>{t('settings.general')} — {locale === 'pt' ? 'Idioma da Interface' : 'Interface Language'}</h2>
+            <h2>{locale === 'pt' ? 'Idioma da Interface' : 'Interface Language'}</h2>
             <Grid>
               <Field>
                 <label>{locale === 'pt' ? 'Idioma do Painel' : 'Admin Language'}</label>
@@ -356,44 +355,11 @@ export const Settings = () => {
           </Section>
 
           <Section>
-            <h2>{locale === 'pt' ? 'Identidade do Site' : 'Site Identity'}</h2>
+            <h2>{locale === 'pt' ? 'Projeto' : 'Project'}</h2>
             <Grid>
               <Field><label>{locale === 'pt' ? 'Nome do Site' : 'Site Name'}</label><input value={settings.site_name} onChange={e => update('site_name', e.target.value)} placeholder="My Website" /></Field>
               <Field><label>{locale === 'pt' ? 'URL do Site' : 'Site URL'}</label><input value={settings.site_url} onChange={e => update('site_url', e.target.value)} placeholder="https://example.com" /></Field>
-              <Field $full><label>{locale === 'pt' ? 'Descrição' : 'Description'}</label><textarea value={settings.site_description} onChange={e => update('site_description', e.target.value)} placeholder={locale === 'pt' ? 'Breve descrição do site' : 'Brief site description'} /></Field>
-              <Field><label>{locale === 'pt' ? 'Idioma do Conteúdo' : 'Content Language'}</label><select value={settings.language} onChange={e => update('language', e.target.value)}><option value="pt">Português</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option></select></Field>
               <Field><label>{locale === 'pt' ? 'Fuso Horário' : 'Timezone'}</label><select value={settings.timezone} onChange={e => update('timezone', e.target.value)}><option value="Europe/Lisbon">Europe/Lisbon</option><option value="Europe/London">Europe/London</option><option value="Europe/Paris">Europe/Paris</option><option value="America/New_York">America/New York</option><option value="America/Sao_Paulo">America/São Paulo</option><option value="UTC">UTC</option></select></Field>
-            </Grid>
-          </Section>
-          <Section>
-            <h2>Branding</h2>
-            <Grid>
-              <Field><label>Logo URL</label><input value={settings.logo_url} onChange={e => update('logo_url', e.target.value)} placeholder="https://example.com/logo.png" /></Field>
-              <Field><label>Favicon URL</label><input value={settings.favicon_url} onChange={e => update('favicon_url', e.target.value)} placeholder="https://example.com/favicon.ico" /></Field>
-              <Field><label>Primary Color</label><div style={{ display: 'flex', gap: 8 }}><input type="color" value={settings.primary_color} onChange={e => update('primary_color', e.target.value)} style={{ width: 40, height: 36, padding: 2 }} /><input value={settings.primary_color} onChange={e => update('primary_color', e.target.value)} style={{ flex: 1 }} /></div></Field>
-              <Field><label>Secondary Color</label><div style={{ display: 'flex', gap: 8 }}><input type="color" value={settings.secondary_color} onChange={e => update('secondary_color', e.target.value)} style={{ width: 40, height: 36, padding: 2 }} /><input value={settings.secondary_color} onChange={e => update('secondary_color', e.target.value)} style={{ flex: 1 }} /></div></Field>
-            </Grid>
-          </Section>
-          <Section>
-            <h2>Contact & Social</h2>
-            <Grid>
-              <Field><label>Email</label><input value={settings.contact_email} onChange={e => update('contact_email', e.target.value)} placeholder="hello@example.com" /></Field>
-              <Field><label>Phone</label><input value={settings.contact_phone} onChange={e => update('contact_phone', e.target.value)} placeholder="+351 900 000 000" /></Field>
-              <Field $full><label>Address</label><input value={settings.address} onChange={e => update('address', e.target.value)} placeholder="Street, City, Country" /></Field>
-              <Field><label>Facebook</label><input value={settings.facebook_url} onChange={e => update('facebook_url', e.target.value)} placeholder="https://facebook.com/..." /></Field>
-              <Field><label>Instagram</label><input value={settings.instagram_url} onChange={e => update('instagram_url', e.target.value)} placeholder="https://instagram.com/..." /></Field>
-              <Field><label>Twitter / X</label><input value={settings.twitter_url} onChange={e => update('twitter_url', e.target.value)} placeholder="https://x.com/..." /></Field>
-              <Field><label>LinkedIn</label><input value={settings.linkedin_url} onChange={e => update('linkedin_url', e.target.value)} placeholder="https://linkedin.com/..." /></Field>
-              <Field><label>YouTube</label><input value={settings.youtube_url} onChange={e => update('youtube_url', e.target.value)} placeholder="https://youtube.com/@..." /></Field>
-              <Field><label>TikTok</label><input value={settings.tiktok_url} onChange={e => update('tiktok_url', e.target.value)} placeholder="https://tiktok.com/@..." /></Field>
-            </Grid>
-          </Section>
-          <Section>
-            <h2>Advanced</h2>
-            <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#1e40af' }}>
-              <strong>SEO, Analytics & Custom Code</strong> moved to the <strong>SEO & Analytics</strong> add-on. Install it from Add-ons to manage meta tags, Open Graph, Google Analytics, robots.txt and custom scripts.
-            </div>
-            <Grid>
               <Field><label>Maintenance Mode</label><select value={settings.maintenance_mode} onChange={e => update('maintenance_mode', e.target.value)}><option value="false">Off</option><option value="true">On</option></select></Field>
             </Grid>
           </Section>

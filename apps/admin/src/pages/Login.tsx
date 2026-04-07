@@ -275,7 +275,7 @@ export const Login = () => {
       <FormBox>
         <Header>
           <div className="logo-wrapper" style={{ background: 'none', border: 'none', width: 'auto', height: 'auto' }}>
-            <img src="/logo.jpg" alt="kibanCMS" style={{ height: '48px', objectFit: 'contain' }} />
+            <img src="/logo.png" alt="kibanCMS" style={{ height: '48px', objectFit: 'contain' }} />
           </div>
           <h1>kibanCMS</h1>
           <p>{t('login.title')}</p>
