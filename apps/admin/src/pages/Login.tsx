@@ -80,32 +80,25 @@ const Header = styled.div`
   margin-bottom: ${spacing[8]};
 
   .logo-wrapper {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto ${spacing[4]};
-    background: linear-gradient(135deg, ${colors.accent[400]}, ${colors.accent[600]});
-    border-radius: ${borders.radius.xl};
+    width: auto;
+    height: auto;
+    margin: 0 auto ${spacing[6]};
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: ${shadows.lg};
-
-    svg {
-      color: ${colors.white};
-    }
   }
 
   h1 {
-    font-size: ${typography.fontSize['2xl']};
-    font-weight: ${typography.fontWeight.bold};
-    margin: 0 0 ${spacing[2]} 0;
-    letter-spacing: ${typography.letterSpacing.tight};
-    color: ${colors.gray[900]};
+    display: none;
   }
 
   p {
     font-size: ${typography.fontSize.sm};
-    color: ${colors.gray[600]};
+    color: ${colors.gray[500]};
     margin: 0;
     line-height: ${typography.lineHeight.relaxed};
   }
@@ -274,10 +267,9 @@ export const Login = () => {
     <Container>
       <FormBox>
         <Header>
-          <div className="logo-wrapper" style={{ background: 'none', border: 'none', width: 'auto', height: 'auto' }}>
-            <img src="/logo.png" alt="kibanCMS" style={{ height: '48px', objectFit: 'contain' }} />
+          <div className="logo-wrapper">
+            <img src="/logo.png" alt="kibanCMS" style={{ height: '64px', objectFit: 'contain' }} />
           </div>
-          <h1>kibanCMS</h1>
           <p>{t('login.title')}</p>
         </Header>
 
