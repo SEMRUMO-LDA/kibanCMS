@@ -165,29 +165,101 @@ No Make.com, para aceder aos campos usa:
 | **email_subject_template** | `Nova mensagem de {name} — Solfil` |
 | **webhook_url** | `https://hook.eu2.make.com/abc123xyz` (o URL do Passo 2) |
 | **is_active** | `true` |
-| **auto_reply** | (vazio, ou mensagem de auto-resposta) |
+| **auto_reply** | Mensagem de confirmacao para o visitante (ver Passo 6) |
 | **Status** | Published |
 
 ---
 
-## Passo 6: Ativar o Scenario no Make.com
+## Passo 6: Configurar auto-reply ao visitante (Make.com)
+
+Quando alguem submete o formulario, alem da notificacao interna, o visitante
+recebe um email de confirmacao automatico.
+
+### No Make.com — adicionar segundo modulo de email
+
+O Scenario fica assim:
+
+```
+Webhook → Email 1 (notificacao interna) → Email 2 (auto-reply ao visitante)
+```
+
+1. No Scenario, clica **+** depois do primeiro modulo de email
+2. Adiciona outro modulo de email (Gmail, SMTP, ou o que usares)
+3. Configura:
+
+| Campo | Valor |
+|-------|-------|
+| **To** | `{{submission.email}}` (email do visitante) |
+| **From name** | `Solfil` (ou o nome da empresa) |
+| **Subject** | `Recebemos a sua mensagem — Solfil` |
+| **Body (HTML)** | Ver template abaixo |
+
+### Template HTML do auto-reply
+
+```html
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+  <h2 style="color: #222;">Obrigado pelo seu contacto</h2>
+
+  <p>Ola {{submission.name}},</p>
+
+  <p>Confirmamos a rececao da sua mensagem. A nossa equipa ira analisar
+  o seu pedido e entrar em contacto consigo o mais brevemente possivel.</p>
+
+  <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
+    <strong style="color: #555;">A sua mensagem:</strong><br>
+    <p style="color: #555; margin: 8px 0 0 0;">{{submission.message}}</p>
+  </div>
+
+  <p>Se precisar de assistencia urgente, contacte-nos diretamente:</p>
+  <ul>
+    <li>Telefone: +351 XXX XXX XXX</li>
+    <li>Email: geral@solfil.pt</li>
+  </ul>
+
+  <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
+  <p style="font-size: 12px; color: #999;">
+    Solfil — Materiais de Construcao<br>
+    Esta e uma mensagem automatica. Nao responda a este email.
+  </p>
+</div>
+```
+
+### Usar o campo auto_reply do CMS (opcional)
+
+Se preferires gerir o texto do auto-reply dentro do CMS em vez de hardcoded no Make.com:
+
+1. Na **Forms Config**, preenche o campo `auto_reply` com o texto desejado
+2. No Make.com, usa `{{notification.auto_reply}}` como body do Email 2
+3. Assim podes alterar a mensagem sem tocar no Make.com
+
+### Notas importantes sobre auto-reply
+
+- O email e enviado **pelo Make.com**, nao pelo CMS
+- O remetente (From) depende da conta de email configurada no Make.com
+- Para que o email nao va para spam, usa um dominio verificado (ex: `noreply@solfil.pt`)
+- Testa sempre com o teu proprio email primeiro
+
+---
+
+## Passo 7: Ativar o Scenario no Make.com
 
 1. No Make.com, clica **Run once** para testar
 2. Submete um formulario de teste no website
-3. Verifica que o Make.com recebeu os dados e enviou o email
+3. Verifica que o Make.com recebeu os dados e enviou **ambos** os emails
 4. Se tudo ok, ativa o **Scheduling** (toggle ON no canto inferior)
 5. Define para **Immediately** (processa assim que recebe)
 
 ---
 
-## Passo 7: Testar
+## Passo 8: Testar
 
 1. Vai ao website (ex: solfil.pt)
 2. Preenche e submete o formulario de contacto
 3. Verifica:
    - [ ] Lead aparece em **Conteudo > Form Submissions** no CMS
-   - [ ] Email chegou a `geral@solfil.pt`
-   - [ ] Dados estao corretos no email
+   - [ ] Email de notificacao chegou a `geral@solfil.pt`
+   - [ ] Email de confirmacao chegou ao email do visitante
+   - [ ] Dados estao corretos em ambos os emails
 
 ---
 
@@ -239,6 +311,8 @@ No Make.com, usa `{{notification.to}}` no campo "To".
 ## Resumo
 
 - **Leads** ficam sempre guardadas no CMS, com ou sem webhook
-- **Email** e enviado via Make.com (webhook externo)
+- **Email de notificacao** enviado ao admin via Make.com
+- **Email de confirmacao** enviado ao visitante via Make.com (auto-reply)
 - **Configuracao por form** — cada formulario pode ter emails e webhook diferentes
+- **Texto do auto-reply** gerido no CMS (campo `auto_reply` na Forms Config)
 - **Zero codigo** no backend para email — tudo via webhook + Make.com
