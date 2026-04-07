@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Filter, Edit2, Trash2, Loader, Code, Eye, X } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Code, Eye, X, Download } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
@@ -908,6 +908,50 @@ export const CollectionEntries = () => {
     return matchesSearch && matchesStatus;
   });
 
+  const handleExportCSV = () => {
+    if (filteredEntries.length === 0) return;
+
+    const allKeys = new Set<string>();
+    allKeys.add('title');
+    allKeys.add('slug');
+    allKeys.add('status');
+    allKeys.add('created_at');
+
+    filteredEntries.forEach(e => {
+      if (e.content && typeof e.content === 'object') {
+        Object.keys(e.content).forEach(k => allKeys.add(k));
+      }
+    });
+
+    const headers = Array.from(allKeys);
+
+    const csvRows = [
+      headers.join(','),
+      ...filteredEntries.map(entry => {
+        return headers.map(key => {
+          let val: any;
+          if (key === 'title') val = entry.title;
+          else if (key === 'slug') val = entry.slug;
+          else if (key === 'status') val = entry.status;
+          else if (key === 'created_at') val = entry.created_at;
+          else val = entry.content?.[key];
+
+          if (val === null || val === undefined) return '';
+          const str = String(val).replace(/"/g, '""');
+          return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+        }).join(',');
+      }),
+    ];
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${collectionSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -952,6 +996,12 @@ export const CollectionEntries = () => {
           </TitleSection>
         </HeaderLeft>
         <div style={{ display: 'flex', gap: spacing[3], alignItems: 'center' }}>
+          {entries.length > 0 && (
+            <CodeButton onClick={handleExportCSV}>
+              <Download size={18} />
+              Export CSV
+            </CodeButton>
+          )}
           <CodeButton onClick={() => setShowCodeModal(true)}>
             <Code size={18} />
             Get Code
