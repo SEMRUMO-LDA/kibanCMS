@@ -4,9 +4,7 @@ import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { CommandPalette } from '../components/CommandPalette';
 import { useI18n } from '../lib/i18n';
-import { api } from '../lib/api';
 import {
-  Building2,
   LayoutDashboard,
   Files,
   Image as ImageIcon,
@@ -32,11 +30,6 @@ const fadeIn = keyframes`
 const slideInLeft = keyframes`
   from { transform: translateX(-100%); }
   to { transform: translateX(0); }
-`;
-
-const shimmer = keyframes`
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
 `;
 
 // ============================================
@@ -93,12 +86,7 @@ const LogoSection = styled.div`
   }
 
   h1 {
-    font-size: ${typography.fontSize.lg};
-    font-weight: ${typography.fontWeight.bold};
-    margin: 0;
-    letter-spacing: ${typography.letterSpacing.tight};
-    color: ${colors.gray[900]};
-    line-height: 1;
+    display: none;
   }
 `;
 
@@ -411,16 +399,10 @@ const SearchHint = styled.div`
 export const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [collections, setCollections] = useState<any[]>([]);
   const { user, profile, signOut } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Load collections for sidebar
-  useEffect(() => {
-    api.getCollections().then(({ data }) => setCollections(data || [])).catch(() => {});
-  }, []);
 
   // Cmd+K / Ctrl+K keyboard shortcut
   useEffect(() => {
@@ -484,24 +466,10 @@ export const DashboardLayout = () => {
               <LayoutDashboard size={20} />
               <span>{t('nav.dashboard')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/content'} onClick={() => handleNavigation('/content')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname === '/content' || location.pathname.startsWith('/content/')} onClick={() => handleNavigation('/content')} role="button" tabIndex={0}>
               <Files size={20} />
               <span>{t('nav.content')}</span>
             </NavItem>
-
-            {/* Dynamic collections */}
-            {collections.map(col => (
-              <NavItem
-                key={col.slug}
-                $active={location.pathname === `/content/${col.slug}`}
-                onClick={() => handleNavigation(`/content/${col.slug}`)}
-                role="button" tabIndex={0}
-              >
-                <span style={{ width: 8, height: 8, borderRadius: '50%', border: `2px solid ${location.pathname === `/content/${col.slug}` ? colors.accent[500] : colors.gray[300]}`, flexShrink: 0, marginLeft: spacing[2] }} />
-                <span>{col.name}</span>
-              </NavItem>
-            ))}
-
             <NavItem $active={location.pathname.startsWith('/media')} onClick={() => handleNavigation('/media')} role="button" tabIndex={0}>
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
@@ -534,7 +502,7 @@ export const DashboardLayout = () => {
         <UserSection>
           <div className="user-avatar">{getUserInitials()}</div>
           <div className="user-info">
-            <strong>{profile?.full_name || 'Admin User'}</strong>
+            <strong>{profile?.full_name || user?.email?.split('@')[0] || 'User'}</strong>
             <span>{user?.email}</span>
           </div>
           <LogoutBtn onClick={handleLogout} title={t('nav.signOut')} aria-label="Sign out">

@@ -118,12 +118,20 @@ CREATE TABLE IF NOT EXISTS entry_revisions (
 -- Auto-create profile on user signup
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    _role user_role := 'viewer';
 BEGIN
-    INSERT INTO public.profiles (id, email, full_name)
+    -- Use role from invite metadata if present (set by /users/invite endpoint)
+    IF NEW.raw_user_meta_data->>'invited_role' IS NOT NULL THEN
+        _role := (NEW.raw_user_meta_data->>'invited_role')::user_role;
+    END IF;
+
+    INSERT INTO public.profiles (id, email, full_name, role)
     VALUES (
         NEW.id,
         NEW.email,
-        NEW.raw_user_meta_data->>'full_name'
+        NEW.raw_user_meta_data->>'full_name',
+        _role
     );
     RETURN NEW;
 END;
@@ -159,7 +167,7 @@ RETURNS BOOLEAN AS $$
     SELECT EXISTS (
         SELECT 1 FROM profiles
         WHERE id = user_id
-        AND role IN ('admin', 'editor')
+        AND role IN ('super_admin', 'admin', 'editor')
     );
 $$ LANGUAGE sql SECURITY DEFINER;
 
