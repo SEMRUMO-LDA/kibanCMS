@@ -321,6 +321,32 @@ const stripePayments: AddonDefinition = {
   author: 'kibanCMS',
   collections: [
     {
+      name: 'Stripe Config',
+      slug: 'stripe-config',
+      description: 'Stripe API keys and settings (create one entry with slug "default")',
+      type: 'custom',
+      fields: [
+        { id: 'stripe_publishable_key', name: 'stripe_publishable_key', label: 'Publishable Key', type: 'text', required: true, helpText: 'Starts with pk_live_ or pk_test_. Safe for frontend.' },
+        { id: 'stripe_secret_key', name: 'stripe_secret_key', label: 'Secret Key', type: 'text', required: true, helpText: 'Starts with sk_live_ or sk_test_. NEVER expose in frontend.' },
+        { id: 'stripe_webhook_secret', name: 'stripe_webhook_secret', label: 'Webhook Secret', type: 'text', helpText: 'Starts with whsec_ — from Stripe Dashboard > Webhooks' },
+        { id: 'default_currency', name: 'default_currency', label: 'Default Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
+      ],
+    },
+    {
+      name: 'Stripe Products',
+      slug: 'stripe-products',
+      description: 'Products and services available for purchase',
+      type: 'custom',
+      fields: [
+        { id: 'product_name', name: 'product_name', label: 'Product Name', type: 'text', required: true },
+        { id: 'description', name: 'description', label: 'Description', type: 'textarea' },
+        { id: 'price', name: 'price', label: 'Price (cents)', type: 'number', required: true, helpText: 'Amount in cents (e.g. 2500 = 25.00 EUR)' },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true, placeholder: 'eur' },
+        { id: 'image_url', name: 'image_url', label: 'Product Image URL', type: 'url' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Only active products can be purchased' },
+      ],
+    },
+    {
       name: 'Stripe Transactions',
       slug: 'stripe-transactions',
       description: 'Payment transactions processed through Stripe',
@@ -338,25 +364,6 @@ const stripePayments: AddonDefinition = {
         { id: 'paid_at', name: 'paid_at', label: 'Paid At', type: 'date' },
       ],
     },
-    {
-      name: 'Stripe Products',
-      slug: 'stripe-products',
-      description: 'Products and services available for purchase',
-      type: 'custom',
-      fields: [
-        { id: 'product_name', name: 'product_name', label: 'Product Name', type: 'text', required: true },
-        { id: 'description', name: 'description', label: 'Description', type: 'textarea' },
-        { id: 'price', name: 'price', label: 'Price (cents)', type: 'number', required: true, helpText: 'Amount in cents (e.g. 2500 = 25.00 EUR)' },
-        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true, placeholder: 'eur' },
-        { id: 'image_url', name: 'image_url', label: 'Product Image URL', type: 'url' },
-        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Only active products can be purchased' },
-      ],
-    },
-  ],
-  configFields: [
-    { id: 'stripe_publishable_key', name: 'stripe_publishable_key', label: 'Publishable Key', type: 'text', required: true, helpText: 'Starts with pk_live_ or pk_test_' },
-    { id: 'stripe_webhook_secret', name: 'stripe_webhook_secret', label: 'Webhook Signing Secret', type: 'text', helpText: 'Starts with whsec_ — from Stripe Dashboard > Webhooks' },
-    { id: 'default_currency', name: 'default_currency', label: 'Default Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
   ],
 };
 

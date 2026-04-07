@@ -7,19 +7,88 @@ import type { AuthRequest } from '../middleware/auth.js';
 const router: Router = Router();
 
 // ============================================
-// STRIPE CLIENT (lazy init — only when keys exist)
+// STRIPE CONFIG — loaded from CMS (multi-client)
+//
+// Each kibanCMS instance stores its own Stripe keys
+// in the "stripe-config" collection (entry slug: "default").
+// This means each client/site has its own Stripe account.
+//
+// Fallback: environment variables for single-tenant setups.
 // ============================================
 
-let stripeClient: Stripe | null = null;
+interface StripeConfig {
+  secretKey: string;
+  webhookSecret: string;
+  defaultCurrency: string;
+  publishableKey?: string;
+}
 
-async function getStripe(): Promise<Stripe | null> {
-  if (stripeClient) return stripeClient;
+// Cache to avoid DB lookup on every request (TTL 60s)
+let configCache: { config: StripeConfig; fetchedAt: number } | null = null;
+const CONFIG_TTL = 60_000;
 
+async function getStripeConfig(): Promise<StripeConfig | null> {
+  // Return cached if fresh
+  if (configCache && Date.now() - configCache.fetchedAt < CONFIG_TTL) {
+    return configCache.config;
+  }
+
+  // Try loading from CMS (stripe-config collection, "default" entry)
+  const { data: col } = await supabase
+    .from('collections')
+    .select('id')
+    .eq('slug', 'stripe-config')
+    .single();
+
+  if (col) {
+    const { data: entry } = await supabase
+      .from('entries')
+      .select('content')
+      .eq('collection_id', col.id)
+      .eq('slug', 'default')
+      .eq('status', 'published')
+      .single();
+
+    if (entry?.content) {
+      const c = entry.content as Record<string, any>;
+      if (c.stripe_secret_key) {
+        const config: StripeConfig = {
+          secretKey: c.stripe_secret_key,
+          webhookSecret: c.stripe_webhook_secret || '',
+          defaultCurrency: (c.default_currency || 'eur').toLowerCase(),
+          publishableKey: c.stripe_publishable_key || '',
+        };
+        configCache = { config, fetchedAt: Date.now() };
+        return config;
+      }
+    }
+  }
+
+  // Fallback to environment variables (single-tenant / legacy)
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  if (!secretKey) return null;
+  if (secretKey) {
+    const config: StripeConfig = {
+      secretKey,
+      webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+      defaultCurrency: (process.env.STRIPE_DEFAULT_CURRENCY || 'eur').toLowerCase(),
+    };
+    configCache = { config, fetchedAt: Date.now() };
+    return config;
+  }
 
-  stripeClient = new Stripe(secretKey, { apiVersion: '2025-03-31.basil' });
-  return stripeClient;
+  return null;
+}
+
+// Stripe clients cached by secret key (supports config changes without restart)
+const stripeClients = new Map<string, Stripe>();
+
+function getStripeClient(secretKey: string): Stripe {
+  let client = stripeClients.get(secretKey);
+  if (!client) {
+    client = new Stripe(secretKey);
+    stripeClients.set(secretKey, client);
+  }
+  return client;
 }
 
 // ============================================
@@ -39,19 +108,19 @@ async function getCollectionId(slug: string): Promise<string | null> {
 // POST /api/v1/payments/create-session
 //
 // Creates a Stripe Checkout Session and returns the URL.
-// The frontend redirects the customer to this URL.
+// Reads Stripe keys from CMS (multi-client) or env vars (fallback).
 //
 // Body:
-//   product_slug?: string  — slug of a stripe-products entry (uses its price/name)
-//   amount?: number        — amount in cents (required if no product_slug)
-//   currency?: string      — ISO 4217 code (default: eur)
-//   name?: string          — product/service name shown in checkout
-//   description?: string   — description shown in checkout
+//   product_slug?: string  — slug of a stripe-products entry
+//   amount?: number        — amount in cents (if no product_slug)
+//   currency?: string      — ISO 4217 (default from config)
+//   name?: string          — product name shown in checkout
+//   description?: string   — description in checkout
 //   image_url?: string     — product image
-//   customer_email?: string — pre-fill customer email
-//   success_url: string    — redirect after successful payment
-//   cancel_url: string     — redirect if customer cancels
-//   metadata?: object      — custom key-value pairs stored with the payment
+//   customer_email?: string — pre-fill email
+//   success_url: string    — redirect after payment
+//   cancel_url: string     — redirect on cancel
+//   metadata?: object      — custom data stored with payment
 // ============================================
 
 router.post('/create-session', async (req: AuthRequest, res: Response) => {
@@ -62,16 +131,18 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const stripe = await getStripe();
-    if (!stripe) {
+    const config = await getStripeConfig();
+    if (!config) {
       return res.status(503).json({
         error: {
-          message: 'Stripe not configured. Set STRIPE_SECRET_KEY in environment variables.',
+          message: 'Stripe not configured. Add Stripe keys in the CMS (Stripe Config) or set STRIPE_SECRET_KEY.',
           status: 503,
           timestamp: new Date().toISOString(),
         },
       });
     }
+
+    const stripe = getStripeClient(config.secretKey);
 
     const {
       product_slug,
@@ -86,7 +157,6 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       metadata,
     } = req.body;
 
-    // Validate required URLs
     if (!success_url || !cancel_url) {
       return res.status(400).json({
         error: { message: 'Missing required fields: success_url, cancel_url', status: 400, timestamp: new Date().toISOString() },
@@ -95,16 +165,16 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
     let lineItemName = name || 'Payment';
     let lineItemAmount: number;
-    let lineItemCurrency = (currency || process.env.STRIPE_DEFAULT_CURRENCY || 'eur').toLowerCase();
+    let lineItemCurrency = (currency || config.defaultCurrency).toLowerCase();
     let lineItemDescription = description || undefined;
     let lineItemImages: string[] = [];
 
-    // If product_slug provided, load from CMS
+    // Load product from CMS if slug provided
     if (product_slug) {
       const colId = await getCollectionId('stripe-products');
       if (!colId) {
         return res.status(404).json({
-          error: { message: 'Stripe Products collection not found. Install the Stripe Payments addon first.', status: 404, timestamp: new Date().toISOString() },
+          error: { message: 'Stripe Products collection not found. Install the Stripe Payments addon.', status: 404, timestamp: new Date().toISOString() },
         });
       }
 
@@ -150,8 +220,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
     if (image_url) lineItemImages = [image_url];
 
-    // Create Stripe Checkout Session
-    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [
@@ -176,9 +245,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
         ...(product_slug && { product_slug }),
         ...(metadata && typeof metadata === 'object' ? metadata : {}),
       },
-    };
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    });
 
     logger.info('Stripe Checkout session created', {
       sessionId: session.id,
@@ -204,34 +271,31 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 // ============================================
 // POST /api/v1/payments/webhook
 //
-// Receives Stripe webhook events (checkout.session.completed, etc.)
-// Public endpoint — no API key auth, verified via Stripe signature.
+// Receives Stripe webhook events.
+// Public — no API key, verified via Stripe signature.
 // ============================================
 
 router.post('/webhook', async (req: Request, res: Response) => {
   try {
-    const stripe = await getStripe();
-    if (!stripe) {
+    const config = await getStripeConfig();
+    if (!config) {
       return res.status(503).json({ error: { message: 'Stripe not configured', status: 503 } });
     }
 
+    const stripe = getStripeClient(config.secretKey);
     const sig = req.headers['stripe-signature'] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    if (!sig || !webhookSecret) {
+    if (!sig || !config.webhookSecret) {
       return res.status(400).json({
-        error: { message: 'Missing Stripe signature or webhook secret', status: 400 },
+        error: { message: 'Missing Stripe signature or webhook secret not configured', status: 400 },
       });
     }
 
-    // Verify event signature
     let event: Stripe.Event;
     try {
-      // req.body must be raw buffer for signature verification
-      // Express raw body is handled via middleware in server.ts
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      event = stripe.webhooks.constructEvent(req.body, sig, config.webhookSecret);
     } catch (err: any) {
-      logger.warn('Stripe webhook signature verification failed', { error: err.message });
+      logger.warn('Stripe webhook signature failed', { error: err.message });
       return res.status(400).json({ error: { message: 'Invalid signature', status: 400 } });
     }
 
@@ -247,7 +311,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
         return res.json({ received: true });
       }
 
-      // Find admin profile for author_id
       const { data: adminProfile } = await supabase
         .from('profiles')
         .select('id')
@@ -298,7 +361,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
       const colId = await getCollectionId('stripe-transactions');
       if (colId) {
-        // Find and update the transaction entry
         const { data: entries } = await supabase
           .from('entries')
           .select('id, content')
@@ -317,7 +379,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
             })
             .eq('id', entry.id);
 
-          logger.info('Stripe transaction marked as refunded', { chargeId: charge.id });
+          logger.info('Transaction marked as refunded', { chargeId: charge.id });
         }
       }
     }
@@ -331,9 +393,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
 // ============================================
 // GET /api/v1/payments/transactions
-//
-// List payment transactions (admin).
-// Query: status, limit, offset
 // ============================================
 
 router.get('/transactions', async (req: AuthRequest, res: Response) => {
@@ -377,6 +436,43 @@ router.get('/transactions', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Error fetching transactions', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+// ============================================
+// GET /api/v1/payments/config (public key only)
+//
+// Returns the publishable key so frontends can show
+// Stripe-powered UI elements. Never returns secret key.
+// ============================================
+
+router.get('/config', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.profileId) {
+      return res.status(401).json({
+        error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const config = await getStripeConfig();
+    if (!config) {
+      return res.status(503).json({
+        error: { message: 'Stripe not configured', status: 503, timestamp: new Date().toISOString() },
+      });
+    }
+
+    res.json({
+      data: {
+        publishable_key: config.publishableKey || null,
+        default_currency: config.defaultCurrency,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error fetching Stripe config', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
     });

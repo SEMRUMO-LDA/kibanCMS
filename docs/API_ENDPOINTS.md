@@ -188,6 +188,7 @@
 | `/api/v1/payments/create-session` | POST | API Key | Cria Stripe Checkout Session, retorna URL de pagamento |
 | `/api/v1/payments/webhook` | POST | Public (Stripe signature) | Recebe eventos do Stripe (pagamentos, reembolsos) |
 | `/api/v1/payments/transactions` | GET | API Key | Listar transacoes. Filtros: `status`, `limit`, `offset` |
+| `/api/v1/payments/config` | GET | API Key | Retorna publishable key e moeda default (seguro, sem secret key) |
 
 **Body (POST /create-session):**
 ```json
@@ -220,10 +221,7 @@ Ou com montante manual (sem produto no CMS):
 
 **Pre-requisitos:** Addon "Stripe Payments" instalado + `STRIPE_SECRET_KEY` configurado no servidor.
 
-**Variaveis de ambiente:**
-- `STRIPE_SECRET_KEY` — chave secreta do Stripe (sk_live_ ou sk_test_)
-- `STRIPE_WEBHOOK_SECRET` — secret do webhook (whsec_)
-- `STRIPE_DEFAULT_CURRENCY` — moeda por defeito (default: eur)
+**Configuracao:** Stripe keys sao lidas da collection `stripe-config` (entry slug `default`). Fallback para variaveis de ambiente (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_DEFAULT_CURRENCY`).
 
 ---
 
@@ -277,6 +275,6 @@ Ou com montante manual (sem produto no CMS):
 | AI Features | 4 | 4 |
 | Dashboard & Analytics | 2 | 2 |
 | Forms | 2 | 2 |
-| Payments | 3 | 3 |
+| Payments | 4 | 4 |
 | Redirects | 1 | 1 |
-| **Total** | **42** | **42** |
+| **Total** | **43** | **43** |
