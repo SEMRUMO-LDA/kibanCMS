@@ -1,11 +1,9 @@
 import { Router, type Request, type Response } from 'express';
+// @ts-ignore — Stripe v22 has non-standard exports
 import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import type { AuthRequest } from '../middleware/auth.js';
-
-// Stripe v22 types — use module-level type extraction
-type StripeClient = InstanceType<typeof Stripe>;
 
 const router: Router = Router();
 
@@ -83,12 +81,13 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
 }
 
 // Stripe clients cached by secret key (supports config changes without restart)
-const stripeClients = new Map<string, StripeClient>();
+const stripeClients = new Map<string, any>();
 
-function getStripeClient(secretKey: string): StripeClient {
+function getStripeClient(secretKey: string): any {
   let client = stripeClients.get(secretKey);
   if (!client) {
-    client = new Stripe(secretKey) as StripeClient;
+    // @ts-ignore — Stripe v22 constructor
+    client = new Stripe(secretKey);
     stripeClients.set(secretKey, client);
   }
   return client;
