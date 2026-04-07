@@ -126,6 +126,13 @@ const seo: AddonDefinition = {
         { id: 'noindex_default', name: 'noindex_default', label: 'No-index by Default', type: 'boolean', helpText: 'Block search engines from indexing (useful for staging)' },
         // Structured Data
         { id: 'structured_data', name: 'structured_data', label: 'JSON-LD Schema', type: 'textarea', helpText: 'Global structured data in JSON-LD format' },
+        // Sitemap & Multilingual
+        { id: 'sitemap_url', name: 'sitemap_url', label: 'Sitemap URL', type: 'url', placeholder: 'https://example.com/sitemap.xml', helpText: 'URL of the XML sitemap for search engines' },
+        { id: 'hreflang', name: 'hreflang', label: 'Hreflang Tags', type: 'textarea', helpText: 'One per line: lang|url (e.g. pt|https://example.pt, en|https://example.com)' },
+        // Domain Verification
+        { id: 'google_site_verification', name: 'google_site_verification', label: 'Google Search Console', type: 'text', placeholder: 'google-site-verification=xxx', helpText: 'Verification meta tag content from Google Search Console' },
+        { id: 'bing_site_verification', name: 'bing_site_verification', label: 'Bing Webmaster', type: 'text', placeholder: 'msvalidate.01=xxx', helpText: 'Verification meta tag content from Bing Webmaster Tools' },
+        { id: 'pinterest_verification', name: 'pinterest_verification', label: 'Pinterest', type: 'text', helpText: 'Pinterest domain verification code' },
         // Custom Code
         { id: 'custom_head_code', name: 'custom_head_code', label: 'Custom Head Code', type: 'textarea', helpText: 'Injected before </head> — scripts, meta tags, etc.' },
         { id: 'custom_body_code', name: 'custom_body_code', label: 'Custom Body Code', type: 'textarea', helpText: 'Injected before </body> — tracking scripts, chat widgets, etc.' },

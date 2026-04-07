@@ -8,4 +8,5 @@
 | [Forms Email Setup](FORMS_EMAIL_SETUP.md) | Contact form integration + Make.com email webhook |
 | [Stripe Payments Setup](STRIPE_SETUP.md) | Accept payments via Stripe Checkout |
 | [Newsletter Addon](NEWSLETTER_SETUP.md) | Email subscriptions from any frontend |
+| [SEO & Analytics](SEO_SETUP.md) | Complete SEO, Open Graph, analytics, structured data |
 | [Redirects Manager](REDIRECTS_SETUP.md) | 301/302 redirects for SEO and migrations |
