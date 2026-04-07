@@ -17,6 +17,7 @@ import activityRouter from './routes/activity.js';
 import mediaIntelRouter from './routes/media-intelligence.js';
 import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
+import paymentsRouter from './routes/payments.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
@@ -60,6 +61,9 @@ if (NODE_ENV === 'production') {
     crossOriginResourcePolicy: false, // Disable CORP for API
   }));
 }
+
+// Stripe webhook needs raw body for signature verification (must be before json parser)
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
 
 // Body parsing (limit increased for base64 media uploads)
 app.use(express.json({ limit: '55mb' }));
@@ -122,6 +126,8 @@ app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
 app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key + stricter rate limit
+app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
+app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)

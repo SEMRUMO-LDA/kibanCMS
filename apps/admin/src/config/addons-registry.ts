@@ -306,6 +306,61 @@ const aiContent: AddonDefinition = {
 };
 
 // ============================================
+// STRIPE PAYMENTS ADD-ON
+// ============================================
+
+const stripePayments: AddonDefinition = {
+  id: 'stripe-payments',
+  name: 'Stripe Payments',
+  description: 'Accept payments via Stripe Checkout with transaction tracking',
+  longDescription: 'Accept one-time payments from any frontend using Stripe Checkout. Customers are redirected to a secure Stripe-hosted page — zero PCI complexity. All transactions are logged in the CMS. Includes Apple Pay, Google Pay, and 3D Secure out of the box.',
+  icon: 'credit-card',
+  color: '#635BFF',
+  category: 'commerce',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Stripe Transactions',
+      slug: 'stripe-transactions',
+      description: 'Payment transactions processed through Stripe',
+      type: 'custom',
+      fields: [
+        { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Session ID', type: 'text', required: true },
+        { id: 'stripe_payment_intent', name: 'stripe_payment_intent', label: 'Payment Intent', type: 'text' },
+        { id: 'amount', name: 'amount', label: 'Amount (cents)', type: 'number', required: true },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true, placeholder: 'eur' },
+        { id: 'payment_status', name: 'payment_status', label: 'Status', type: 'text', required: true, helpText: 'paid, unpaid, expired, refunded' },
+        { id: 'customer_email', name: 'customer_email', label: 'Customer Email', type: 'email' },
+        { id: 'customer_name', name: 'customer_name', label: 'Customer Name', type: 'text' },
+        { id: 'product_name', name: 'product_name', label: 'Product / Description', type: 'text' },
+        { id: 'metadata', name: 'metadata', label: 'Metadata', type: 'textarea', helpText: 'Custom data sent from the frontend (JSON)' },
+        { id: 'paid_at', name: 'paid_at', label: 'Paid At', type: 'date' },
+      ],
+    },
+    {
+      name: 'Stripe Products',
+      slug: 'stripe-products',
+      description: 'Products and services available for purchase',
+      type: 'custom',
+      fields: [
+        { id: 'product_name', name: 'product_name', label: 'Product Name', type: 'text', required: true },
+        { id: 'description', name: 'description', label: 'Description', type: 'textarea' },
+        { id: 'price', name: 'price', label: 'Price (cents)', type: 'number', required: true, helpText: 'Amount in cents (e.g. 2500 = 25.00 EUR)' },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true, placeholder: 'eur' },
+        { id: 'image_url', name: 'image_url', label: 'Product Image URL', type: 'url' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Only active products can be purchased' },
+      ],
+    },
+  ],
+  configFields: [
+    { id: 'stripe_publishable_key', name: 'stripe_publishable_key', label: 'Publishable Key', type: 'text', required: true, helpText: 'Starts with pk_live_ or pk_test_' },
+    { id: 'stripe_webhook_secret', name: 'stripe_webhook_secret', label: 'Webhook Signing Secret', type: 'text', helpText: 'Starts with whsec_ — from Stripe Dashboard > Webhooks' },
+    { id: 'default_currency', name: 'default_currency', label: 'Default Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
+  ],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -317,6 +372,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   redirects,
   webhooksVisual,
   aiContent,
+  stripePayments,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {

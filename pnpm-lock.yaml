@@ -111,6 +111,9 @@ importers:
       multer:
         specifier: ^2.1.1
         version: 2.1.1
+      stripe:
+        specifier: ^22.0.0
+        version: 22.0.0(@types/node@20.19.37)
       zod:
         specifier: ^3.22.4
         version: 3.25.76
@@ -8397,6 +8400,18 @@ packages:
     dependencies:
       js-tokens: 9.0.1
     dev: true
+
+  /stripe@22.0.0(@types/node@20.19.37):
+    resolution: {integrity: sha512-q1UgXXpSfZCmkyzZEh3vFEWT7+ajuaFGqaP9Tsi2NMtwlkigIWNr+KBIUQqtNeNEsreDKgdn+BP5HRW9JDj22Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+    dependencies:
+      '@types/node': 20.19.37
+    dev: false
 
   /strtok3@9.1.1:
     resolution: {integrity: sha512-FhwotcEqjr241ZbjFzjlIYg6c5/L/s4yBGWSMvJ9UoExiSqL+FnFA/CaeZx17WGaZMS/4SOZp8wH18jSS4R4lw==}

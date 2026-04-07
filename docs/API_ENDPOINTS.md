@@ -179,7 +179,55 @@
 
 ---
 
-## 11. Redirects
+## 11. Payments (Addon — Stripe)
+
+**Base:** `/api/v1/payments` — **Auth:** API Key (create-session, transactions) / Public (webhook)
+
+| Rota | Metodo | Auth | Descricao |
+|------|--------|------|-----------|
+| `/api/v1/payments/create-session` | POST | API Key | Cria Stripe Checkout Session, retorna URL de pagamento |
+| `/api/v1/payments/webhook` | POST | Public (Stripe signature) | Recebe eventos do Stripe (pagamentos, reembolsos) |
+| `/api/v1/payments/transactions` | GET | API Key | Listar transacoes. Filtros: `status`, `limit`, `offset` |
+
+**Body (POST /create-session):**
+```json
+{
+  "product_slug": "produto-x",
+  "success_url": "https://meusite.pt/obrigado",
+  "cancel_url": "https://meusite.pt/checkout"
+}
+```
+Ou com montante manual (sem produto no CMS):
+```json
+{
+  "amount": 2500,
+  "currency": "eur",
+  "name": "Consultoria 30min",
+  "success_url": "https://meusite.pt/obrigado",
+  "cancel_url": "https://meusite.pt/checkout"
+}
+```
+
+**Resposta (201):**
+```json
+{
+  "data": {
+    "session_id": "cs_live_xxx",
+    "checkout_url": "https://checkout.stripe.com/c/pay/cs_live_xxx"
+  }
+}
+```
+
+**Pre-requisitos:** Addon "Stripe Payments" instalado + `STRIPE_SECRET_KEY` configurado no servidor.
+
+**Variaveis de ambiente:**
+- `STRIPE_SECRET_KEY` — chave secreta do Stripe (sk_live_ ou sk_test_)
+- `STRIPE_WEBHOOK_SECRET` — secret do webhook (whsec_)
+- `STRIPE_DEFAULT_CURRENCY` — moeda por defeito (default: eur)
+
+---
+
+## 12. Redirects
 
 **Base:** `/api/v1/redirects` — **Auth:** Public
 
@@ -229,5 +277,6 @@
 | AI Features | 4 | 4 |
 | Dashboard & Analytics | 2 | 2 |
 | Forms | 2 | 2 |
+| Payments | 3 | 3 |
 | Redirects | 1 | 1 |
-| **Total** | **39** | **39** |
+| **Total** | **42** | **42** |

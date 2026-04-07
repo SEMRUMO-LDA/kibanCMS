@@ -50,6 +50,7 @@ docs/           All documentation
 | [API Endpoints](docs/API_ENDPOINTS.md) | All 39 API endpoints documented |
 | [Infrastructure Guide](docs/INFRASTRUCTURE_GUIDE.md) | Railway, Supabase, GitHub access |
 | [Forms Email Setup](docs/FORMS_EMAIL_SETUP.md) | Contact form + email notifications |
+| [Stripe Payments](docs/STRIPE_SETUP.md) | Accept payments via Stripe Checkout |
 
 ## Deploy
 
