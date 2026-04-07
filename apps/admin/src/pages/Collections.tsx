@@ -10,6 +10,22 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { useToast } from '../components/Toast';
 import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
+// Addon color mapping — collections belonging to the same addon share the same color bar
+const ADDON_COLORS: Record<string, string> = {
+  'form-submissions': '#9333ea',
+  'forms-config': '#9333ea',
+  'newsletter-subscribers': '#2563eb',
+  'newsletter-campaigns': '#2563eb',
+  'stripe-config': '#635BFF',
+  'stripe-products': '#635BFF',
+  'stripe-transactions': '#635BFF',
+  'redirects': '#059669',
+  'bookings': '#ea580c',
+  'booking-services': '#ea580c',
+  'seo-settings': '#16a34a',
+  'automations': '#8b5cf6',
+};
+
 // ============================================
 // ANIMATIONS
 // ============================================
@@ -108,7 +124,7 @@ const Grid = styled.div`
   margin-bottom: ${spacing[8]};
 `;
 
-const CollectionCard = styled.div`
+const CollectionCard = styled.div<{ $accentColor?: string }>`
   background: ${colors.white};
   border: 1px solid ${colors.gray[200]};
   border-radius: ${borders.radius.xl};
@@ -119,15 +135,22 @@ const CollectionCard = styled.div`
   display: flex;
   flex-direction: column;
   min-height: 200px;
+  position: relative;
+  overflow: hidden;
+
+  ${props => props.$accentColor ? `
+    border-top: 3px solid ${props.$accentColor};
+  ` : ''}
 
   &:hover {
     transform: translateY(-4px);
     box-shadow: ${shadows.lg};
-    border-color: ${colors.accent[300]};
+    border-color: ${props => props.$accentColor || colors.accent[300]};
+    ${props => props.$accentColor ? `border-top-color: ${props.$accentColor};` : ''}
 
     .arrow {
       transform: translateX(4px);
-      color: ${colors.accent[600]};
+      color: ${props => props.$accentColor || colors.accent[600]};
     }
 
     .icon-wrapper {
@@ -532,6 +555,7 @@ export const Collections = () => {
           {collections.map((collection) => (
             <CollectionCard
               key={collection.id}
+              $accentColor={ADDON_COLORS[collection.slug] || collection.color || undefined}
               onClick={() => navigate(`/content/${collection.slug}`)}
             >
               <CardHeader>

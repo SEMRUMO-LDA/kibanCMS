@@ -458,7 +458,7 @@ export const DashboardLayout = () => {
           <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle menu">
             <Menu size={20} />
           </button>
-          <Building2 size={24} color={colors.accent[500]} />
+          <img src="/logo.jpg" alt="kibanCMS" style={{ height: '24px', objectFit: 'contain' }} />
           <h1>kibanCMS</h1>
         </div>
       </MobileHeader>
@@ -467,7 +467,7 @@ export const DashboardLayout = () => {
 
       <Sidebar $isOpen={mobileMenuOpen}>
         <LogoSection>
-          <Building2 size={28} color={colors.accent[500]} className="logo-icon" />
+          <img src="/logo.jpg" alt="kibanCMS" style={{ height: '28px', objectFit: 'contain' }} className="logo-icon" />
           <h1>kibanCMS</h1>
         </LogoSection>
 
