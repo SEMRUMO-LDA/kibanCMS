@@ -89,28 +89,46 @@ const newsletter: AddonDefinition = {
 
 const seo: AddonDefinition = {
   id: 'seo',
-  name: 'SEO',
-  description: 'Search engine optimization tools and meta management',
-  longDescription: 'Automatically add SEO fields to all your entries — meta title, description, Open Graph tags, and canonical URLs. Includes sitemap generation hints and structured data support.',
+  name: 'SEO & Analytics',
+  description: 'Complete SEO, Open Graph, analytics, and indexing management',
+  longDescription: 'Manage all SEO settings from one place: meta tags, Open Graph for social sharing, Twitter Cards, favicon, robots.txt, sitemap, Google Analytics, Tag Manager, and structured data (JSON-LD). Everything a frontend needs to rank well and look great when shared.',
   icon: 'search',
   color: '#16a34a',
   category: 'tools',
-  version: '1.0.0',
+  version: '2.0.0',
   author: 'kibanCMS',
   collections: [
     {
       name: 'SEO Settings',
       slug: 'seo-settings',
-      description: 'Global SEO configuration and defaults',
+      description: 'Global SEO, Open Graph, analytics, and indexing configuration',
       type: 'custom',
       fields: [
-        { id: 'site_title', name: 'site_title', label: 'Site Title', type: 'text', required: true, maxLength: 60, helpText: 'Default title tag for your site' },
-        { id: 'site_description', name: 'site_description', label: 'Site Description', type: 'textarea', maxLength: 160, helpText: 'Default meta description' },
-        { id: 'og_image', name: 'og_image', label: 'Default OG Image', type: 'image', helpText: 'Default social media share image' },
+        // Meta Tags
+        { id: 'meta_title', name: 'meta_title', label: 'Meta Title', type: 'text', required: true, maxLength: 60, helpText: 'Default <title> tag (max 60 chars)' },
+        { id: 'meta_description', name: 'meta_description', label: 'Meta Description', type: 'textarea', maxLength: 160, helpText: 'Default meta description (max 160 chars)' },
         { id: 'favicon_url', name: 'favicon_url', label: 'Favicon URL', type: 'url', placeholder: 'https://example.com/favicon.ico' },
-        { id: 'robots_txt', name: 'robots_txt', label: 'robots.txt Content', type: 'textarea', placeholder: 'User-agent: *\nAllow: /' },
+        { id: 'canonical_url', name: 'canonical_url', label: 'Canonical URL', type: 'url', helpText: 'Default canonical URL (usually your domain)' },
+        // Open Graph
+        { id: 'og_title', name: 'og_title', label: 'OG Title', type: 'text', helpText: 'Title for social sharing (falls back to Meta Title)' },
+        { id: 'og_description', name: 'og_description', label: 'OG Description', type: 'textarea', helpText: 'Description for social sharing (falls back to Meta Description)' },
+        { id: 'og_image', name: 'og_image', label: 'OG Image', type: 'image', helpText: 'Social share image — 1200x630px recommended' },
+        { id: 'og_type', name: 'og_type', label: 'OG Type', type: 'text', placeholder: 'website', helpText: 'website, article, product, etc.' },
+        // Twitter Card
+        { id: 'twitter_card', name: 'twitter_card', label: 'Twitter Card Type', type: 'text', placeholder: 'summary_large_image', helpText: 'summary, summary_large_image, app, player' },
+        { id: 'twitter_handle', name: 'twitter_handle', label: 'Twitter Handle', type: 'text', placeholder: '@yoursite' },
+        // Analytics
         { id: 'google_analytics', name: 'google_analytics', label: 'Google Analytics ID', type: 'text', placeholder: 'G-XXXXXXXXXX' },
-        { id: 'structured_data', name: 'structured_data', label: 'JSON-LD Schema', type: 'textarea', helpText: 'Global structured data (JSON-LD format)' },
+        { id: 'google_tag_manager', name: 'google_tag_manager', label: 'Google Tag Manager', type: 'text', placeholder: 'GTM-XXXXXXX' },
+        { id: 'facebook_pixel', name: 'facebook_pixel', label: 'Facebook Pixel ID', type: 'text', placeholder: '1234567890' },
+        // Indexing
+        { id: 'robots_txt', name: 'robots_txt', label: 'robots.txt', type: 'textarea', placeholder: 'User-agent: *\nAllow: /', helpText: 'Controls search engine crawling' },
+        { id: 'noindex_default', name: 'noindex_default', label: 'No-index by Default', type: 'boolean', helpText: 'Block search engines from indexing (useful for staging)' },
+        // Structured Data
+        { id: 'structured_data', name: 'structured_data', label: 'JSON-LD Schema', type: 'textarea', helpText: 'Global structured data in JSON-LD format' },
+        // Custom Code
+        { id: 'custom_head_code', name: 'custom_head_code', label: 'Custom Head Code', type: 'textarea', helpText: 'Injected before </head> — scripts, meta tags, etc.' },
+        { id: 'custom_body_code', name: 'custom_body_code', label: 'Custom Body Code', type: 'textarea', helpText: 'Injected before </body> — tracking scripts, chat widgets, etc.' },
       ],
     },
   ],

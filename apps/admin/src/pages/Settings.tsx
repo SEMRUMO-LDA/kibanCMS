@@ -389,22 +389,12 @@ export const Settings = () => {
             </Grid>
           </Section>
           <Section>
-            <h2>SEO & Analytics</h2>
-            <Grid>
-              <Field $full><label>Meta Title</label><input value={settings.meta_title} onChange={e => update('meta_title', e.target.value)} placeholder="Site Title — Tagline" maxLength={60} /><p className="help">{settings.meta_title.length}/60</p></Field>
-              <Field $full><label>Meta Description</label><textarea value={settings.meta_description} onChange={e => update('meta_description', e.target.value)} placeholder="Concise description..." maxLength={160} style={{ minHeight: 60 }} /><p className="help">{settings.meta_description.length}/160</p></Field>
-              <Field><label>OG Image</label><input value={settings.og_image} onChange={e => update('og_image', e.target.value)} placeholder="https://example.com/og.jpg" /><p className="help">1200x630 recommended</p></Field>
-              <Field><label>Google Analytics</label><input value={settings.google_analytics} onChange={e => update('google_analytics', e.target.value)} placeholder="G-XXXXXXXXXX" /></Field>
-              <Field><label>Google Tag Manager</label><input value={settings.google_tag_manager} onChange={e => update('google_tag_manager', e.target.value)} placeholder="GTM-XXXXXXX" /></Field>
-            </Grid>
-          </Section>
-          <Section>
             <h2>Advanced</h2>
+            <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#1e40af' }}>
+              <strong>SEO, Analytics & Custom Code</strong> moved to the <strong>SEO & Analytics</strong> add-on. Install it from Add-ons to manage meta tags, Open Graph, Google Analytics, robots.txt and custom scripts.
+            </div>
             <Grid>
-              <Field $full><label>Custom Head Code</label><textarea value={settings.custom_head_code} onChange={e => update('custom_head_code', e.target.value)} placeholder="<script>...</script>" style={{ fontFamily: typography.fontFamily.mono, fontSize: 13 }} /></Field>
-              <Field $full><label>Custom Footer Code</label><textarea value={settings.custom_footer_code} onChange={e => update('custom_footer_code', e.target.value)} placeholder="<script>...</script>" style={{ fontFamily: typography.fontFamily.mono, fontSize: 13 }} /></Field>
               <Field><label>Maintenance Mode</label><select value={settings.maintenance_mode} onChange={e => update('maintenance_mode', e.target.value)}><option value="false">Off</option><option value="true">On</option></select></Field>
-              <Field $full><label>robots.txt</label><textarea value={settings.robots_txt} onChange={e => update('robots_txt', e.target.value)} style={{ fontFamily: typography.fontFamily.mono, fontSize: 13, minHeight: 60 }} /></Field>
             </Grid>
           </Section>
         </>
