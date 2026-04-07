@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
+// Stripe v22 types — use module-level type extraction
+type StripeClient = InstanceType<typeof Stripe>;
+
 const router: Router = Router();
 
 // ============================================
@@ -80,12 +83,12 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
 }
 
 // Stripe clients cached by secret key (supports config changes without restart)
-const stripeClients = new Map<string, Stripe>();
+const stripeClients = new Map<string, StripeClient>();
 
-function getStripeClient(secretKey: string): Stripe {
+function getStripeClient(secretKey: string): StripeClient {
   let client = stripeClients.get(secretKey);
   if (!client) {
-    client = new Stripe(secretKey);
+    client = new Stripe(secretKey) as StripeClient;
     stripeClients.set(secretKey, client);
   }
   return client;
@@ -291,7 +294,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
       });
     }
 
-    let event: Stripe.Event;
+    let event: any;
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, config.webhookSecret);
     } catch (err: any) {
@@ -303,7 +306,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
     // Handle checkout.session.completed
     if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const session = event.data.object as any;
 
       const colId = await getCollectionId('stripe-transactions');
       if (!colId) {
@@ -357,7 +360,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
     // Handle refunds
     if (event.type === 'charge.refunded') {
-      const charge = event.data.object as Stripe.Charge;
+      const charge = event.data.object as any;
 
       const colId = await getCollectionId('stripe-transactions');
       if (colId) {
