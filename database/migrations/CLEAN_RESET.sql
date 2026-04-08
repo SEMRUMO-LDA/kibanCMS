@@ -17,6 +17,13 @@
 -- ============================================================
 
 -- ============================
+-- STEP 0: EXTENSIONS
+-- ============================
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ============================
 -- STEP 1: APAGAR TABELAS v2 (nao usadas)
 -- ============================
 
@@ -410,7 +417,7 @@ BEGIN
     ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions;
 
 -- API key generation
 CREATE OR REPLACE FUNCTION generate_api_key()
@@ -424,21 +431,21 @@ BEGIN
     key_value := replace(key_value, '=', '');
     RETURN key_value;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions;
 
 CREATE OR REPLACE FUNCTION hash_api_key(key_value TEXT)
 RETURNS TEXT AS $$
 BEGIN
     RETURN encode(digest(key_value, 'sha256'), 'hex');
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions;
 
 CREATE OR REPLACE FUNCTION get_key_prefix(key_value TEXT)
 RETURNS TEXT AS $$
 BEGIN
     RETURN substring(key_value from 1 for 17) || '...';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions;
 
 -- Auto-create API key on profile creation
 CREATE OR REPLACE FUNCTION auto_create_api_key()
@@ -451,7 +458,7 @@ BEGIN
     VALUES (NEW.id, 'Default API Key', hash_api_key(new_key), get_key_prefix(new_key));
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions;
 
 -- Entry revision on update
 CREATE OR REPLACE FUNCTION create_entry_revision()
@@ -521,7 +528,7 @@ RETURNS VARCHAR(255) AS $$
 BEGIN
     RETURN 'whsec_' || encode(gen_random_bytes(32), 'hex');
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public, extensions;
 
 -- ============================
 -- STEP 11: TRIGGERS
