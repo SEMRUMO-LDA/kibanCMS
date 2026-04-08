@@ -77,9 +77,9 @@ async function fireFormWebhook(
   // 3. Build subject from template
   const subject = (emailSubjectTemplate || 'New {form_name} from {name}')
     .replace('{form_name}', formName)
-    .replace('{name}', content.name || 'Anonymous')
-    .replace('{email}', content.email || '')
-    .replace('{subject}', content.subject || '');
+    .replace('{name}', (content.name || 'Anonymous').replace(/[\r\n]/g, ''))
+    .replace('{email}', (content.email || '').replace(/[\r\n]/g, ''))
+    .replace('{subject}', (content.subject || '').replace(/[\r\n]/g, ''));
 
   // 4. POST to webhook
   const payload = {

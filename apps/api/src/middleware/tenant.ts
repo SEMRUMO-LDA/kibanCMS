@@ -88,5 +88,5 @@ export function tenantMiddleware(req: Request, res: Response, next: NextFunction
   }
 
   const clients = getOrCreateClients(tenant);
-  tenantStore.run({ tenant, ...clients }, () => next());
+  return tenantStore.run({ tenant, ...clients }, () => next());
 }

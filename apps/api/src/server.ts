@@ -39,7 +39,7 @@ loadTenants();
 const app: express.Express = express();
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['*'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
 
 // CORS configuration - MUST BE FIRST, before helmet
 app.use(cors({
@@ -120,7 +120,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
-    version: '1.3.0',
+    version: '1.4.0',
     mode: NODE_ENV,
     tenant: ctx?.tenant?.id || 'default',
   });

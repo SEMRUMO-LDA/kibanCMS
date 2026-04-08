@@ -266,14 +266,22 @@ export const Login = () => {
       const { tenantId, supabaseUrl, supabaseAnonKey, session } = json.data;
       const client = initSupabaseWithConfig({ tenantId, supabaseUrl, supabaseAnonKey });
 
-      // Set the session on the new Supabase client
+      // Set the session and wait for auth state to propagate
       await client.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
 
-      // Small delay to let AuthProvider pick up the session
-      await new Promise(r => setTimeout(r, 100));
+      // Wait for AuthProvider to pick up the session
+      await new Promise<void>((resolve) => {
+        const { data: { subscription } } = client.auth.onAuthStateChange((event) => {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            subscription.unsubscribe();
+            resolve();
+          }
+        });
+        setTimeout(() => { subscription.unsubscribe(); resolve(); }, 3000);
+      });
 
       navigate('/', { replace: true });
     } catch (err: any) {
@@ -313,7 +321,7 @@ export const Login = () => {
         </Form>
 
         <Footer>
-          <p>Powered by <strong>kibanCMS</strong> v1.3</p>
+          <p>Powered by <strong>kibanCMS</strong> v1.4</p>
         </Footer>
       </FormBox>
     </Container>

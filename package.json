@@ -1,6 +1,6 @@
 {
   "name": "@kiban/workspace",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "kibanCMS - Next-generation headless CMS",
   "author": "Kiban Agency <dev@kiban.pt>",
