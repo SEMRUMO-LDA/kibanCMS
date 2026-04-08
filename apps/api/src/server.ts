@@ -20,6 +20,7 @@ import formsRouter from './routes/forms.js';
 import paymentsRouter from './routes/payments.js';
 import bookingsRouter from './routes/bookings.js';
 import newsletterRouter from './routes/newsletter.js';
+import authRouter from './routes/auth.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { loadTenants, resolveTenant } from './config/tenants.js';
@@ -142,6 +143,9 @@ app.get('/api/v1/config', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Auth route — no auth middleware (this IS the auth)
+app.use('/api/v1/auth', authRouter);
 
 // API routes
 // Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)

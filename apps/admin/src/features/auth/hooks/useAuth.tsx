@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../../../lib/supabase';
+import { supabase, clearTenant } from '../../../lib/supabase';
 
 interface AuthContextType {
   session: Session | null;
@@ -152,7 +152,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profileFetchedForId.current = null;
     setLoading(false);
 
-    // Clear localStorage manually as backup
+    // Clear tenant config and Supabase localStorage
+    clearTenant();
     try { localStorage.removeItem('sb-' + new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0] + '-auth-token'); } catch {}
 
     // Tell Supabase (with timeout — don't hang if server is dead)

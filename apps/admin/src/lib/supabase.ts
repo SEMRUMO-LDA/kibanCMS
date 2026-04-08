@@ -1,20 +1,24 @@
 /**
  * Supabase Client Configuration — Multi-tenant aware
  *
- * In production: fetches Supabase credentials from /api/v1/config
- * (the API resolves the correct tenant based on hostname).
+ * Flow:
+ * 1. Check localStorage for saved tenant config (returning user)
+ * 2. If found → init Supabase with saved config
+ * 3. If not → no Supabase init (login page will handle it)
+ * 4. After login → initSupabaseWithConfig() saves config and inits client
  *
- * In development: uses VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
- * from .env as fallback.
+ * In development: uses VITE_ env vars as fallback.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../shared/types/supabase.types';
 
-// ── Singleton client (initialized by initSupabase) ──
+const TENANT_STORAGE_KEY = 'kiban_tenant';
+
+// ── Singleton client ──
 
 let _supabase: SupabaseClient<Database> | null = null;
-let _initPromise: Promise<SupabaseClient<Database>> | null = null;
+let _tenantId: string | null = null;
 
 function buildClient(url: string, anonKey: string): SupabaseClient<Database> {
   return createClient<Database>(url, anonKey, {
@@ -31,64 +35,101 @@ function buildClient(url: string, anonKey: string): SupabaseClient<Database> {
   });
 }
 
-/**
- * Initialize the Supabase client.
- * Tries /api/v1/config first (multi-tenant), falls back to env vars (dev).
- */
-export async function initSupabase(): Promise<SupabaseClient<Database>> {
-  if (_supabase) return _supabase;
-  if (_initPromise) return _initPromise;
-
-  _initPromise = (async () => {
-    // Try fetching config from the API (same origin in production)
-    try {
-      const res = await fetch('/api/v1/config');
-      if (res.ok) {
-        const { data } = await res.json();
-        if (data?.supabaseUrl && data?.supabaseAnonKey) {
-          _supabase = buildClient(data.supabaseUrl, data.supabaseAnonKey);
-          return _supabase;
-        }
-      }
-    } catch {
-      // API not available (dev mode with separate servers) — fall through
-    }
-
-    // Fallback to env vars (development)
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!url || !key) {
-      throw new Error('Missing Supabase config. Check .env or /api/v1/config.');
-    }
-
-    _supabase = buildClient(url, key);
-    return _supabase;
-  })();
-
-  return _initPromise;
+interface TenantConfig {
+  tenantId: string;
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 /**
- * Get the Supabase client (must call initSupabase first).
- * Throws if not initialized — use in code that runs after app init.
+ * Get saved tenant config from localStorage.
  */
-export function getSupabase(): SupabaseClient<Database> {
-  if (!_supabase) {
-    throw new Error('Supabase not initialized. Call initSupabase() first.');
+function getSavedTenant(): TenantConfig | null {
+  try {
+    const raw = localStorage.getItem(TENANT_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
+}
+
+/**
+ * Save tenant config to localStorage.
+ */
+function saveTenant(config: TenantConfig): void {
+  localStorage.setItem(TENANT_STORAGE_KEY, JSON.stringify(config));
+}
+
+/**
+ * Clear tenant config (on logout).
+ */
+export function clearTenant(): void {
+  localStorage.removeItem(TENANT_STORAGE_KEY);
+  _supabase = null;
+  _tenantId = null;
+}
+
+/**
+ * Initialize Supabase from saved config or env vars.
+ * Returns true if client is ready, false if login is needed.
+ */
+export async function initSupabase(): Promise<boolean> {
+  if (_supabase) return true;
+
+  // 1. Check localStorage for saved tenant
+  const saved = getSavedTenant();
+  if (saved) {
+    _supabase = buildClient(saved.supabaseUrl, saved.supabaseAnonKey);
+    _tenantId = saved.tenantId;
+    return true;
+  }
+
+  // 2. Fallback to env vars (development)
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (url && key) {
+    _supabase = buildClient(url, key);
+    _tenantId = 'default';
+    return true;
+  }
+
+  // 3. No config available — login will provide it
+  return false;
+}
+
+/**
+ * Initialize Supabase with config from login response.
+ * Called after successful POST /api/v1/auth/login.
+ */
+export function initSupabaseWithConfig(config: TenantConfig): SupabaseClient<Database> {
+  saveTenant(config);
+  _supabase = buildClient(config.supabaseUrl, config.supabaseAnonKey);
+  _tenantId = config.tenantId;
+  return _supabase;
+}
+
+/**
+ * Get the current tenant ID (for X-Tenant header).
+ */
+export function getTenantId(): string | null {
+  return _tenantId;
+}
+
+/**
+ * Get the Supabase client. Returns null if not initialized.
+ */
+export function getSupabase(): SupabaseClient<Database> | null {
   return _supabase;
 }
 
 // ── Backward-compatible export ──
-// Uses a proxy so existing `import { supabase }` still works.
-// The proxy delegates to the initialized client.
+// Proxy delegates to the initialized client.
 
 export const supabase: SupabaseClient<Database> = new Proxy({} as SupabaseClient<Database>, {
   get(_, prop: string | symbol) {
     if (!_supabase) {
-      // During init, auth listeners may fire before client is ready
-      // Return a no-op for auth-related calls
       if (prop === 'auth') {
         return new Proxy({}, {
           get() {
@@ -96,7 +137,7 @@ export const supabase: SupabaseClient<Database> = new Proxy({} as SupabaseClient
           },
         });
       }
-      throw new Error('Supabase not initialized yet. Ensure initSupabase() completed.');
+      return undefined;
     }
     const value = (_supabase as any)[prop];
     if (typeof value === 'function') {
@@ -112,51 +153,53 @@ export const supabase: SupabaseClient<Database> = new Proxy({} as SupabaseClient
 
 export const auth = {
   signIn: async (email: string, password: string) => {
-    const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
-    return { data, error };
-  },
-
-  signUp: async (email: string, password: string, metadata?: Record<string, any>) => {
-    const { data, error } = await getSupabase().auth.signUp({
-      email,
-      password,
-      options: {
-        data: metadata,
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
     return { data, error };
   },
 
   signOut: async () => {
-    const { error } = await getSupabase().auth.signOut();
+    const client = getSupabase();
+    if (!client) return { error: null };
+    const { error } = await client.auth.signOut();
     return { error };
   },
 
   getSession: async () => {
-    const { data, error } = await getSupabase().auth.getSession();
+    const client = getSupabase();
+    if (!client) return { data: null, error: null };
+    const { data, error } = await client.auth.getSession();
     return { data: data?.session, error };
   },
 
   getUser: async () => {
-    const { data: { user }, error } = await getSupabase().auth.getUser();
+    const client = getSupabase();
+    if (!client) return { user: null, error: null };
+    const { data: { user }, error } = await client.auth.getUser();
     return { user, error };
   },
 
   resetPassword: async (email: string) => {
-    const { data, error } = await getSupabase().auth.resetPasswordForEmail(email, {
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,
     });
     return { data, error };
   },
 
   updatePassword: async (newPassword: string) => {
-    const { data, error } = await getSupabase().auth.updateUser({ password: newPassword });
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.auth.updateUser({ password: newPassword });
     return { data, error };
   },
 
   onAuthStateChange: (callback: (event: string, session: any) => void) => {
-    return getSupabase().auth.onAuthStateChange(callback);
+    const client = getSupabase();
+    if (!client) return { data: { subscription: { unsubscribe: () => {} } } };
+    return client.auth.onAuthStateChange(callback);
   },
 };
 
@@ -166,32 +209,44 @@ export const auth = {
 
 export const storage = {
   upload: async (bucket: string, path: string, file: File, options?: { upsert?: boolean; contentType?: string }) => {
-    const { data, error } = await getSupabase().storage.from(bucket).upload(path, file, options);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.storage.from(bucket).upload(path, file, options);
     return { data, error };
   },
 
   download: async (bucket: string, path: string) => {
-    const { data, error } = await getSupabase().storage.from(bucket).download(path);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.storage.from(bucket).download(path);
     return { data, error };
   },
 
   getPublicUrl: (bucket: string, path: string) => {
-    const { data } = getSupabase().storage.from(bucket).getPublicUrl(path);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data } = client.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   },
 
   createSignedUrl: async (bucket: string, path: string, expiresIn: number) => {
-    const { data, error } = await getSupabase().storage.from(bucket).createSignedUrl(path, expiresIn);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.storage.from(bucket).createSignedUrl(path, expiresIn);
     return { data: data?.signedUrl, error };
   },
 
   delete: async (bucket: string, paths: string[]) => {
-    const { data, error } = await getSupabase().storage.from(bucket).remove(paths);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.storage.from(bucket).remove(paths);
     return { data, error };
   },
 
   list: async (bucket: string, path?: string, options?: { limit?: number; offset?: number }) => {
-    const { data, error } = await getSupabase().storage.from(bucket).list(path, options);
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const { data, error } = await client.storage.from(bucket).list(path, options);
     return { data, error };
   },
 };
@@ -202,7 +257,9 @@ export const storage = {
 
 export const realtime = {
   subscribe: (table: string, callback: (payload: any) => void, filter?: string) => {
-    const channel = getSupabase()
+    const client = getSupabase();
+    if (!client) throw new Error('Supabase not initialized');
+    const channel = client
       .channel(`public:${table}`)
       .on('postgres_changes', { event: '*', schema: 'public', table, filter }, callback)
       .subscribe();
@@ -210,7 +267,9 @@ export const realtime = {
   },
 
   unsubscribe: async (channel: any) => {
-    await getSupabase().removeChannel(channel);
+    const client = getSupabase();
+    if (!client) return;
+    await client.removeChannel(channel);
   },
 };
 

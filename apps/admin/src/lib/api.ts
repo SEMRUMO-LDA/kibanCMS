@@ -8,7 +8,7 @@
  * Auth: JWT token from Supabase auth (passed in Authorization header).
  */
 
-import { supabase } from './supabase';
+import { supabase, getTenantId } from './supabase';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1';
 
@@ -51,12 +51,18 @@ class ApiClient {
     const timer = setTimeout(() => controller.abort(), timeout);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+      const tenantId = getTenantId();
+      if (tenantId) {
+        headers['X-Tenant'] = tenantId;
+      }
+
       const res = await fetch(`${API_BASE}${path}`, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });

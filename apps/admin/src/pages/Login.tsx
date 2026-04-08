@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { supabase } from '../lib/supabase';
+import { initSupabaseWithConfig, getSupabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
-import { FileText, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 
 // ============================================
@@ -248,12 +248,32 @@ export const Login = () => {
     setLoading(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Try multi-tenant login (API tries all tenants)
+      const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1';
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (signInError) throw signInError;
+      const json = await res.json();
+
+      if (!res.ok || json.error) {
+        throw new Error(json.error?.message || 'Invalid email or password');
+      }
+
+      // Init Supabase with tenant config from login response
+      const { tenantId, supabaseUrl, supabaseAnonKey, session } = json.data;
+      const client = initSupabaseWithConfig({ tenantId, supabaseUrl, supabaseAnonKey });
+
+      // Set the session on the new Supabase client
+      await client.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+
+      // Small delay to let AuthProvider pick up the session
+      await new Promise(r => setTimeout(r, 100));
 
       navigate('/', { replace: true });
     } catch (err: any) {
