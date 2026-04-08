@@ -355,6 +355,34 @@ router.post('/webhook', async (req: Request, res: Response) => {
         amount: session.amount_total,
         status: session.payment_status,
       });
+
+      // If this payment is for a booking, update its status to confirmed
+      const bookingId = session.metadata?.booking_id;
+      if (bookingId) {
+        const { data: bookingEntry } = await supabase
+          .from('entries')
+          .select('id, content')
+          .eq('id', bookingId)
+          .single();
+
+        if (bookingEntry) {
+          const content = bookingEntry.content as Record<string, any>;
+          await supabase
+            .from('entries')
+            .update({
+              content: {
+                ...content,
+                booking_status: 'confirmed',
+                confirmed_at: new Date().toISOString(),
+                stripe_session_id: session.id,
+              },
+              tags: ['booking', 'confirmed'],
+            })
+            .eq('id', bookingId);
+
+          logger.info('Booking confirmed via payment', { bookingId, sessionId: session.id });
+        }
+      }
     }
 
     // Handle refunds
