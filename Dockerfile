@@ -27,6 +27,7 @@ COPY packages/types/ ./packages/types/
 WORKDIR /app/apps/admin
 
 # No VITE_ env vars needed — frontend fetches config from /api/v1/config at runtime
+ENV NODE_OPTIONS="--max-old-space-size=512"
 RUN pnpm build
 
 # Stage 3: Build API
