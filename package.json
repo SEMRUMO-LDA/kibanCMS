@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "setup": "bash setup.sh",
+    "new-client": "bash scripts/new-client.sh",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File setup.ps1",
     "dev": "turbo dev",
     "dev:admin": "cd apps/admin && pnpm dev",
