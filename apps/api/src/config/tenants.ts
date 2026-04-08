@@ -104,10 +104,12 @@ export function resolveTenant(hostname: string): TenantConfig | null {
 }
 
 export function getAllTenants(): TenantConfig[] {
-  // Return all tenants including default
-  if (tenants.length > 0) return tenants;
-  if (defaultTenant) return [defaultTenant];
-  return [];
+  const all = [...tenants];
+  // Include default tenant if it's not already in the list
+  if (defaultTenant && !tenants.some(t => t.id === defaultTenant!.id)) {
+    all.push(defaultTenant);
+  }
+  return all;
 }
 
 export function getDefaultTenant(): TenantConfig | null {

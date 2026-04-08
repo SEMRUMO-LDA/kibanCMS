@@ -57,6 +57,8 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
+    console.log(`[Auth] Login attempt for ${email} across ${tenants.length} tenant(s): ${tenants.map(t => t.id).join(', ')}`);
+
     // Try all tenants in parallel
     const results = await Promise.allSettled(
       tenants.map(async (tenant) => {
@@ -64,9 +66,11 @@ router.post('/login', async (req: Request, res: Response) => {
         const { data, error } = await client.auth.signInWithPassword({ email, password });
 
         if (error || !data.session) {
+          console.log(`[Auth] ${tenant.id}: failed — ${error?.message || 'no session'}`);
           throw new Error(error?.message || 'Auth failed');
         }
 
+        console.log(`[Auth] ${tenant.id}: success — user ${data.session.user.email}`);
         return { tenant, session: data.session };
       })
     );
@@ -78,6 +82,7 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     if (!success) {
+      console.log(`[Auth] All tenants rejected login for ${email}`);
       res.status(401).json({
         error: {
           message: 'Invalid email or password',
