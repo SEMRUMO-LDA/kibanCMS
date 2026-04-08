@@ -18,8 +18,11 @@ import mediaIntelRouter from './routes/media-intelligence.js';
 import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
 import paymentsRouter from './routes/payments.js';
+import bookingsRouter from './routes/bookings.js';
 import newsletterRouter from './routes/newsletter.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
+import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
+import { loadTenants, resolveTenant } from './config/tenants.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
 // ES Module __dirname equivalent
@@ -28,6 +31,9 @@ const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
+
+// Load tenant configuration (must be before app starts)
+loadTenants();
 
 const app: express.Express = express();
 const PORT = process.env.PORT || 5001;
@@ -88,6 +94,9 @@ const limiter = rateLimit({
 // Apply rate limiting to API routes only
 app.use('/api/v1', limiter);
 
+// Tenant resolution — sets up per-request Supabase clients
+app.use(tenantMiddleware);
+
 // Stricter rate limit for form submissions (anti-spam)
 const formsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -105,12 +114,32 @@ const formsLimiter = rateLimit({
 
 // Health check endpoint (no auth required)
 app.get('/health', (req, res) => {
+  const ctx = tenantStore.getStore();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
     version: '1.3.0',
     mode: NODE_ENV,
+    tenant: ctx?.tenant?.id || 'default',
+  });
+});
+
+// Tenant config endpoint — frontend fetches Supabase credentials from here
+app.get('/api/v1/config', (req, res) => {
+  const ctx = tenantStore.getStore();
+  if (!ctx) {
+    res.status(500).json({ error: { message: 'No tenant context', status: 500 } });
+    return;
+  }
+
+  res.json({
+    data: {
+      supabaseUrl: ctx.tenant.supabaseUrl,
+      supabaseAnonKey: ctx.tenant.supabaseAnonKey,
+      tenantId: ctx.tenant.id,
+    },
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -130,6 +159,7 @@ app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key 
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
+app.use('/api/v1/bookings', validateApiKey, bookingsRouter); // Bookings — API Key auth
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)

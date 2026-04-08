@@ -26,10 +26,7 @@ COPY packages/types/ ./packages/types/
 
 WORKDIR /app/apps/admin
 
-# Write .env for Vite build (anon key is public by design)
-RUN echo "VITE_SUPABASE_URL=https://tzlpqzrhnifsclxegnfa.supabase.co" > .env && \
-    echo "VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR6bHBxenJobmlmc2NseGVnbmZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwNDIwNjUsImV4cCI6MjA5MDYxODA2NX0.WOGBtHE7b4VYULo0I5SpueiJ48NKwdDIzFUvs26C-cs" >> .env
-
+# No VITE_ env vars needed — frontend fetches config from /api/v1/config at runtime
 RUN pnpm build
 
 # Stage 3: Build API

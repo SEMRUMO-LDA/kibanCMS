@@ -391,13 +391,21 @@ $$ LANGUAGE plpgsql;
 -- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    _role user_role := 'viewer';
 BEGIN
-    INSERT INTO public.profiles (id, email, full_name, avatar_url)
+    -- Use role from invite metadata if present (set by /users/invite endpoint)
+    IF NEW.raw_user_meta_data->>'invited_role' IS NOT NULL THEN
+        _role := (NEW.raw_user_meta_data->>'invited_role')::user_role;
+    END IF;
+
+    INSERT INTO public.profiles (id, email, full_name, avatar_url, role)
     VALUES (
         NEW.id,
         NEW.email,
         COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
-        COALESCE(NEW.raw_user_meta_data->>'avatar_url', '')
+        COALESCE(NEW.raw_user_meta_data->>'avatar_url', ''),
+        _role
     )
     ON CONFLICT (id) DO NOTHING;
     RETURN NEW;

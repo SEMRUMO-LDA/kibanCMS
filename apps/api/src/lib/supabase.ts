@@ -1,27 +1,62 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * Supabase Client — Multi-tenant aware
+ *
+ * Uses AsyncLocalStorage to resolve the correct Supabase client
+ * per request. Routes import { supabase, supabaseAdmin } as before —
+ * no code changes needed in route handlers.
+ *
+ * In single-tenant mode (no TENANTS env var), falls back to
+ * SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY env vars.
+ */
+
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { tenantStore } from '../middleware/tenant.js';
 
 dotenv.config();
+
+// ── Default clients (backward compat / fallback) ──
+
+let defaultSupabase: SupabaseClient | null = null;
+let defaultSupabaseAdmin: SupabaseClient | null = null;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl) {
-  throw new Error('Missing SUPABASE_URL in .env');
+if (supabaseUrl && (supabaseServiceKey || supabaseAnonKey)) {
+  defaultSupabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey!);
+  defaultSupabaseAdmin = supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey)
+    : defaultSupabase;
 }
 
-if (!supabaseServiceKey && !supabaseAnonKey) {
-  throw new Error('Missing Supabase credentials. Configure SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY in .env');
+// ── Tenant-aware proxy ──
+// When code does `supabase.from('table')`, the proxy intercepts
+// and delegates to the current tenant's client automatically.
+
+function createTenantProxy(key: 'supabase' | 'supabaseAdmin'): SupabaseClient {
+  const fallback = key === 'supabase' ? defaultSupabase : defaultSupabaseAdmin;
+
+  return new Proxy({} as SupabaseClient, {
+    get(_, prop: string | symbol) {
+      const store = tenantStore.getStore();
+      const client = store ? store[key] : fallback;
+
+      if (!client) {
+        throw new Error(
+          `No Supabase client available. Set SUPABASE_URL env var or configure TENANTS.`
+        );
+      }
+
+      const value = (client as any)[prop];
+      if (typeof value === 'function') {
+        return value.bind(client);
+      }
+      return value;
+    },
+  });
 }
 
-// Server-side client uses service role key to bypass RLS.
-// Authorization is enforced at the application layer (middleware + ownership checks).
-// This is the standard Supabase pattern for server-side APIs.
-export const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey!);
-
-// Admin client for Supabase Auth admin operations (invite, delete user).
-// Falls back to the same client if service key is available.
-export const supabaseAdmin = supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : supabase;
+export const supabase: SupabaseClient = createTenantProxy('supabase');
+export const supabaseAdmin: SupabaseClient = createTenantProxy('supabaseAdmin');
