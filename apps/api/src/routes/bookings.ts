@@ -108,7 +108,7 @@ async function getAdminProfileId(): Promise<string | null> {
 
 router.get('/tours', async (req: AuthRequest, res: Response) => {
   try {
-    const colId = await getCollectionId('lunes-tours');
+    const colId = await getCollectionId('tours');
     if (!colId) {
       return res.status(404).json({
         error: { message: 'Tours collection not found', status: 404, timestamp: new Date().toISOString() }
@@ -169,7 +169,7 @@ router.get('/availability', async (req: AuthRequest, res: Response) => {
     }
 
     // Get tour to read time_slots and max_capacity
-    const toursColId = await getCollectionId('lunes-tours');
+    const toursColId = await getCollectionId('tours');
     let timeSlots = ['10:00', '14:00', '17:00'];
     let maxCapacity = MAX_CAPACITY;
 
@@ -253,7 +253,7 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
     const totalGuests = Number(adults) + Number(children || 0);
 
     // Check availability
-    const toursColId = await getCollectionId('lunes-tours');
+    const toursColId = await getCollectionId('tours');
     let maxCapacity = MAX_CAPACITY;
     let priceAdult = 0;
     let priceChild = 0;
