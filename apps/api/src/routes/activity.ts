@@ -12,7 +12,7 @@ const router: Router = Router();
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-    const offset = parseInt(req.query.offset as string) || 0;
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
 
     // Get recent entries with author info
     const { data: entries, error, count } = await supabase
@@ -62,6 +62,46 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     res.status(500).json({
       error: { message: error.message || 'Failed to load activity', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+/**
+ * GET /api/v1/activity/audit
+ * Returns the full audit log (admin only).
+ * Query params: limit, offset, resource, action
+ */
+router.get('/audit', async (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const { resource, action } = req.query;
+
+    let query = supabase
+      .from('audit_log')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (resource && typeof resource === 'string') {
+      query = query.eq('resource', resource);
+    }
+    if (action && typeof action === 'string') {
+      query = query.eq('action', action);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      data: data || [],
+      meta: { pagination: { limit, offset, total: count || 0 } },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: { message: error.message || 'Failed to load audit log', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });

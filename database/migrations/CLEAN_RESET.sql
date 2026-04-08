@@ -232,6 +232,20 @@ CREATE TABLE webhook_deliveries (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Audit Log
+CREATE TABLE audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    user_email TEXT,
+    action TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    resource_id TEXT,
+    details JSONB DEFAULT '{}',
+    ip_address TEXT,
+    request_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ============================
 -- STEP 7: INDEXES
 -- ============================
@@ -264,6 +278,12 @@ CREATE INDEX idx_webhooks_profile ON webhooks(profile_id);
 CREATE INDEX idx_webhooks_enabled ON webhooks(enabled) WHERE enabled = true;
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhook_deliveries_created ON webhook_deliveries(created_at DESC);
+
+-- Audit Log
+CREATE INDEX idx_audit_log_user ON audit_log(user_id);
+CREATE INDEX idx_audit_log_resource ON audit_log(resource, action);
+CREATE INDEX idx_audit_log_created ON audit_log(created_at DESC);
+CREATE INDEX idx_audit_log_request ON audit_log(request_id);
 
 -- Full-text search (se pg_trgm estiver disponivel)
 DO $$ BEGIN
@@ -311,6 +331,7 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE media ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entry_revisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
@@ -381,6 +402,10 @@ CREATE POLICY "webhooks_delete" ON webhooks
 CREATE POLICY "deliveries_select" ON webhook_deliveries
     FOR SELECT TO authenticated
     USING (webhook_id IN (SELECT id FROM webhooks WHERE profile_id = auth.uid()));
+
+-- AUDIT LOG (admins can read, inserts via service role)
+CREATE POLICY "audit_log_select" ON audit_log
+    FOR SELECT TO authenticated USING (is_admin_or_super());
 
 -- ============================
 -- STEP 10: UTILITY FUNCTIONS

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../lib/logger.js';
+import { audit } from '../lib/audit.js';
 
 const router: Router = Router();
 
@@ -190,6 +191,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     if (error) throw error;
 
+    audit(req, 'create', 'collection', collection.id, { name, slug });
+
     res.status(201).json({
       data: collection,
       timestamp: new Date().toISOString(),
@@ -330,6 +333,8 @@ router.put('/:slug', async (req: AuthRequest, res: Response) => {
 
     if (error) throw error;
 
+    audit(req, 'update', 'collection', collection.id, { slug, fields: Object.keys(updateData) });
+
     res.json({
       data: collection,
       timestamp: new Date().toISOString(),
@@ -412,6 +417,8 @@ router.delete('/:slug', async (req: AuthRequest, res: Response) => {
       .eq('slug', slug);
 
     if (error) throw error;
+
+    audit(req, 'delete', 'collection', existing.id, { slug });
 
     res.json({
       data: { id: existing.id, slug },

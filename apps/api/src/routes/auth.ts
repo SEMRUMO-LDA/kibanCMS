@@ -9,6 +9,7 @@
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { getAllTenants, type TenantConfig } from '../config/tenants.js';
+import { audit } from '../lib/audit.js';
 
 const router: Router = Router();
 
@@ -94,6 +95,8 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     const { tenant, session } = success.value;
+
+    audit(req, 'login', 'auth', session.user.id, { email, tenant: tenant.id });
 
     res.json({
       data: {

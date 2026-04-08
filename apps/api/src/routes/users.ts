@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../lib/logger.js';
+import { audit } from '../lib/audit.js';
 
 const router: Router = Router();
 
@@ -250,6 +251,8 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
 
     if (error) throw error;
 
+    audit(req, 'update', 'user', id, { fields: Object.keys(updateData), email: user.email });
+
     res.json({
       data: user,
       timestamp: new Date().toISOString(),
@@ -406,6 +409,8 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
 
     if (error) throw error;
+
+    audit(req, 'delete', 'user', id, { email: existing.email });
 
     res.json({
       message: 'User deleted successfully',

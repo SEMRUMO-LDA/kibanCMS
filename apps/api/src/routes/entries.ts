@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { validateContent } from '../lib/validate-content.js';
+import { audit } from '../lib/audit.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -293,6 +294,8 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
       throw error;
     }
 
+    audit(req, 'create', 'entry', entry.id, { title: entry.title, collection: collection.slug });
+
     res.status(201).json({
       data: entry,
       meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
@@ -418,6 +421,8 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       throw error;
     }
 
+    audit(req, 'update', 'entry', entry.id, { title: entry.title, collection: collection.slug, fields: Object.keys(updateData) });
+
     res.json({
       data: entry,
       meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
@@ -479,6 +484,8 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       .eq('id', existing.id);
 
     if (error) throw error;
+
+    audit(req, 'delete', 'entry', existing.id, { title: existing.title, collection: collection.slug });
 
     res.json({
       data: { id: existing.id, title: existing.title, slug: existing.slug },

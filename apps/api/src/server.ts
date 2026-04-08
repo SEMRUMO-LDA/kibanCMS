@@ -23,6 +23,7 @@ import newsletterRouter from './routes/newsletter.js';
 import authRouter from './routes/auth.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
+import { requestIdMiddleware } from './middleware/request-id.js';
 import { loadTenants, resolveTenant } from './config/tenants.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
@@ -94,6 +95,9 @@ const limiter = rateLimit({
 
 // Apply rate limiting to API routes only
 app.use('/api/v1', limiter);
+
+// Request ID — unique ID for every request (tracing)
+app.use(requestIdMiddleware);
 
 // Tenant resolution — sets up per-request Supabase clients
 app.use(tenantMiddleware);
