@@ -16,6 +16,7 @@ import { logger } from '../lib/logger.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import {
   translateFields,
+  translateTexts,
   detectLanguage,
   computeContentHash,
   extractTranslatableFields,
@@ -699,6 +700,55 @@ router.put('/translation/:entryId/:lang', async (req: AuthRequest, res: Response
     logger.error('Error updating translation', { error: error.message });
     res.status(500).json({
       error: { message: 'Failed to update translation', status: 500, timestamp: new Date().toISOString() }
+    });
+  }
+});
+
+// ============================================
+// POST /api/v1/i18n/translate-text
+// Auto-translate an array of text strings (widget use)
+// Body: { texts: string[], target_lang: string, source_lang?: string }
+// ============================================
+
+router.post('/translate-text', async (req: AuthRequest, res: Response) => {
+  try {
+    const { texts, target_lang, source_lang } = req.body;
+
+    if (!texts || !Array.isArray(texts) || texts.length === 0 || !target_lang) {
+      return res.status(400).json({
+        error: { message: 'Missing required fields: texts (array), target_lang', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+
+    // Limit to 200 texts per request to prevent abuse
+    if (texts.length > 200) {
+      return res.status(400).json({
+        error: { message: 'Maximum 200 texts per request', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+
+    const config = await getI18nConfig();
+    if (!config) {
+      return res.status(503).json({
+        error: { message: 'i18n not configured', status: 503, timestamp: new Date().toISOString() }
+      });
+    }
+
+    const translations = await translateTexts(
+      texts,
+      target_lang,
+      config.googleApiKey,
+      source_lang || config.defaultLanguage
+    );
+
+    res.json({
+      data: { translations },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error translating text', { error: error.message });
+    res.status(500).json({
+      error: { message: error.message || 'Failed to translate text', status: 500, timestamp: new Date().toISOString() }
     });
   }
 });
