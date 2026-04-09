@@ -1,21 +1,29 @@
 /**
- * Translation Engine — Google Cloud Translation API v2
+ * Translation Engine — DeepL API v2
  *
  * Handles:
  * - Batch translation of content fields
- * - Language detection
+ * - Language detection (via translate endpoint)
  * - Content hashing for change detection
- * - HTML preservation for richtext fields
+ * - HTML preservation for formatted fields
  *
- * Each tenant provides their own Google Translate API key
+ * Each tenant provides their own DeepL API key
  * via the i18n-config collection in the CMS.
+ * DeepL Free keys end with ":fx", Pro keys don't.
  */
 
 import { createHash } from 'crypto';
 import { logger } from './logger.js';
 
-const GOOGLE_TRANSLATE_URL = 'https://translation.googleapis.com/language/translate/v2';
-const GOOGLE_DETECT_URL = 'https://translation.googleapis.com/language/translate/v2/detect';
+function getDeepLEndpoint(apiKey: string): string {
+  return apiKey.endsWith(':fx')
+    ? 'https://api-free.deepl.com/v2/translate'
+    : 'https://api.deepl.com/v2/translate';
+}
+
+function mapLangToDeepL(code: string): string {
+  return code.toUpperCase();
+}
 
 // Field types that should be translated (string-based content)
 const TRANSLATABLE_TYPES = new Set(['text', 'textarea', 'richtext', 'email']);
@@ -95,27 +103,16 @@ export function extractTranslatableFields(
 // GOOGLE TRANSLATE API
 // ============================================
 
-interface TranslateResponse {
-  data: {
-    translations: Array<{
-      translatedText: string;
-      detectedSourceLanguage?: string;
-    }>;
-  };
-}
-
-interface DetectResponse {
-  data: {
-    detections: Array<Array<{
-      language: string;
-      confidence: number;
-    }>>;
-  };
+interface DeepLResponse {
+  translations: Array<{
+    text: string;
+    detected_source_language?: string;
+  }>;
 }
 
 /**
- * Translate a batch of text segments using Google Cloud Translation API v2.
- * Supports HTML content (preserves tags).
+ * Translate a batch of text segments using DeepL API v2.
+ * Supports HTML content (preserves formatting).
  */
 export async function translateTexts(
   texts: string[],
@@ -125,36 +122,38 @@ export async function translateTexts(
 ): Promise<string[]> {
   if (texts.length === 0) return [];
 
-  // Google Translate API accepts up to 128 segments per request
-  const MAX_BATCH = 128;
+  const MAX_BATCH = 50;
   const results: string[] = [];
+  const endpoint = getDeepLEndpoint(apiKey);
 
   for (let i = 0; i < texts.length; i += MAX_BATCH) {
     const batch = texts.slice(i, i + MAX_BATCH);
 
-    const params = new URLSearchParams();
-    params.set('key', apiKey);
-    params.set('target', targetLang);
-    params.set('format', 'html'); // Preserves HTML tags in richtext
-    if (sourceLang) params.set('source', sourceLang);
-    for (const text of batch) {
-      params.append('q', text);
-    }
+    const body: Record<string, any> = {
+      text: batch,
+      target_lang: mapLangToDeepL(targetLang),
+      preserve_formatting: true,
+    };
+    if (sourceLang) body.source_lang = mapLangToDeepL(sourceLang);
 
-    const res = await fetch(`${GOOGLE_TRANSLATE_URL}?${params.toString()}`, {
+    const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      logger.error('Google Translate API error', { status: res.status, error: err });
-      throw new Error(`Google Translate API error: ${res.status}`);
+      logger.error('DeepL API error', { status: res.status, error: err });
+      throw new Error(`DeepL API error: ${res.status}`);
     }
 
-    const json = (await res.json()) as TranslateResponse;
-    for (const t of json.data.translations) {
-      results.push(t.translatedText);
+    const json = (await res.json()) as DeepLResponse;
+    for (const t of json.translations) {
+      results.push(t.text);
     }
   }
 
@@ -187,34 +186,37 @@ export async function translateFields(
 }
 
 /**
- * Detect the language of a text sample.
+ * Detect the language of a text sample via DeepL translate endpoint.
  */
 export async function detectLanguage(
   text: string,
   apiKey: string
 ): Promise<{ language: string; confidence: number }> {
-  const params = new URLSearchParams();
-  params.set('key', apiKey);
-  params.append('q', text.slice(0, 500)); // Use first 500 chars for detection
+  try {
+    const endpoint = getDeepLEndpoint(apiKey);
 
-  const res = await fetch(`${GOOGLE_DETECT_URL}?${params.toString()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `DeepL-Auth-Key ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text: [text.slice(0, 200)],
+        target_lang: 'EN',
+      }),
+    });
 
-  if (!res.ok) {
-    const err = await res.text();
-    logger.error('Google Detect API error', { status: res.status, error: err });
-    throw new Error(`Google Detect API error: ${res.status}`);
+    if (!res.ok) throw new Error(`DeepL API error: ${res.status}`);
+
+    const json = (await res.json()) as DeepLResponse;
+    const detected = json.translations[0]?.detected_source_language || 'EN';
+
+    return { language: detected.toLowerCase(), confidence: 1.0 };
+  } catch (error) {
+    logger.error('Language detection failed', { error });
+    return { language: 'en', confidence: 0 };
   }
-
-  const json = (await res.json()) as DetectResponse;
-  const detection = json.data.detections[0]?.[0];
-
-  return {
-    language: detection?.language || 'en',
-    confidence: detection?.confidence || 0,
-  };
 }
 
 // ============================================
