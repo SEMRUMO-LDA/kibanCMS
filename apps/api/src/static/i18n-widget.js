@@ -200,15 +200,20 @@
       });
 
     } else if (style === 'minimal') {
-      // Minimal text links
-      var html = '<div style="display:flex;gap:4px;background:#fff;padding:6px 10px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.12);border:1px solid rgba(0,0,0,0.08);font-family:-apple-system,sans-serif;font-size:13px;">';
-      languages.forEach(function (lang, i) {
-        if (i > 0) html += '<span style="color:#d4d4d4;">|</span>';
+      // Minimal glassmorphism pill
+      var html = '<div style="display:flex;align-items:center;gap:2px;' +
+        'background:rgba(255,255,255,0.12);' +
+        'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
+        'padding:4px;border-radius:999px;' +
+        'box-shadow:0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15);' +
+        'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;">';
+      languages.forEach(function (lang) {
         var isActive = lang.code === (currentLang || defaultLang);
         html += '<a href="#" data-lang="' + lang.code + '" style="' +
-          'text-decoration:none;color:' + (isActive ? '#06b6d4' : '#737373') + ';' +
-          'font-weight:' + (isActive ? '700' : '500') + ';padding:2px 4px;' +
-          'text-transform:uppercase;letter-spacing:0.05em;">' +
+          'text-decoration:none;padding:6px 12px;border-radius:999px;' +
+          'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;' +
+          'color:' + (isActive ? '#fff' : 'rgba(255,255,255,0.5)') + ';' +
+          'background:' + (isActive ? 'rgba(255,255,255,0.18)' : 'transparent') + ';">' +
           lang.code + '</a>';
       });
       html += '</div>';
@@ -220,8 +225,8 @@
           onLanguageChange(a.getAttribute('data-lang'));
           widgetEl.querySelectorAll('a[data-lang]').forEach(function (link) {
             var isNowActive = link.getAttribute('data-lang') === currentLang;
-            link.style.color = isNowActive ? '#06b6d4' : '#737373';
-            link.style.fontWeight = isNowActive ? '700' : '500';
+            link.style.color = isNowActive ? '#fff' : 'rgba(255,255,255,0.5)';
+            link.style.background = isNowActive ? 'rgba(255,255,255,0.18)' : 'transparent';
           });
         });
       });
