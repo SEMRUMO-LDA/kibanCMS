@@ -30,7 +30,7 @@ const Container = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, ${colors.gray[50]} 0%, ${colors.white} 50%, ${colors.accent[50]} 100%);
+  background: url('https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=1920&q=80&auto=format') center/cover no-repeat fixed;
   padding: ${spacing[8]};
   position: relative;
   overflow: hidden;
@@ -38,40 +38,27 @@ const Container = styled.div`
   &::before {
     content: '';
     position: absolute;
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, ${colors.accent[200]}40 0%, transparent 70%);
-    top: -250px;
-    right: -250px;
-    border-radius: 50%;
-    animation: ${float} 8s ease-in-out infinite;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
   }
 
   &::after {
-    content: '';
-    position: absolute;
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, ${colors.accent[300]}30 0%, transparent 70%);
-    bottom: -200px;
-    left: -200px;
-    border-radius: 50%;
-    animation: ${float} 10s ease-in-out infinite;
-    animation-delay: 2s;
+    display: none;
   }
 `;
 
 const FormBox = styled.div`
   width: 100%;
   max-width: 440px;
-  background: ${colors.white};
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid ${colors.gray[200]};
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   padding: ${spacing[10]} ${spacing[8]};
   border-radius: ${borders.radius['2xl']};
-  box-shadow: ${shadows.xl};
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
   z-index: 10;
+  position: relative;
   animation: ${fadeIn} ${animations.duration.slow} ${animations.easing.out};
 `;
 

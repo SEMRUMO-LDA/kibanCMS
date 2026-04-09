@@ -12,10 +12,12 @@ import {
   Settings,
   LogOut,
   Menu,
-  Command,
+  Search,
   Puzzle,
   Activity,
   CalendarCheck,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -47,17 +49,18 @@ const Container = styled.div`
   font-family: ${typography.fontFamily.sans};
 `;
 
-const Sidebar = styled.aside<{ $isOpen: boolean }>`
-  width: ${layout.sidebar.expanded};
+const Sidebar = styled.aside<{ $isOpen: boolean; $collapsed: boolean }>`
+  width: ${p => p.$collapsed ? layout.sidebar.collapsed : layout.sidebar.expanded};
   background: ${colors.white};
   border-right: 1px solid ${colors.gray[200]};
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 100;
-  transition: transform ${animations.duration.normal} ${animations.easing.out};
+  transition: width 0.2s ease-out, transform ${animations.duration.normal} ${animations.easing.out};
 
   @media (max-width: 768px) {
+    width: ${layout.sidebar.expanded};
     position: fixed;
     left: 0;
     top: 0;
@@ -68,26 +71,41 @@ const Sidebar = styled.aside<{ $isOpen: boolean }>`
   }
 `;
 
-const LogoSection = styled.div`
-  height: ${layout.header.height};
+const LogoSection = styled.div<{ $collapsed?: boolean }>`
+  padding: ${spacing[5]} ${p => p.$collapsed ? spacing[3] : spacing[5]};
   display: flex;
   align-items: center;
-  padding: 0 ${spacing[6]};
   gap: ${spacing[3]};
-  border-bottom: 1px solid ${colors.gray[200]};
+  border-bottom: 1px solid ${colors.gray[100]};
   background: ${colors.white};
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
 
   .logo-icon {
     flex-shrink: 0;
     transition: transform ${animations.duration.fast} ${animations.easing.spring};
+    &:hover { transform: scale(1.05) rotate(-3deg); }
+  }
 
-    &:hover {
-      transform: scale(1.05) rotate(-5deg);
-    }
+  .logo-text {
+    display: ${p => p.$collapsed ? 'none' : 'flex'};
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
   }
 
   h1 {
-    display: none;
+    font-size: ${typography.fontSize.lg};
+    font-weight: ${typography.fontWeight.bold};
+    color: ${colors.gray[900]};
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .version {
+    font-size: 10px;
+    color: ${colors.gray[400]};
+    font-weight: 500;
+    letter-spacing: 0.03em;
   }
 `;
 
@@ -116,21 +134,23 @@ const NavSection = styled.div`
   }
 `;
 
-const NavLabel = styled.div`
+const NavLabel = styled.div<{ $collapsed?: boolean }>`
   font-size: ${typography.fontSize.xs};
   font-weight: ${typography.fontWeight.semibold};
   text-transform: uppercase;
   letter-spacing: ${typography.letterSpacing.wider};
-  color: ${colors.gray[500]};
+  color: ${colors.gray[400]};
   padding: 0 ${spacing[3]};
   margin-bottom: ${spacing[2]};
+  display: ${p => p.$collapsed ? 'none' : 'block'};
 `;
 
-const NavItem = styled.div<{ $active?: boolean }>`
+const NavItem = styled.div<{ $active?: boolean; $collapsed?: boolean }>`
   display: flex;
   align-items: center;
-  gap: ${spacing[3]};
-  padding: ${spacing[3]} ${spacing[3]};
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
+  gap: ${p => p.$collapsed ? '0' : spacing[3]};
+  padding: ${p => p.$collapsed ? spacing[3] : `${spacing[3]} ${spacing[3]}`};
   border-radius: ${borders.radius.lg};
   cursor: pointer;
   color: ${props => props.$active ? colors.gray[900] : colors.gray[600]};
@@ -179,6 +199,7 @@ const NavItem = styled.div<{ $active?: boolean }>`
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: ${(p: any) => p.$collapsed ? 'none' : 'block'};
   }
 
   /* Keyboard focus indicator */
@@ -188,17 +209,44 @@ const NavItem = styled.div<{ $active?: boolean }>`
   }
 `;
 
-const UserSection = styled.div`
-  padding: ${spacing[4]} ${spacing[4]};
+const CollapseBtn = styled.button<{ $collapsed?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing[2]};
+  padding: ${spacing[2]};
+  margin: 0 ${p => p.$collapsed ? spacing[2] : spacing[4]} ${spacing[2]};
+  background: none;
+  border: 1px solid transparent;
+  border-radius: ${borders.radius.md};
+  color: ${colors.gray[400]};
+  cursor: pointer;
+  font-size: 12px;
+  font-family: ${typography.fontFamily.sans};
+  transition: all 0.15s;
+
+  &:hover {
+    background: ${colors.gray[50]};
+    border-color: ${colors.gray[200]};
+    color: ${colors.gray[600]};
+  }
+
+  svg { width: 16px; height: 16px; flex-shrink: 0; }
+  span { display: ${p => p.$collapsed ? 'none' : 'inline'}; }
+`;
+
+const UserSection = styled.div<{ $collapsed?: boolean }>`
+  padding: ${p => p.$collapsed ? `${spacing[3]} ${spacing[2]}` : `${spacing[4]} ${spacing[4]}`};
   border-top: 1px solid ${colors.gray[200]};
   display: flex;
   align-items: center;
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
   gap: ${spacing[3]};
   background: ${colors.gray[50]};
 
   .user-avatar {
-    width: 40px;
-    height: 40px;
+    width: ${p => p.$collapsed ? '36px' : '40px'};
+    height: ${p => p.$collapsed ? '36px' : '40px'};
     border-radius: ${borders.radius.full};
     background: linear-gradient(135deg, ${colors.accent[400]}, ${colors.accent[600]});
     display: flex;
@@ -214,7 +262,7 @@ const UserSection = styled.div`
   .user-info {
     flex: 1;
     overflow: hidden;
-    display: flex;
+    display: ${p => p.$collapsed ? 'none' : 'flex'};
     flex-direction: column;
     gap: ${spacing[0.5]};
     min-width: 0;
@@ -363,33 +411,45 @@ const Overlay = styled.div<{ $isOpen: boolean }>`
   }
 `;
 
-const SearchHint = styled.div`
+const SearchHint = styled.div<{ $collapsed?: boolean }>`
   display: flex;
   align-items: center;
-  gap: ${spacing[2]};
-  padding: ${spacing[3]};
-  margin: 0 ${spacing[4]} ${spacing[4]};
-  background: ${colors.gray[100]};
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
+  gap: ${spacing[2.5]};
+  padding: ${p => p.$collapsed ? spacing[2.5] : `${spacing[2.5]} ${spacing[3.5]}`};
+  margin: ${spacing[2]} ${p => p.$collapsed ? spacing[2] : spacing[4]} ${spacing[3]};
+  background: ${colors.gray[50]};
   border: 1px solid ${colors.gray[200]};
-  border-radius: ${borders.radius.md};
-  font-size: ${typography.fontSize.xs};
-  color: ${colors.gray[600]};
+  border-radius: ${borders.radius.lg};
+  font-size: ${typography.fontSize.sm};
+  color: ${colors.gray[500]};
   cursor: pointer;
   transition: all ${animations.duration.fast} ${animations.easing.out};
 
   &:hover {
-    background: ${colors.gray[200]};
-    border-color: ${colors.gray[300]};
+    background: ${colors.white};
+    border-color: ${colors.accent[300]};
+    color: ${colors.gray[700]};
+    box-shadow: 0 0 0 3px ${colors.accent[50]};
+  }
+
+  svg { flex-shrink: 0; }
+
+  span {
+    flex: 1;
+    display: ${p => p.$collapsed ? 'none' : 'block'};
   }
 
   kbd {
-    padding: ${spacing[1]} ${spacing[2]};
+    display: ${p => p.$collapsed ? 'none' : 'inline-flex'};
+    padding: 2px 6px;
     background: ${colors.white};
-    border: 1px solid ${colors.gray[300]};
+    border: 1px solid ${colors.gray[200]};
     border-radius: ${borders.radius.sm};
-    font-size: ${typography.fontSize['2xs']};
+    font-size: 10px;
     font-family: ${typography.fontFamily.mono};
-    box-shadow: ${shadows.xs};
+    color: ${colors.gray[400]};
+    line-height: 1.4;
   }
 `;
 
@@ -400,6 +460,9 @@ const SearchHint = styled.div`
 export const DashboardLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('kiban-sidebar-collapsed') === 'true'; } catch { return false; }
+  });
   const { user, profile, signOut } = useAuth();
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -416,6 +479,14 @@ export const DashboardLayout = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const toggleCollapse = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('kiban-sidebar-collapsed', String(next)); } catch {}
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -448,71 +519,75 @@ export const DashboardLayout = () => {
 
       <Overlay $isOpen={mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
 
-      <Sidebar $isOpen={mobileMenuOpen}>
-        <LogoSection>
-          <img src="/logo.png" alt="kibanCMS" style={{ height: '28px', objectFit: 'contain' }} className="logo-icon" />
-          <h1>kibanCMS</h1>
+      <Sidebar $isOpen={mobileMenuOpen} $collapsed={collapsed}>
+        <LogoSection $collapsed={collapsed}>
+          <img src="/logo.png" alt="kibanCMS" style={{ height: collapsed ? '32px' : '40px', objectFit: 'contain' }} className="logo-icon" />
+          <div className="logo-text">
+            <h1>kibanCMS</h1>
+            <span className="version">v1.5.0</span>
+          </div>
         </LogoSection>
 
-        <SearchHint onClick={() => setCommandPaletteOpen(true)}>
-          <Command size={14} />
-          <span>{t('nav.quickSearch')}</span>
+        <SearchHint $collapsed={collapsed} onClick={() => setCommandPaletteOpen(true)}>
+          <Search size={16} />
+          <span>Search...</span>
           <kbd>⌘K</kbd>
         </SearchHint>
 
         <Nav>
           <NavSection>
-            <NavLabel>{t('nav.main')}</NavLabel>
-            <NavItem $active={location.pathname === '/'} onClick={() => handleNavigation('/')} role="button" tabIndex={0}>
+            <NavLabel $collapsed={collapsed}>{t('nav.main')}</NavLabel>
+            <NavItem $active={location.pathname === '/'} $collapsed={collapsed} onClick={() => handleNavigation('/')} role="button" tabIndex={0} title={collapsed ? t('nav.dashboard') : undefined}>
               <LayoutDashboard size={20} />
               <span>{t('nav.dashboard')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/content' || location.pathname.startsWith('/content/')} onClick={() => handleNavigation('/content')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname === '/content' || location.pathname.startsWith('/content/')} $collapsed={collapsed} onClick={() => handleNavigation('/content')} role="button" tabIndex={0} title={collapsed ? t('nav.content') : undefined}>
               <Files size={20} />
               <span>{t('nav.content')}</span>
             </NavItem>
-            <NavItem $active={location.pathname.startsWith('/media')} onClick={() => handleNavigation('/media')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname.startsWith('/media')} $collapsed={collapsed} onClick={() => handleNavigation('/media')} role="button" tabIndex={0} title={collapsed ? t('nav.media') : undefined}>
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/bookings'} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
               <CalendarCheck size={20} />
               <span>Bookings</span>
             </NavItem>
           </NavSection>
 
           <NavSection>
-            <NavLabel>{t('nav.system')}</NavLabel>
-            <NavItem $active={location.pathname.startsWith('/users')} onClick={() => handleNavigation('/users')} role="button" tabIndex={0}>
+            <NavLabel $collapsed={collapsed}>{t('nav.system')}</NavLabel>
+            <NavItem $active={location.pathname.startsWith('/users')} $collapsed={collapsed} onClick={() => handleNavigation('/users')} role="button" tabIndex={0} title={collapsed ? t('nav.users') : undefined}>
               <Users size={20} /><span>{t('nav.users')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/activity'} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname === '/activity'} $collapsed={collapsed} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0} title={collapsed ? t('nav.activity') : undefined}>
               <Activity size={20} /><span>{t('nav.activity')}</span>
             </NavItem>
-            <NavItem $active={location.pathname.startsWith('/addons')} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0}>
+            <NavItem $active={location.pathname.startsWith('/addons')} $collapsed={collapsed} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0} title={collapsed ? t('nav.addons') : undefined}>
               <Puzzle size={20} /><span>{t('nav.addons')}</span>
             </NavItem>
-            <NavItem
-              $active={location.pathname.startsWith('/settings')}
-              onClick={() => handleNavigation('/settings')}
-              role="button"
-              tabIndex={0}
-            >
+            <NavItem $active={location.pathname.startsWith('/settings')} $collapsed={collapsed} onClick={() => handleNavigation('/settings')} role="button" tabIndex={0} title={collapsed ? 'Settings' : undefined}>
               <Settings size={20} />
               <span>Settings</span>
             </NavItem>
           </NavSection>
         </Nav>
 
-        <UserSection>
+        <CollapseBtn $collapsed={collapsed} onClick={toggleCollapse}>
+          {collapsed ? <ChevronsRight /> : <><ChevronsLeft /><span>Collapse</span></>}
+        </CollapseBtn>
+
+        <UserSection $collapsed={collapsed}>
           <div className="user-avatar">{getUserInitials()}</div>
           <div className="user-info">
             <strong>{profile?.full_name || user?.email?.split('@')[0] || 'User'}</strong>
             <span>{user?.email}</span>
           </div>
-          <LogoutBtn onClick={handleLogout} title={t('nav.signOut')} aria-label="Sign out">
-            <LogOut size={18} />
-          </LogoutBtn>
+          {!collapsed && (
+            <LogoutBtn onClick={handleLogout} title={t('nav.signOut')} aria-label="Sign out">
+              <LogOut size={18} />
+            </LogoutBtn>
+          )}
         </UserSection>
       </Sidebar>
 
