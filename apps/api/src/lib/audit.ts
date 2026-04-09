@@ -50,9 +50,11 @@ export function audit(
   };
 
   // Fire and forget — don't block the response
-  supabase
-    .from('audit_log')
-    .insert(entry)
+  Promise.resolve(
+    supabase
+      .from('audit_log')
+      .insert(entry)
+  )
     .then(({ error }) => {
       if (error) {
         console.error('[Audit] Failed to write:', error.message, entry);
