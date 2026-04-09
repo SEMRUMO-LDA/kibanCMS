@@ -296,6 +296,13 @@ const AddonCollectionRow = styled.div`
     gap: ${spacing[3]};
     flex: 1;
     min-width: 0;
+    overflow: hidden;
+  }
+
+  .row-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .row-name {
@@ -577,7 +584,7 @@ export const Collections = () => {
                             >
                               <div className="row-left">
                                 <FileText size={16} style={{ color: colors.gray[400], flexShrink: 0 }} />
-                                <div>
+                                <div className="row-text">
                                   <div className="row-name">{col.name}</div>
                                   {col.description && (
                                     <div className="row-desc">{col.description}</div>
