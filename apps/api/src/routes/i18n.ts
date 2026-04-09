@@ -60,8 +60,8 @@ async function getI18nConfig(): Promise<I18nConfig | null> {
     .from('entries')
     .select('content')
     .eq('collection_id', col.id)
-    .eq('slug', 'default')
     .eq('status', 'published')
+    .limit(1)
     .single();
 
   if (!entry?.content) return null;
