@@ -5,10 +5,9 @@ import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
-import { FileText, ArrowRight, Loader, Code, Plus, Pencil, Trash2 } from 'lucide-react';
+import { FileText, ArrowRight, Loader, Plus, Pencil, Trash2 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
-import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
 // Addon color mapping — collections belonging to the same addon share the same color bar
 const ADDON_COLORS: Record<string, string> = {
@@ -239,36 +238,6 @@ const CardFooter = styled.div`
   }
 `;
 
-const CodeButton = styled.button`
-  background: none;
-  border: 1px solid ${colors.gray[300]};
-  border-radius: ${borders.radius.md};
-  padding: ${spacing[2]} ${spacing[3]};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: ${spacing[2]};
-  font-size: ${typography.fontSize.xs};
-  font-weight: ${typography.fontWeight.medium};
-  color: ${colors.gray[600]};
-  transition: all ${animations.duration.fast} ${animations.easing.out};
-
-  &:hover {
-    background: ${colors.accent[50]};
-    border-color: ${colors.accent[300]};
-    color: ${colors.accent[700]};
-
-    svg {
-      color: ${colors.accent[600]};
-    }
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-    transition: color ${animations.duration.fast} ${animations.easing.out};
-  }
-`;
 
 const CardActions = styled.div`
   display: flex;
@@ -433,7 +402,6 @@ export const Collections = () => {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
@@ -574,15 +542,6 @@ export const Collections = () => {
 
               <CardFooter>
                 <CardActions>
-                  <CodeButton
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCollection(collection);
-                    }}
-                  >
-                    <Code />
-                    Get Code
-                  </CodeButton>
                   {isAdmin && (
                     <>
                       <ActionBtn
@@ -611,13 +570,6 @@ export const Collections = () => {
         </Grid>
       )}
 
-      {selectedCollection && (
-        <CodeSnippetModal
-          collectionSlug={selectedCollection.slug}
-          collectionName={selectedCollection.name}
-          onClose={() => setSelectedCollection(null)}
-        />
-      )}
     </Container>
   );
 };

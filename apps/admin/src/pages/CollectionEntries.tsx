@@ -3,10 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Code, Eye, X, Download } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
-import { CodeSnippetModal } from '../components/CodeSnippetModal';
 
 // ============================================
 // ANIMATIONS
@@ -780,7 +779,6 @@ export const CollectionEntries = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [collectionName, setCollectionName] = useState('');
-  const [showCodeModal, setShowCodeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
@@ -1002,10 +1000,6 @@ export const CollectionEntries = () => {
               Export CSV
             </CodeButton>
           )}
-          <CodeButton onClick={() => setShowCodeModal(true)}>
-            <Code size={18} />
-            Get Code
-          </CodeButton>
           <CreateButton onClick={() => navigate(`/content/${collectionSlug}/new`)}>
             <Plus size={20} />
             Create Entry
@@ -1154,14 +1148,6 @@ export const CollectionEntries = () => {
             </tbody>
           </Table>
         </TableContainer>
-      )}
-
-      {showCodeModal && collectionSlug && (
-        <CodeSnippetModal
-          collectionSlug={collectionSlug}
-          collectionName={collectionName || collectionSlug}
-          onClose={() => setShowCodeModal(false)}
-        />
       )}
 
       {viewEntry && (
