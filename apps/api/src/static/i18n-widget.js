@@ -56,7 +56,7 @@
   function fetchLanguages(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/i18n/languages');
-    xhr.setRequestHeader('x-api-key', API_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
     xhr.onload = function () {
       if (xhr.status === 200) {
         try {
@@ -77,7 +77,7 @@
   function fetchWidgetConfig(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/i18n/widget');
-    xhr.setRequestHeader('x-api-key', API_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
     xhr.onload = function () {
       if (xhr.status === 200) {
         try {
