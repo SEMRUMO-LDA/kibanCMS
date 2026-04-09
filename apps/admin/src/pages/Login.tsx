@@ -30,7 +30,7 @@ const Container = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: url('https://images.unsplash.com/photo-1478436127897-769e1b3f0f36?w=1920&q=80&auto=format') center/cover no-repeat fixed;
+  background: url('https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1920&q=80&auto=format') center/cover no-repeat fixed;
   padding: ${spacing[8]};
   position: relative;
   overflow: hidden;
