@@ -248,6 +248,39 @@ class ApiClient {
   async getBookingTours() {
     return this.request<any[]>('GET', '/bookings/tours');
   }
+
+  // ── i18n ──
+  async getI18nLanguages() {
+    return this.request<any>('GET', '/i18n/languages');
+  }
+
+  async getI18nSupportedLanguages() {
+    return this.request<any[]>('GET', '/i18n/supported-languages');
+  }
+
+  async detectLanguage() {
+    return this.request<any>('POST', '/i18n/detect-language');
+  }
+
+  async translateEntry(entryId: string, collectionSlug: string, targetLang: string) {
+    return this.request<any>('POST', '/i18n/translate', { entry_id: entryId, collection_slug: collectionSlug, target_lang: targetLang }, 30000);
+  }
+
+  async translateBulk(collectionSlug: string, targetLang: string) {
+    return this.request<any>('POST', '/i18n/translate-bulk', { collection_slug: collectionSlug, target_lang: targetLang }, 120000);
+  }
+
+  async getI18nStatus(collectionSlug: string) {
+    return this.request<any>('GET', `/i18n/status/${collectionSlug}`);
+  }
+
+  async updateTranslation(entryId: string, lang: string, fields: Record<string, string>) {
+    return this.request<any>('PUT', `/i18n/translation/${entryId}/${lang}`, { fields });
+  }
+
+  async getI18nWidget() {
+    return this.request<any>('GET', '/i18n/widget');
+  }
 }
 
 export const api = new ApiClient();

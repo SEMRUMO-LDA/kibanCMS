@@ -141,8 +141,26 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
 
     if (error) throw error;
 
+    // i18n: overlay translations if ?lang= is provided
+    const lang = req.query.lang as string | undefined;
+    let responseData = entries || [];
+    if (lang && responseData.length > 0) {
+      responseData = responseData.map((entry: any) => {
+        const translations = entry.meta?.translations?.[lang];
+        if (translations) {
+          return {
+            ...entry,
+            title: translations._title || entry.title,
+            content: { ...(entry.content || {}), ...translations },
+            meta: { ...(entry.meta || {}), _served_lang: lang },
+          };
+        }
+        return { ...entry, meta: { ...(entry.meta || {}), _served_lang: entry.meta?.i18n?.source_lang || null } };
+      });
+    }
+
     res.json({
-      data: entries || [],
+      data: responseData,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
         pagination: { limit: limitNum, offset: offsetNum, total: count || 0 },
@@ -185,8 +203,21 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // i18n: overlay translations if ?lang= is provided
+    let responseEntry = entry as any;
+    const lang = req.query.lang as string | undefined;
+    if (lang && responseEntry.meta?.translations?.[lang]) {
+      const translations = responseEntry.meta.translations[lang];
+      responseEntry = {
+        ...responseEntry,
+        title: translations._title || responseEntry.title,
+        content: { ...(responseEntry.content || {}), ...translations },
+        meta: { ...(responseEntry.meta || {}), _served_lang: lang },
+      };
+    }
+
     res.json({
-      data: entry,
+      data: responseEntry,
       meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
       timestamp: new Date().toISOString(),
     });

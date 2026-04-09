@@ -10,7 +10,7 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
-  Zap, Sparkles, CreditCard,
+  Zap, Sparkles, CreditCard, Globe,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -184,6 +184,7 @@ const ICON_MAP: Record<string, any> = {
   'zap': Zap,
   'sparkles': Sparkles,
   'credit-card': CreditCard,
+  'globe': Globe,
 };
 
 // ============================================

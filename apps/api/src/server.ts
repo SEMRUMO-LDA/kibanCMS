@@ -19,6 +19,7 @@ import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
 import paymentsRouter from './routes/payments.js';
 import bookingsRouter from './routes/bookings.js';
+import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import authRouter from './routes/auth.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
@@ -168,6 +169,7 @@ app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); /
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
 app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend)
+app.use('/api/v1/i18n', validateAny, i18nRouter); // i18n — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)

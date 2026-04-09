@@ -406,6 +406,59 @@ const stripePayments: AddonDefinition = {
 };
 
 // ============================================
+// INTERNATIONALIZATION ADD-ON
+// ============================================
+
+const i18n: AddonDefinition = {
+  id: 'i18n',
+  name: 'Internationalization',
+  description: 'Multi-language content with automatic translation and language switcher',
+  longDescription: 'Add multi-language support to your content. Detect your default language, enable additional languages, and translate content automatically using Google Cloud Translation API. Each client uses their own API key. Includes an embeddable language switcher widget and a ?lang= API parameter for frontends.',
+  icon: 'globe',
+  color: '#6366f1',
+  category: 'content',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'i18n Config',
+      slug: 'i18n-config',
+      description: 'Language settings and translation configuration',
+      type: 'custom',
+      fields: [
+        { id: 'default_language', name: 'default_language', label: 'Default Language', type: 'text', required: true, placeholder: 'pt', helpText: 'ISO 639-1 code of your source content language' },
+        { id: 'default_language_name', name: 'default_language_name', label: 'Default Language Name', type: 'text', placeholder: 'Portugues' },
+        { id: 'enabled_languages', name: 'enabled_languages', label: 'Enabled Languages (JSON)', type: 'textarea', required: true, helpText: 'JSON array: [{"code":"en","name":"English"},{"code":"fr","name":"Francais"}]' },
+        { id: 'google_translate_api_key', name: 'google_translate_api_key', label: 'Google Translate API Key', type: 'text', required: true, helpText: 'Your Google Cloud Translation API key (per-client). Get one at console.cloud.google.com' },
+        { id: 'auto_translate', name: 'auto_translate', label: 'Auto-translate on Publish', type: 'boolean', helpText: 'Automatically translate entries when published' },
+        { id: 'translatable_collections', name: 'translatable_collections', label: 'Translatable Collections (JSON)', type: 'textarea', helpText: 'JSON array of collection slugs to translate. Empty = all collections.' },
+        { id: 'widget_enabled', name: 'widget_enabled', label: 'Enable Language Widget', type: 'boolean' },
+        { id: 'widget_position', name: 'widget_position', label: 'Widget Position', type: 'text', placeholder: 'bottom-right', helpText: 'bottom-right, bottom-left, top-right, top-left' },
+        { id: 'widget_style', name: 'widget_style', label: 'Widget Style', type: 'text', placeholder: 'dropdown', helpText: 'dropdown, flags, minimal' },
+      ],
+    },
+    {
+      name: 'Translation Log',
+      slug: 'i18n-translations',
+      description: 'Translation status and audit log per entry per language',
+      type: 'custom',
+      fields: [
+        { id: 'entry_id', name: 'entry_id', label: 'Entry ID', type: 'text', required: true },
+        { id: 'collection_slug', name: 'collection_slug', label: 'Collection', type: 'text', required: true },
+        { id: 'language', name: 'language', label: 'Language', type: 'text', required: true, helpText: 'Target language code (en, fr, es...)' },
+        { id: 'status', name: 'status', label: 'Status', type: 'text', required: true, helpText: 'pending, auto-translated, reviewed, published' },
+        { id: 'translated_fields', name: 'translated_fields', label: 'Translated Content (JSON)', type: 'textarea' },
+        { id: 'content_hash', name: 'content_hash', label: 'Content Hash', type: 'text', helpText: 'SHA-256 of source content for change detection' },
+        { id: 'translated_at', name: 'translated_at', label: 'Translated At', type: 'date' },
+        { id: 'reviewed_by', name: 'reviewed_by', label: 'Reviewed By', type: 'text' },
+        { id: 'reviewed_at', name: 'reviewed_at', label: 'Reviewed At', type: 'date' },
+        { id: 'error', name: 'error', label: 'Error', type: 'text' },
+      ],
+    },
+  ],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -418,6 +471,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   webhooksVisual,
   aiContent,
   stripePayments,
+  i18n,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {

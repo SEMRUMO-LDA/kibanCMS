@@ -6,7 +6,7 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 import {
   FileText, ArrowRight, Loader, Plus, Pencil, Trash2,
-  Mail, Search, CreditCard, CalendarCheck, Zap, Sparkles, Package,
+  Mail, Search, CreditCard, CalendarCheck, Zap, Sparkles, Package, Globe,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -22,6 +22,7 @@ const ADDON_ICON_MAP: Record<string, any> = {
   'sparkles': Sparkles,
   'file-input': FileText,
   'arrow-right': ArrowRight,
+  'globe': Globe,
 };
 
 // ============================================
