@@ -49,8 +49,9 @@ RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
 
 WORKDIR /app
 
-# Copy API build
+# Copy API build + static assets
 COPY --from=api-builder /app/apps/api/dist ./apps/api/dist
+COPY --from=api-builder /app/apps/api/src/static ./apps/api/static
 COPY --from=api-builder /app/apps/api/package.json ./apps/api/
 
 # Copy admin build

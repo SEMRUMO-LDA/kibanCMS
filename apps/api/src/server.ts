@@ -169,6 +169,17 @@ app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); /
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
 app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend)
+// i18n widget — public static JS file (no auth)
+app.get('/api/v1/i18n/widget.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  // Production: __dirname = /app/apps/api/dist → static at /app/apps/api/static
+  // Development: __dirname = apps/api/src → static at apps/api/src/static
+  const staticPath = NODE_ENV === 'production'
+    ? path.join(__dirname, '../static/i18n-widget.js')
+    : path.join(__dirname, 'static/i18n-widget.js');
+  res.sendFile(staticPath);
+});
 app.use('/api/v1/i18n', validateAny, i18nRouter); // i18n — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
