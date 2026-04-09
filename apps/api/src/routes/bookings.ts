@@ -458,4 +458,215 @@ router.get('/status/:bookingId', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// ============================================
+// GET /api/v1/bookings/list
+// Admin list with filters, pagination, and sorting
+// Query: status, tour, date_from, date_to, limit, offset
+// ============================================
+
+router.get('/list', async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      status: statusFilter,
+      tour,
+      date_from,
+      date_to,
+      limit = '50',
+      offset = '0',
+    } = req.query as Record<string, string | undefined>;
+
+    const bookingsColId = await getCollectionId('bookings');
+    if (!bookingsColId) {
+      return res.status(404).json({
+        error: { message: 'Bookings collection not found', status: 404, timestamp: new Date().toISOString() }
+      });
+    }
+
+    let query = supabase
+      .from('entries')
+      .select('id, title, slug, content, status, tags, created_at, updated_at', { count: 'exact' })
+      .eq('collection_id', bookingsColId)
+      .order('created_at', { ascending: false });
+
+    if (statusFilter) {
+      query = query.filter('content->>booking_status', 'eq', statusFilter);
+    }
+    if (tour) {
+      query = query.filter('content->>tour_slug', 'eq', tour);
+    }
+    if (date_from) {
+      query = query.filter('content->>date', 'gte', date_from);
+    }
+    if (date_to) {
+      query = query.filter('content->>date', 'lte', date_to);
+    }
+
+    const limitNum = Math.min(parseInt(limit || '50', 10) || 50, 200);
+    const offsetNum = parseInt(offset || '0', 10) || 0;
+    query = query.range(offsetNum, offsetNum + limitNum - 1);
+
+    const { data: entries, error, count } = await query;
+    if (error) throw error;
+
+    res.json({
+      data: entries || [],
+      meta: { pagination: { limit: limitNum, offset: offsetNum, total: count || 0 } },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error listing bookings', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Failed to list bookings', status: 500, timestamp: new Date().toISOString() }
+    });
+  }
+});
+
+// ============================================
+// GET /api/v1/bookings/stats
+// Dashboard stats: totals by status + revenue
+// ============================================
+
+router.get('/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const bookingsColId = await getCollectionId('bookings');
+    if (!bookingsColId) {
+      return res.json({
+        data: { total: 0, pending: 0, confirmed: 0, cancelled: 0, revenue: 0 },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const { data: all, error } = await supabase
+      .from('entries')
+      .select('content')
+      .eq('collection_id', bookingsColId);
+
+    if (error) throw error;
+
+    let total = 0, pending = 0, confirmed = 0, cancelled = 0, revenue = 0;
+
+    for (const entry of all || []) {
+      const c = entry.content as Record<string, any>;
+      total++;
+      const st = c.booking_status || 'pending';
+      if (st === 'pending') pending++;
+      else if (st === 'confirmed') {
+        confirmed++;
+        revenue += Number(c.amount) || 0;
+      }
+      else if (st === 'cancelled') cancelled++;
+    }
+
+    res.json({
+      data: { total, pending, confirmed, cancelled, revenue },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error fetching booking stats', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Failed to fetch stats', status: 500, timestamp: new Date().toISOString() }
+    });
+  }
+});
+
+// ============================================
+// POST /api/v1/bookings/:bookingId/confirm
+// Manually confirm a booking (without Stripe)
+// ============================================
+
+router.post('/:bookingId/confirm', async (req: AuthRequest, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+
+    const { data: entry, error: fetchErr } = await supabase
+      .from('entries')
+      .select('id, content')
+      .eq('id', bookingId)
+      .single();
+
+    if (fetchErr || !entry) {
+      return res.status(404).json({
+        error: { message: 'Booking not found', status: 404, timestamp: new Date().toISOString() }
+      });
+    }
+
+    const content = entry.content as Record<string, any>;
+    if (content.booking_status === 'confirmed') {
+      return res.json({ data: { message: 'Already confirmed' }, timestamp: new Date().toISOString() });
+    }
+
+    const { error: updateErr } = await supabase
+      .from('entries')
+      .update({
+        content: {
+          ...content,
+          booking_status: 'confirmed',
+          confirmed_at: new Date().toISOString(),
+        },
+        tags: ['booking', 'confirmed'],
+      })
+      .eq('id', bookingId);
+
+    if (updateErr) throw updateErr;
+
+    logger.info('Booking manually confirmed', { bookingId });
+    res.json({ data: { message: 'Booking confirmed' }, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    logger.error('Error confirming booking', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Failed to confirm booking', status: 500, timestamp: new Date().toISOString() }
+    });
+  }
+});
+
+// ============================================
+// POST /api/v1/bookings/:bookingId/cancel
+// Cancel a booking
+// ============================================
+
+router.post('/:bookingId/cancel', async (req: AuthRequest, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+
+    const { data: entry, error: fetchErr } = await supabase
+      .from('entries')
+      .select('id, content')
+      .eq('id', bookingId)
+      .single();
+
+    if (fetchErr || !entry) {
+      return res.status(404).json({
+        error: { message: 'Booking not found', status: 404, timestamp: new Date().toISOString() }
+      });
+    }
+
+    const content = entry.content as Record<string, any>;
+    if (content.booking_status === 'cancelled') {
+      return res.json({ data: { message: 'Already cancelled' }, timestamp: new Date().toISOString() });
+    }
+
+    const { error: updateErr } = await supabase
+      .from('entries')
+      .update({
+        content: {
+          ...content,
+          booking_status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+        },
+        tags: ['booking', 'cancelled'],
+      })
+      .eq('id', bookingId);
+
+    if (updateErr) throw updateErr;
+
+    logger.info('Booking cancelled', { bookingId });
+    res.json({ data: { message: 'Booking cancelled' }, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    logger.error('Error cancelling booking', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Failed to cancel booking', status: 500, timestamp: new Date().toISOString() }
+    });
+  }
+});
+
 export default router;

@@ -15,6 +15,7 @@ import {
   Command,
   Puzzle,
   Activity,
+  CalendarCheck,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -473,6 +474,10 @@ export const DashboardLayout = () => {
             <NavItem $active={location.pathname.startsWith('/media')} onClick={() => handleNavigation('/media')} role="button" tabIndex={0}>
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
+            </NavItem>
+            <NavItem $active={location.pathname === '/bookings'} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0}>
+              <CalendarCheck size={20} />
+              <span>Bookings</span>
             </NavItem>
           </NavSection>
 

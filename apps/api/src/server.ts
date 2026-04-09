@@ -167,7 +167,7 @@ app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key 
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
-app.use('/api/v1/bookings', validateApiKey, bookingsRouter); // Bookings — API Key auth
+app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // Serve Admin UI (static files from admin build)

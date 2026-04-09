@@ -226,6 +226,28 @@ class ApiClient {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return this.request<any[]>('GET', `/activity${qs}`);
   }
+
+  // ── Bookings ──
+  async getBookingStats() {
+    return this.request<any>('GET', '/bookings/stats');
+  }
+
+  async getBookingsList(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/bookings/list${qs}`);
+  }
+
+  async confirmBooking(bookingId: string) {
+    return this.request<any>('POST', `/bookings/${bookingId}/confirm`);
+  }
+
+  async cancelBooking(bookingId: string) {
+    return this.request<any>('POST', `/bookings/${bookingId}/cancel`);
+  }
+
+  async getBookingTours() {
+    return this.request<any[]>('GET', '/bookings/tours');
+  }
 }
 
 export const api = new ApiClient();

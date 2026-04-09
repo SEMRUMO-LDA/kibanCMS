@@ -19,6 +19,7 @@ import { Addons } from './pages/Addons';
 import { ActivityLog } from './pages/ActivityLog';
 // SiteSettings merged into unified Settings page
 import { Diagnostics } from './pages/Diagnostics';
+import { BookingsManager } from './pages/BookingsManager';
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -93,6 +94,7 @@ const AppContent = () => {
         <Route path="site-settings" element={<Navigate to="/settings?tab=general" replace />} />
         <Route path="activity" element={<ActivityLog />} />
         <Route path="addons" element={<Addons />} />
+        <Route path="bookings" element={<BookingsManager />} />
         <Route path="settings" element={<Settings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 

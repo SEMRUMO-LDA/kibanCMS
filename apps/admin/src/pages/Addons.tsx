@@ -10,7 +10,7 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
-  Zap, Sparkles,
+  Zap, Sparkles, CreditCard,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -183,6 +183,7 @@ const ICON_MAP: Record<string, any> = {
   'arrow-right': ArrowRight,
   'zap': Zap,
   'sparkles': Sparkles,
+  'credit-card': CreditCard,
 };
 
 // ============================================
@@ -332,7 +333,7 @@ export const Addons = () => {
                     <>
                       <InstalledBadge><CheckCircle /> Installed</InstalledBadge>
                       <div style={{ display: 'flex', gap: spacing[2] }}>
-                        <Btn $variant="ghost" onClick={() => navigate(`/content/${addon.collections[0].slug}`)}>
+                        <Btn $variant="ghost" onClick={() => navigate(addon.id === 'bookings' ? '/bookings' : `/content/${addon.collections[0].slug}`)}>
                           Open <ArrowRight />
                         </Btn>
                         <Btn $variant="danger" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
