@@ -314,24 +314,25 @@
 
   function renderMinimalWidget() {
     var isExpanded = false;
-    var glass = 'background:rgba(255,255,255,0.12);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
+    var glass = 'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
       'box-shadow:0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15);' +
       'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;' +
-      'cursor:pointer;transition:all 0.35s cubic-bezier(0.4,0,0.2,1);';
+      'cursor:pointer;';
 
     var circleEl = document.createElement('div');
     circleEl.className = 'kiban-circle';
     circleEl.style.cssText = glass +
+      'background:rgba(255,255,255,0.12);' +
       'width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
-      'color:#fff;text-transform:uppercase;font-weight:600;font-size:11px;';
+      'color:#fff;text-transform:uppercase;font-weight:600;font-size:11px;' +
+      'transition:opacity 0.3s ease,transform 0.3s ease;';
     circleEl.textContent = (currentLang || defaultLang).toUpperCase();
 
     var pillEl = document.createElement('div');
     pillEl.className = 'kiban-pill';
     pillEl.style.cssText = glass +
-      'display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;' +
-      'opacity:0;pointer-events:none;position:absolute;bottom:0;right:0;' +
-      'transform:scale(0.6);';
+      'background:rgba(255,255,255,0.12);' +
+      'display:none;align-items:center;gap:2px;padding:4px;border-radius:999px;';
 
     var pillHtml = '';
     languages.forEach(function (lang) {
@@ -350,12 +351,13 @@
 
     function toggle() {
       isExpanded = !isExpanded;
-      circleEl.style.opacity = isExpanded ? '0' : '1';
-      circleEl.style.pointerEvents = isExpanded ? 'none' : 'auto';
-      circleEl.style.transform = isExpanded ? 'scale(0.6)' : 'scale(1)';
-      pillEl.style.opacity = isExpanded ? '1' : '0';
-      pillEl.style.pointerEvents = isExpanded ? 'auto' : 'none';
-      pillEl.style.transform = isExpanded ? 'scale(1)' : 'scale(0.6)';
+      if (isExpanded) {
+        circleEl.style.display = 'none';
+        pillEl.style.display = 'flex';
+      } else {
+        circleEl.style.display = 'flex';
+        pillEl.style.display = 'none';
+      }
     }
 
     circleEl.addEventListener('click', toggle);
