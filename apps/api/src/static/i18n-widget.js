@@ -200,35 +200,87 @@
       });
 
     } else if (style === 'minimal') {
-      // Minimal glassmorphism pill
-      var html = '<div style="display:flex;align-items:center;gap:2px;' +
-        'background:rgba(255,255,255,0.12);' +
+      // Minimal glassmorphism circle → pill toggle
+      var isExpanded = false;
+      var glassBase = 'background:rgba(255,255,255,0.12);' +
         'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
-        'padding:4px;border-radius:999px;' +
         'box-shadow:0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15);' +
-        'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;">';
+        'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;' +
+        'cursor:pointer;overflow:hidden;transition:all 0.35s cubic-bezier(0.4,0,0.2,1);';
+
+      // Collapsed circle
+      var circleEl = document.createElement('div');
+      circleEl.className = 'kiban-circle';
+      circleEl.style.cssText = glassBase +
+        'width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
+        'color:#fff;text-transform:uppercase;font-weight:600;font-size:11px;';
+      circleEl.textContent = (currentLang || defaultLang).toUpperCase();
+
+      // Expanded pill
+      var pillEl = document.createElement('div');
+      pillEl.className = 'kiban-pill';
+      pillEl.style.cssText = glassBase +
+        'display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;' +
+        'opacity:0;pointer-events:none;position:absolute;bottom:0;right:0;' +
+        'transform:scale(0.6);transition:all 0.35s cubic-bezier(0.4,0,0.2,1);';
+
+      var pillHtml = '';
       languages.forEach(function (lang) {
         var isActive = lang.code === (currentLang || defaultLang);
-        html += '<a href="#" data-lang="' + lang.code + '" style="' +
-          'text-decoration:none;padding:6px 12px;border-radius:999px;' +
-          'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;' +
+        pillHtml += '<a href="#" data-lang="' + lang.code + '" style="' +
+          'text-decoration:none;padding:8px 14px;border-radius:999px;' +
+          'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;white-space:nowrap;' +
           'color:' + (isActive ? '#fff' : 'rgba(255,255,255,0.5)') + ';' +
           'background:' + (isActive ? 'rgba(255,255,255,0.18)' : 'transparent') + ';">' +
           lang.code + '</a>';
       });
-      html += '</div>';
-      widgetEl.innerHTML = html;
+      pillEl.innerHTML = pillHtml;
 
-      widgetEl.querySelectorAll('a[data-lang]').forEach(function (a) {
+      widgetEl.style.cssText += 'position:relative;';
+      widgetEl.appendChild(circleEl);
+      widgetEl.appendChild(pillEl);
+
+      function toggleExpand() {
+        isExpanded = !isExpanded;
+        if (isExpanded) {
+          circleEl.style.opacity = '0';
+          circleEl.style.pointerEvents = 'none';
+          circleEl.style.transform = 'scale(0.6)';
+          pillEl.style.opacity = '1';
+          pillEl.style.pointerEvents = 'auto';
+          pillEl.style.transform = 'scale(1)';
+        } else {
+          circleEl.style.opacity = '1';
+          circleEl.style.pointerEvents = 'auto';
+          circleEl.style.transform = 'scale(1)';
+          pillEl.style.opacity = '0';
+          pillEl.style.pointerEvents = 'none';
+          pillEl.style.transform = 'scale(0.6)';
+        }
+      }
+
+      circleEl.addEventListener('click', toggleExpand);
+
+      pillEl.querySelectorAll('a[data-lang]').forEach(function (a) {
         a.addEventListener('click', function (e) {
           e.preventDefault();
           onLanguageChange(a.getAttribute('data-lang'));
-          widgetEl.querySelectorAll('a[data-lang]').forEach(function (link) {
+          circleEl.textContent = currentLang.toUpperCase();
+          pillEl.querySelectorAll('a[data-lang]').forEach(function (link) {
             var isNowActive = link.getAttribute('data-lang') === currentLang;
             link.style.color = isNowActive ? '#fff' : 'rgba(255,255,255,0.5)';
             link.style.background = isNowActive ? 'rgba(255,255,255,0.18)' : 'transparent';
           });
+          // Collapse back to circle after selection
+          setTimeout(function () { toggleExpand(); }, 200);
         });
+      });
+
+      // Close pill on click outside
+      document.addEventListener('click', function (e) {
+        if (isExpanded && !widgetEl.contains(e.target)) {
+          toggleExpand();
+        }
       });
 
     } else {
