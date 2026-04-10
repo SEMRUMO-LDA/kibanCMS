@@ -30,11 +30,13 @@ export interface AddonDefinition {
   longDescription: string;
   icon: string; // lucide icon name
   color: string; // hex accent color
-  category: 'marketing' | 'content' | 'commerce' | 'tools';
+  category: 'marketing' | 'content' | 'commerce' | 'tools' | 'compliance';
   version: string;
   author: string;
   collections: AddonCollection[];
   configFields?: AddonFieldDef[];
+  /** Route path for addons with dedicated settings pages (no collections) */
+  settingsRoute?: string;
 }
 
 // ============================================
@@ -459,10 +461,48 @@ const i18n: AddonDefinition = {
 };
 
 // ============================================
+// COOKIE NOTICE ADD-ON (GDPR)
+// ============================================
+
+const cookieNotice: AddonDefinition = {
+  id: 'cookie-notice',
+  name: 'Cookie Notice',
+  description: 'GDPR-compliant cookie consent banner with granular controls',
+  longDescription: 'Display a customisable cookie consent banner to comply with GDPR/ePrivacy. Visitors choose which cookie categories to accept (necessary, analytics, marketing, preferences). All consent records are stored for audit. Includes dark/light themes, custom CSS, and a consent analytics dashboard.',
+  icon: 'cookie',
+  color: '#f59e0b',
+  category: 'compliance',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [],
+  settingsRoute: '/addons/cookie-notice',
+};
+
+// ============================================
+// ACCESSIBILITY ADD-ON (EAA 2025)
+// ============================================
+
+const accessibility: AddonDefinition = {
+  id: 'accessibility',
+  name: 'Accessibility',
+  description: 'EAA 2025-compliant accessibility widget with real CSS adjustments',
+  longDescription: 'Help your site comply with the European Accessibility Act (EAA) effective June 2025. Provides a floating widget with real CSS-based adjustments: font size, high contrast, reduced motion, line spacing, large cursor, and readable text alignment. No overlays, no hacks — pure CSS applied to the page.',
+  icon: 'accessibility',
+  color: '#0ea5e9',
+  category: 'compliance',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [],
+  settingsRoute: '/addons/accessibility',
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
 export const ADDONS_REGISTRY: AddonDefinition[] = [
+  cookieNotice,
+  accessibility,
   newsletter,
   seo,
   forms,

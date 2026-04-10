@@ -10,7 +10,7 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
-  Zap, Sparkles, CreditCard, Globe,
+  Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -185,6 +185,8 @@ const ICON_MAP: Record<string, any> = {
   'sparkles': Sparkles,
   'credit-card': CreditCard,
   'globe': Globe,
+  'cookie': Cookie,
+  'accessibility': Accessibility,
 };
 
 // ============================================
@@ -214,7 +216,10 @@ export const Addons = () => {
       const installed = new Set<string>();
 
       for (const addon of ADDONS_REGISTRY) {
-        if (addon.collections.length > 0 && existingSlugs.has(addon.collections[0].slug)) {
+        // Addons with settingsRoute (no collections) are always "available"
+        if (addon.settingsRoute) {
+          installed.add(addon.id);
+        } else if (addon.collections.length > 0 && existingSlugs.has(addon.collections[0].slug)) {
           installed.add(addon.id);
         }
       }
@@ -278,6 +283,7 @@ export const Addons = () => {
       case 'content': return 'Content';
       case 'commerce': return 'Commerce';
       case 'tools': return 'Tools';
+      case 'compliance': return 'Compliance';
       default: return cat;
     }
   };
@@ -320,26 +326,41 @@ export const Addons = () => {
 
                 <CardDesc>{addon.longDescription}</CardDesc>
 
-                <CardCollections>
-                  <div className="cc-label">Creates collections</div>
-                  <div className="cc-list">
-                    {addon.collections.map(col => (
-                      <span key={col.slug} className="cc-item">{col.name}</span>
-                    ))}
-                  </div>
-                </CardCollections>
+                {addon.collections.length > 0 ? (
+                  <CardCollections>
+                    <div className="cc-label">Creates collections</div>
+                    <div className="cc-list">
+                      {addon.collections.map(col => (
+                        <span key={col.slug} className="cc-item">{col.name}</span>
+                      ))}
+                    </div>
+                  </CardCollections>
+                ) : addon.settingsRoute ? (
+                  <CardCollections>
+                    <div className="cc-label">Embeddable widget</div>
+                    <div className="cc-list">
+                      <span className="cc-item">Dedicated settings page</span>
+                    </div>
+                  </CardCollections>
+                ) : null}
 
                 <CardFooter>
                   {isInstalled ? (
                     <>
                       <InstalledBadge><CheckCircle /> Installed</InstalledBadge>
                       <div style={{ display: 'flex', gap: spacing[2] }}>
-                        <Btn $variant="ghost" onClick={() => navigate(addon.id === 'bookings' ? '/bookings' : `/content/${addon.collections[0].slug}`)}>
-                          Open <ArrowRight />
+                        <Btn $variant="ghost" onClick={() => navigate(
+                          addon.settingsRoute ? addon.settingsRoute :
+                          addon.id === 'bookings' ? '/bookings' :
+                          `/content/${addon.collections[0].slug}`
+                        )}>
+                          {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
                         </Btn>
-                        <Btn $variant="danger" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
-                          <Trash2 /> Uninstall
-                        </Btn>
+                        {!addon.settingsRoute && (
+                          <Btn $variant="danger" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
+                            <Trash2 /> Uninstall
+                          </Btn>
+                        )}
                       </div>
                     </>
                   ) : (

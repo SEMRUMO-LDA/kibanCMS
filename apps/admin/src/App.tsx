@@ -20,6 +20,8 @@ import { ActivityLog } from './pages/ActivityLog';
 // SiteSettings merged into unified Settings page
 import { Diagnostics } from './pages/Diagnostics';
 import { BookingsManager } from './pages/BookingsManager';
+import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
+import { AccessibilitySettings } from './pages/AccessibilitySettings';
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -96,6 +98,8 @@ const AppContent = () => {
         <Route path="addons" element={<Addons />} />
         <Route path="bookings" element={<BookingsManager />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
+        <Route path="addons/accessibility" element={<AccessibilitySettings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 
         {/* Placeholder for other routes */}
