@@ -23,6 +23,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
 COPY apps/admin/ ./apps/admin/
 COPY packages/types/ ./packages/types/
+COPY packages/addons/src/ ./packages/addons/src/
 
 WORKDIR /app/apps/admin
 
