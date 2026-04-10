@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<title>kibanCMS — Guia Completo do Programador</title>
+<style>
+  body { font-family: 'Calibri', 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; color: #1a1a1a; line-height: 1.6; font-size: 11pt; }
+  h1 { font-size: 22pt; color: #0e7490; border-bottom: 3px solid #06B6D4; padding-bottom: 10px; margin-top: 40px; }
+  h2 { font-size: 16pt; color: #155e75; border-bottom: 1px solid #ccc; padding-bottom: 6px; margin-top: 36px; page-break-after: avoid; }
+  h3 { font-size: 13pt; color: #1e3a5f; margin-top: 24px; page-break-after: avoid; }
+  h4 { font-size: 11pt; color: #374151; margin-top: 18px; }
+  blockquote { border-left: 4px solid #06B6D4; margin: 16px 0; padding: 10px 16px; background: #f0fdfa; color: #374151; font-style: italic; }
+  code { font-family: 'Consolas', 'Courier New', monospace; background: #f3f4f6; padding: 2px 5px; border-radius: 3px; font-size: 10pt; color: #b91c1c; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 6px; overflow-x: auto; font-family: 'Consolas', 'Courier New', monospace; font-size: 9.5pt; line-height: 1.5; margin: 12px 0; page-break-inside: avoid; }
+  pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; page-break-inside: avoid; }
+  th { background: #0e7490; color: white; padding: 8px 12px; text-align: left; font-weight: 600; }
+  td { padding: 7px 12px; border: 1px solid #d1d5db; }
+  tr:nth-child(even) { background: #f9fafb; }
+  strong { color: #0e7490; }
+  a { color: #0e7490; text-decoration: none; }
+  hr { border: none; border-top: 2px solid #e5e7eb; margin: 30px 0; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  .cover { text-align: center; padding: 80px 20px; page-break-after: always; }
+  .cover h1 { font-size: 32pt; border: none; color: #0e7490; }
+  .cover p { font-size: 12pt; color: #6b7280; }
+  .cover .version { margin-top: 40px; font-size: 10pt; color: #9ca3af; }
+  .toc { page-break-after: always; }
+  .toc a { color: #1e3a5f; }
+  .toc ol { line-height: 2; }
+  .toc ol ol { margin-top: 2px; margin-bottom: 2px; line-height: 1.8; font-size: 10.5pt; }
+  .note { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 10px 16px; margin: 12px 0; border-radius: 0 4px 4px 0; }
+  .danger { background: #fee2e2; border-left: 4px solid #ef4444; padding: 10px 16px; margin: 12px 0; border-radius: 0 4px 4px 0; }
+  .info { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 10px 16px; margin: 12px 0; border-radius: 0 4px 4px 0; }
+  .section { page-break-before: auto; }
+  .checklist { list-style: none; padding-left: 8px; }
+  .checklist li { padding: 6px 0; }
+  .checklist li::before { content: '☐ '; font-size: 13pt; }
+  .flow-box { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 6px; padding: 16px 20px; margin: 12px 0; font-size: 10pt; line-height: 1.8; }
+  .flow-box .step { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 2px; }
+  .flow-box .num { background: #0e7490; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 9pt; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .flow-box .arrow { text-align: center; color: #0e7490; font-size: 13pt; margin: 2px 0; padding-left: 6px; }
+</style>
+</head>
+<body>
+
+<!-- ========== CAPA ========== -->
+<div class="cover">
+  <h1>kibanCMS</h1>
+  <p style="font-size:16pt; color:#374151; margin-top:10px;">Guia Completo do Programador</p>
+  <p style="margin-top:20px;">Documento de referência para programadores da agência <strong>AORUBRO</strong></p>
+  <p>Tudo o que precisas saber para trabalhar com o kibanCMS — infraestrutura, acessos, API, frontends e manutenção.</p>
+  <div class="version">
+    <p>Versão 1.3.0 — Abril 2026</p>
+    <p>Responsável técnico: Tiago Pacheco</p>
+    <p>dev@kiban.pt</p>
+  </div>
+</div>
+
+<!-- ========== ÍNDICE ========== -->
+<div class="toc">
+  <h2>Índice</h2>
+  <ol>
+    <li><a href="#s1">O que é o kibanCMS</a></li>
+    <li><a href="#s2">Arquitetura Geral</a></li>
+    <li><a href="#s3">Stack Tecnológico</a></li>
+    <li><a href="#s4">Estrutura do Projeto</a></li>
+    <li><a href="#s5">Infraestrutura e Acessos</a>
+      <ol>
+        <li><a href="#s5-github">GitHub</a></li>
+        <li><a href="#s5-railway">Railway</a></li>
+        <li><a href="#s5-supabase">Supabase</a></li>
+        <li><a href="#s5-fluxos">Fluxos de funcionamento</a></li>
+      </ol>
+    </li>
+    <li><a href="#s6">Setup Local</a></li>
+    <li><a href="#s7">Base de Dados (Supabase)</a></li>
+    <li><a href="#s8">API — Endpoints e Autenticação</a></li>
+    <li><a href="#s9">Admin UI — Frontend do CMS</a></li>
+    <li><a href="#s10">Sistema de Add-ons</a></li>
+    <li><a href="#s11">Criar um Frontend (Projeto Cliente)</a></li>
+    <li><a href="#s12">Formulários de Contacto (Forms Addon)</a></li>
+    <li><a href="#s13">Webhooks</a></li>
+    <li><a href="#s14">Deploy em Produção</a></li>
+    <li><a href="#s15">Troubleshooting</a></li>
+    <li><a href="#s16">Checklist de Novo Programador</a></li>
+    <li><a href="#s17">Links Rápidos</a></li>
+  </ol>
+</div>
+
+<!-- ========== SECÇÃO 1 ========== -->
+<div class="section" id="s1">
+<h2>1. O que é o kibanCMS</h2>
+
+<p>kibanCMS é um <strong>headless CMS</strong> construído pela AORUBRO. Funciona como backend de conteúdo para qualquer frontend — websites, apps, e-commerce, etc.</p>
+
+<p><strong>Princípio:</strong> O CMS gere os dados. O frontend decide como os mostra.</p>
+
+<p><strong>Fluxo básico:</strong></p>
+<pre><code>Cliente (browser) → Frontend (React/Next.js/HTML) → API kibanCMS → Supabase (DB)
+                                                   ↓
+                                              Admin Panel
+                                        (onde se gere o conteúdo)</code></pre>
+
+<p><strong>URL do admin:</strong> <code>https://kiban.pt</code> (ou o domínio configurado)<br>
+<strong>URL da API:</strong> <code>https://kiban.pt/api/v1/</code></p>
+</div>
+
+<!-- ========== SECÇÃO 2 ========== -->
+<div class="section" id="s2">
+<h2>2. Arquitetura Geral</h2>
+
+<pre><code>kibanCMS (monorepo)
+├── apps/
+│   ├── admin/          → React SPA (painel de administração)
+│   ├── api/            → Express.js (API REST)
+│   └── example/        → Next.js (frontend exemplo)
+│
+├── packages/
+│   ├── types/          → TypeScript types partilhados
+│   ├── core/           → KibanClient (SDK)
+│   ├── ui/             → Componentes React reutilizáveis
+│   ├── media/          → Serviços de media/imagem
+│   ├── addons/         → Sistema de add-ons
+│   └── kiban-client/   → Cliente JS oficial (@kiban/client)
+│
+├── database/
+│   └── migrations/     → SQL para Supabase
+│
+├── Dockerfile          → Build multi-stage
+├── docker-compose.yml  → Config Docker
+└── railway.toml        → Config Railway (deploy)</code></pre>
+
+<p><strong>Em produção</strong>, o servidor Express serve TUDO:</p>
+<ul>
+  <li><code>/api/v1/*</code> → rotas da API</li>
+  <li><code>/*</code> → ficheiros estáticos do admin (React build)</li>
+</ul>
+<p>Isto significa que <strong>um único deploy</strong> serve admin + API.</p>
+</div>
+
+<!-- ========== SECÇÃO 3 ========== -->
+<div class="section" id="s3">
+<h2>3. Stack Tecnológico</h2>
+
+<h3>Backend (API)</h3>
+<table>
+  <tr><th>Tecnologia</th><th>Versão</th><th>Para que serve</th></tr>
+  <tr><td>Node.js</td><td>20.x</td><td>Runtime</td></tr>
+  <tr><td>Express</td><td>4.x</td><td>HTTP framework</td></tr>
+  <tr><td>TypeScript</td><td>5.x</td><td>Tipagem</td></tr>
+  <tr><td>Supabase JS</td><td>2.x</td><td>Acesso a DB + Auth</td></tr>
+  <tr><td>Multer</td><td>2.x</td><td>Upload de ficheiros</td></tr>
+  <tr><td>Zod</td><td>3.x</td><td>Validação de dados</td></tr>
+  <tr><td>Google Generative AI</td><td>0.24.x</td><td>Features IA (alt-text, tradução)</td></tr>
+</table>
+
+<h3>Frontend (Admin)</h3>
+<table>
+  <tr><th>Tecnologia</th><th>Versão</th><th>Para que serve</th></tr>
+  <tr><td>React</td><td>18.x</td><td>UI framework</td></tr>
+  <tr><td>Vite</td><td>5.x</td><td>Build tool</td></tr>
+  <tr><td>TypeScript</td><td>5.x</td><td>Tipagem</td></tr>
+  <tr><td>React Router</td><td>6.x</td><td>Routing SPA</td></tr>
+  <tr><td>Styled Components</td><td>6.x</td><td>CSS-in-JS</td></tr>
+  <tr><td>TipTap</td><td>3.x</td><td>Rich text editor</td></tr>
+  <tr><td>Lucide React</td><td>0.323</td><td>Ícones</td></tr>
+</table>
+
+<h3>Infraestrutura</h3>
+<table>
+  <tr><th>Serviço</th><th>Para que serve</th></tr>
+  <tr><td>Supabase</td><td>Base de dados (PostgreSQL) + Auth + Storage</td></tr>
+  <tr><td>Railway</td><td>Hosting (Docker)</td></tr>
+  <tr><td>GitHub</td><td>Repositório de código</td></tr>
+  <tr><td>Docker</td><td>Containerização</td></tr>
+  <tr><td>pnpm</td><td>Package manager (monorepo)</td></tr>
+</table>
+</div>
+
+<!-- ========== SECÇÃO 4 ========== -->
+<div class="section" id="s4">
+<h2>4. Estrutura do Projeto</h2>
+
+<h3>4.1 API (<code>apps/api/src/</code>)</h3>
+<pre><code>src/
+├── server.ts               → Entry point, monta rotas e middleware
+├── middleware/
+│   └── auth.ts             → Autenticação (JWT + API Key)
+├── lib/
+│   ├── supabase.ts         → Cliente Supabase (service role)
+│   ├── logger.ts           → Logging (JSON em prod, texto em dev)
+│   ├── validate-content.ts → Validação de campos contra schema
+│   └── webhook-worker.ts   → Worker que processa webhooks em background
+└── routes/
+    ├── collections.ts      → CRUD de collections
+    ├── entries.ts          → CRUD de entries
+    ├── media.ts            → Upload e gestão de media
+    ├── forms.ts            → Submissão de formulários
+    ├── users.ts            → Gestão de utilizadores
+    ├── webhooks.ts         → CRUD de webhooks
+    ├── ai.ts               → Geração de schemas com IA
+    ├── ai-content.ts       → Alt-text, tradução, tom
+    ├── dashboard.ts        → Estatísticas do dashboard
+    ├── activity.ts         → Feed de atividade
+    ├── media-intelligence.ts → Uso de media, duplicados
+    └── redirects.ts        → Resolução de redirects (público)</code></pre>
+
+<h3>4.2 Admin (<code>apps/admin/src/</code>)</h3>
+<pre><code>src/
+├── App.tsx                 → Routing principal
+├── main.tsx                → Entry point React
+├── layouts/
+│   └── DashboardLayout.tsx → Sidebar + header + outlet
+├── pages/
+│   ├── Dashboard.tsx       → Página inicial com métricas
+│   ├── Collections.tsx     → Lista de collections
+│   ├── CollectionBuilder.tsx → Criar nova collection (visual)
+│   ├── CollectionEdit.tsx  → Editar collection existente
+│   ├── CollectionEntries.tsx → Lista de entries de uma collection
+│   ├── EntryEdit.tsx       → Criar/editar uma entry
+│   ├── Media.tsx           → Biblioteca de media
+│   ├── Users.tsx           → Gestão de utilizadores
+│   ├── Settings.tsx        → Definições (API keys, SMTP, etc.)
+│   ├── Addons.tsx          → Instalar/desinstalar add-ons
+│   ├── ActivityLog.tsx     → Log de atividade
+│   ├── Onboarding.tsx      → Wizard de setup inicial
+│   ├── Login.tsx           → Página de login
+│   └── Diagnostics.tsx     → Diagnóstico do sistema
+├── components/
+│   ├── EntryEditor.tsx     → Editor de conteúdo
+│   ├── CommandPalette.tsx  → Cmd+K (pesquisa rápida)
+│   ├── CodeSnippetModal.tsx → Snippets de integração
+│   ├── RevisionHistory.tsx → Histórico de versões
+│   ├── Toast.tsx           → Notificações
+│   ├── fields/             → Componentes de campo
+│   └── collection-builder/ → UI do builder visual
+├── config/
+│   ├── addons-registry.ts  → Definição de todos os add-ons
+│   └── collection-presets.ts → Templates de collections
+├── features/auth/
+│   └── hooks/useAuth.tsx   → Hook de autenticação
+├── lib/
+│   ├── api.ts              → Cliente HTTP para a API
+│   ├── supabase.ts         → Cliente Supabase (anon key)
+│   └── i18n.tsx            → Traduções PT/EN
+└── shared/styles/
+    └── design-tokens.ts    → Design system (cores, spacing, tipografia)</code></pre>
+</div>
+
+<!-- ========== SECÇÃO 5: INFRAESTRUTURA ========== -->
+<div class="section" id="s5">
+<h1>5. Infraestrutura e Acessos</h1>
+
+<p>O kibanCMS depende de 3 plataformas externas que funcionam em conjunto:</p>
+
+<table>
+  <tr><th>Plataforma</th><th>O que faz</th><th>URL</th></tr>
+  <tr><td><strong>GitHub</strong></td><td>Guarda o código fonte. Cada push faz deploy automático.</td><td>github.com</td></tr>
+  <tr><td><strong>Railway</strong></td><td>Hospeda o servidor (Docker). Serve a API e o admin.</td><td>railway.app</td></tr>
+  <tr><td><strong>Supabase</strong></td><td>Base de dados PostgreSQL, autenticação e storage de ficheiros.</td><td>supabase.com</td></tr>
+</table>
+
+<pre><code>GitHub                Railway                 Supabase
+(código)    ──push──> (servidor)    ──liga──> (base de dados)
+                      serve o CMS             guarda os dados</code></pre>
+
+<!-- 5.1 GitHub -->
+<h2 id="s5-github">5.1 GitHub</h2>
+
+<h3>Acesso</h3>
+<table>
+  <tr><td><strong>Organização</strong></td><td>SEMRUMO-LDA</td></tr>
+  <tr><td><strong>Repositório</strong></td><td><code>https://github.com/SEMRUMO-LDA/kibanCMS</code></td></tr>
+  <tr><td><strong>Branch principal</strong></td><td><code>main</code> (protegido — cada push faz deploy)</td></tr>
+  <tr><td><strong>Acesso</strong></td><td>Pedir ao Tiago para adicionar a tua conta GitHub como collaborator</td></tr>
+</table>
+
+<h3>Como funciona no dia a dia</h3>
+<pre><code># 1. Clonar o repo (só na primeira vez)
+git clone https://github.com/SEMRUMO-LDA/kibanCMS.git
+cd kibanCMS
+
+# 2. Fazer alterações no código
+# ... editar ficheiros ...
+
+# 3. Commit e push
+git add .
+git commit -m "feat: descrição da alteração"
+git push origin main
+
+# 4. Deploy automático
+# O Railway deteta o push e faz build + deploy (2-5 minutos)
+# Verifica em: https://kiban.pt/health</code></pre>
+
+<div class="note">
+  <strong>⚠ Regras importantes:</strong>
+  <strong>Nunca</strong> fazer force push (<code>git push --force</code>) para <code>main</code>.
+  Fazer <strong>commit com mensagens claras</strong> (ex: <code>feat: add X</code>, <code>fix: corrige Y</code>).
+  Testar localmente antes de fazer push (<code>pnpm dev</code>).
+  Se algo partir em produção, reverter com <code>git revert</code> (não com <code>reset</code>).
+</div>
+
+<!-- 5.2 Railway -->
+<h2 id="s5-railway">5.2 Railway</h2>
+
+<h3>Acesso</h3>
+<table>
+  <tr><td><strong>URL</strong></td><td><code>https://railway.app</code></td></tr>
+  <tr><td><strong>Login</strong></td><td>Conta da organização (pedir acesso ao Tiago)</td></tr>
+  <tr><td><strong>Projeto</strong></td><td>kibanCMS</td></tr>
+  <tr><td><strong>Serviço</strong></td><td><code>kiban</code> (único serviço)</td></tr>
+</table>
+
+<h3>Dashboard</h3>
+<table>
+  <tr><th>Secção</th><th>O que faz</th></tr>
+  <tr><td><strong>Deployments</strong></td><td>Lista de todos os deploys. Verde = sucesso, vermelho = falhou.</td></tr>
+  <tr><td><strong>Logs</strong></td><td>Logs do servidor em tempo real (útil para debug).</td></tr>
+  <tr><td><strong>Variables</strong></td><td>Variáveis de ambiente (API keys, URLs do Supabase).</td></tr>
+  <tr><td><strong>Settings</strong></td><td>Config do serviço (Docker, health check, domínio).</td></tr>
+  <tr><td><strong>Metrics</strong></td><td>CPU, memória, rede.</td></tr>
+</table>
+
+<h3>Variáveis de ambiente configuradas</h3>
+<table>
+  <tr><th>Variável</th><th>Descrição</th><th>Exemplo</th></tr>
+  <tr><td><code>NODE_ENV</code></td><td>Modo do servidor</td><td><code>production</code></td></tr>
+  <tr><td><code>PORT</code></td><td>Porta do servidor</td><td><code>5001</code></td></tr>
+  <tr><td><code>SUPABASE_URL</code></td><td>URL do projeto Supabase</td><td><code>https://xxx.supabase.co</code></td></tr>
+  <tr><td><code>SUPABASE_ANON_KEY</code></td><td>Chave pública do Supabase</td><td><code>eyJ...</code></td></tr>
+  <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Chave secreta do Supabase (nunca expor)</td><td><code>eyJ...</code></td></tr>
+  <tr><td><code>ALLOWED_ORIGINS</code></td><td>Domínios permitidos via CORS</td><td><code>https://solfil.pt,https://kiban.pt</code></td></tr>
+  <tr><td><code>GEMINI_API_KEY</code></td><td>Chave Google Gemini (IA)</td><td><code>AIza...</code></td></tr>
+</table>
+
+<h3>Como ver logs</h3>
+<p>Abre o Railway dashboard → clica no serviço <code>kiban</code> → separador <strong>Logs</strong>. Usa o filtro para procurar erros específicos.</p>
+
+<h3>Como fazer redeploy manual</h3>
+<p>No Railway dashboard, vai a <strong>Deployments</strong> → clica nos 3 pontos do último deploy → seleciona <strong>Redeploy</strong>.</p>
+
+<h3>Verificar se o deploy funcionou</h3>
+<pre><code>curl https://kiban.pt/health
+# Deve retornar:
+# { "status": "ok", "version": "1.3.0", "mode": "production" }</code></pre>
+
+<h3>Domínio</h3>
+<p>O Railway gera um URL automático (tipo <code>xxx.up.railway.app</code>). O domínio <code>kiban.pt</code> está configurado como custom domain. DNS aponta para o Railway via CNAME.</p>
+
+<!-- 5.3 Supabase -->
+<h2 id="s5-supabase">5.3 Supabase</h2>
+
+<h3>O que fornece</h3>
+<ul>
+  <li><strong>PostgreSQL</strong> — base de dados relacional</li>
+  <li><strong>Auth</strong> — sistema de login/registo</li>
+  <li><strong>Storage</strong> — armazenamento de ficheiros (imagens, PDFs)</li>
+  <li><strong>Realtime</strong> — subscrições em tempo real (não usado ativamente)</li>
+</ul>
+
+<h3>Acesso</h3>
+<table>
+  <tr><td><strong>URL</strong></td><td><code>https://supabase.com</code></td></tr>
+  <tr><td><strong>Organização</strong></td><td>SEMRUMO-LDA's Org</td></tr>
+  <tr><td><strong>Projeto</strong></td><td>kibanCMS</td></tr>
+  <tr><td><strong>Dashboard</strong></td><td><code>https://supabase.com/dashboard</code> (login com a conta da org)</td></tr>
+</table>
+
+<h3>Dashboard — secções principais</h3>
+<table>
+  <tr><th>Secção</th><th>O que faz</th><th>Quando usar</th></tr>
+  <tr><td><strong>Table Editor</strong></td><td>Ver e editar dados diretamente nas tabelas</td><td>Debug, corrigir dados manualmente</td></tr>
+  <tr><td><strong>SQL Editor</strong></td><td>Correr queries SQL</td><td>Migrações, consultas complexas</td></tr>
+  <tr><td><strong>Authentication</strong></td><td>Gerir utilizadores registados</td><td>Ver users, resetar passwords</td></tr>
+  <tr><td><strong>Storage</strong></td><td>Ver ficheiros carregados (imagens, etc.)</td><td>Debug de media</td></tr>
+  <tr><td><strong>Logs</strong></td><td>Ver logs de queries e erros</td><td>Debug de performance</td></tr>
+  <tr><td><strong>Settings &gt; API</strong></td><td>Ver URL e chaves do projeto</td><td>Configurar .env</td></tr>
+</table>
+
+<h3>Chaves do Supabase</h3>
+<table>
+  <tr><th>Chave</th><th>Para que serve</th><th>Onde usar</th><th>Segura?</th></tr>
+  <tr><td><strong>anon key</strong></td><td>Chave pública, usada no browser. Sujeita a RLS.</td><td>Frontend (admin), .env do admin</td><td>Pode ser pública</td></tr>
+  <tr><td><strong>service role key</strong></td><td>Chave secreta, bypassa RLS. Acesso total.</td><td>Apenas no servidor (API), nunca no browser</td><td>NUNCA expor</td></tr>
+</table>
+
+<div class="danger">
+  <strong>🔒 SUPABASE_SERVICE_ROLE_KEY</strong> — Esta chave bypassa todas as policies RLS e dá acesso total à base de dados. Nunca a expor no browser, em código frontend, ou em repositórios públicos.
+</div>
+
+<p><strong>Onde encontrar:</strong> Supabase Dashboard → Settings → API → Project API Keys</p>
+
+<h3>Correr migrações SQL</h3>
+<ol>
+  <li>Abre <strong>Supabase Dashboard &gt; SQL Editor</strong></li>
+  <li>Cria um novo query (botão <strong>+</strong>)</li>
+  <li>Cola o conteúdo do ficheiro SQL (ex: <code>database/migrations/CLEAN_RESET.sql</code>)</li>
+  <li>Clica <strong>Run</strong></li>
+  <li>Verifica no output se não houve erros</li>
+</ol>
+
+<h3>Gerir utilizadores (Auth)</h3>
+<p>Supabase Dashboard → <strong>Authentication</strong> → <strong>Users</strong>. Aqui podes ver todos os users registados, resetar passwords, apagar users, e ver metadata.</p>
+
+<div class="note">
+  <strong>Nota:</strong> Apagar um user em auth.users não remove automaticamente o registo na tabela <code>profiles</code> — pode ficar com registos órfãos.
+</div>
+
+<h3>Storage (ficheiros)</h3>
+<p>Supabase Dashboard → <strong>Storage</strong> → Bucket: <code>media</code>. Estrutura de pastas organizada por user/data. Ficheiros públicos acessíveis via URL direto.</p>
+
+<!-- 5.4 Fluxos -->
+<h2 id="s5-fluxos">5.4 Como tudo funciona em conjunto</h2>
+
+<h3>Fluxo de um deploy</h3>
+<div class="flow-box">
+  <div class="step"><span class="num">1</span> Programador faz <code>git push</code> para <code>main</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">2</span> GitHub notifica o Railway (webhook)</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">3</span> Railway faz <code>docker build</code> — instala dependências, compila TypeScript, build do React admin</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">4</span> Railway substitui o container antigo pelo novo</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">5</span> Health check: <code>GET /health</code> — Se OK → deploy completo. Se falha → rollback automático.</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">6</span> <strong>kiban.pt</strong> serve a nova versão. Tempo total: <strong>2-5 minutos</strong>.</div>
+</div>
+
+<h3>Fluxo de um pedido do frontend</h3>
+<div class="flow-box">
+  <div class="step"><span class="num">1</span> Browser do user abre <code>solfil.pt</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">2</span> JavaScript faz <code>fetch</code> para <code>kiban.pt/api/v1/entries/blog</code> com header <code>Authorization: Bearer kiban_live_xxx</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">3</span> Railway recebe o pedido → Express.js processa</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">4</span> API valida a API Key contra tabela <code>api_keys</code> no Supabase</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">5</span> API faz query ao Supabase: <code>SELECT * FROM entries WHERE …</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">6</span> Supabase retorna os dados → API formata e retorna JSON ao browser → frontend mostra o conteúdo</div>
+</div>
+
+<h3>Fluxo de login no admin</h3>
+<div class="flow-box">
+  <div class="step"><span class="num">1</span> User abre <code>kiban.pt/login</code> e insere email + password</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">2</span> Supabase Auth valida credenciais e retorna JWT token</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">3</span> Admin guarda token no browser — todos os pedidos incluem <code>Authorization: Bearer eyJ…</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">4</span> API valida o JWT com Supabase Auth. Se válido → retorna dados. Se não → 401 Unauthorized.</div>
+</div>
+
+<h3>Fluxo de um form submission</h3>
+<div class="flow-box">
+  <div class="step"><span class="num">1</span> Visitante preenche formulário no site (<code>solfil.pt</code>)</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">2</span> Frontend faz <code>POST /api/v1/forms/submit</code> com API Key</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">3</span> Express valida dados, cria entry no Supabase</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">4</span> Trigger do Supabase dispara webhook (<code>entry.created</code>)</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">5</span> API verifica <code>forms-config</code> para webhook URL. Se configurado → POST ao Make.com/Zapier → email enviado.</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">6</span> Lead visível no admin: <strong>Conteúdo &gt; Form Submissions</strong></div>
+</div>
+</div>
+
+<!-- ========== SECÇÃO 6 ========== -->
+<div class="section" id="s6">
+<h2>6. Setup Local</h2>
+
+<h3>Pré-requisitos</h3>
+<ul>
+  <li>Node.js >= 18</li>
+  <li>pnpm >= 8 (<code>npm install -g pnpm</code>)</li>
+  <li>Conta Supabase com projeto criado</li>
+</ul>
+
+<h3>Passos</h3>
+<pre><code># 1. Clonar o repo
+git clone https://github.com/SEMRUMO-LDA/kibanCMS.git
+cd kibanCMS
+
+# 2. Instalar dependências
+pnpm install
+
+# 3. Configurar variáveis de ambiente
+cp .env.example .env
+cp apps/api/.env.example apps/api/.env
+
+# Variáveis necessárias:
+# SUPABASE_URL=https://xxx.supabase.co
+# SUPABASE_ANON_KEY=eyJ...
+# SUPABASE_SERVICE_ROLE_KEY=eyJ...
+# VITE_SUPABASE_URL=https://xxx.supabase.co
+# VITE_SUPABASE_ANON_KEY=eyJ...
+
+# 4. Correr as migrações no Supabase
+# Abre o SQL Editor no dashboard Supabase e corre:
+# database/migrations/CLEAN_RESET.sql
+
+# 5. Iniciar em modo dev
+pnpm dev          # Tudo (admin + API)
+# ou separadamente:
+pnpm dev:admin    # Admin em http://localhost:5173
+pnpm dev:api      # API em http://localhost:5001</code></pre>
+
+<h3>Variáveis de Ambiente</h3>
+<table>
+  <tr><th>Variável</th><th>Onde</th><th>Descrição</th></tr>
+  <tr><td><code>SUPABASE_URL</code></td><td>API</td><td>URL do projeto Supabase</td></tr>
+  <tr><td><code>SUPABASE_ANON_KEY</code></td><td>API + Admin</td><td>Chave pública (anon)</td></tr>
+  <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>API</td><td>Chave secreta (bypassa RLS)</td></tr>
+  <tr><td><code>VITE_SUPABASE_URL</code></td><td>Admin</td><td>Mesmo URL (prefixo VITE_ para Vite)</td></tr>
+  <tr><td><code>VITE_SUPABASE_ANON_KEY</code></td><td>Admin</td><td>Mesmo anon key</td></tr>
+  <tr><td><code>PORT</code></td><td>API</td><td>Porta do servidor (default: 5001)</td></tr>
+  <tr><td><code>ALLOWED_ORIGINS</code></td><td>API</td><td>Domínios CORS (separados por vírgula)</td></tr>
+  <tr><td><code>GEMINI_API_KEY</code></td><td>API</td><td>Chave Google Gemini (para features IA)</td></tr>
+</table>
+</div>
+
+<!-- ========== SECÇÃO 7 ========== -->
+<div class="section" id="s7">
+<h2>7. Base de Dados (Supabase)</h2>
+
+<h3>Tabelas v1.0 (ativas)</h3>
+<table>
+  <tr><th>Tabela</th><th>Descrição</th></tr>
+  <tr><td><code>profiles</code></td><td>Users do CMS (ligados a auth.users)</td></tr>
+  <tr><td><code>collections</code></td><td>Tipos de conteúdo (blog, projects, etc.)</td></tr>
+  <tr><td><code>entries</code></td><td>Conteúdo real (posts, páginas, etc.)</td></tr>
+  <tr><td><code>media</code></td><td>Ficheiros carregados</td></tr>
+  <tr><td><code>api_keys</code></td><td>Chaves API para frontends</td></tr>
+  <tr><td><code>entry_revisions</code></td><td>Histórico de versões de entries</td></tr>
+  <tr><td><code>webhooks</code></td><td>Endpoints de webhook configurados</td></tr>
+  <tr><td><code>webhook_deliveries</code></td><td>Log de entregas de webhooks</td></tr>
+</table>
+
+<h3>Roles de utilizador</h3>
+<table>
+  <tr><th>Role</th><th>Permissões</th></tr>
+  <tr><td><code>super_admin</code></td><td>Acesso total, pode promover admins</td></tr>
+  <tr><td><code>admin</code></td><td>Gere collections, entries, users, webhooks</td></tr>
+  <tr><td><code>editor</code></td><td>Cria e edita entries e media</td></tr>
+  <tr><td><code>author</code></td><td>Cria e edita as próprias entries</td></tr>
+  <tr><td><code>viewer</code></td><td>Apenas leitura</td></tr>
+</table>
+
+<h3>RLS (Row Level Security)</h3>
+<p>A base de dados usa <strong>SECURITY DEFINER functions</strong> para evitar recursão:</p>
+<pre><code>is_admin_or_super()   → true se admin ou super_admin
+is_admin_or_editor()  → true se admin, super_admin ou editor
+has_content_role()    → true se admin, super_admin, editor ou author</code></pre>
+
+<div class="note">
+  <strong>Regra importante:</strong> A API usa <strong>service role key</strong> (bypassa RLS). A autorização é feita no código da API, não no RLS. O RLS protege apenas acessos diretos via Supabase client (admin frontend).
+</div>
+
+<h3>Correr migrações</h3>
+<p>Para uma instalação limpa, corre no <strong>Supabase SQL Editor</strong>:</p>
+<pre><code>database/migrations/CLEAN_RESET.sql</code></pre>
+<p>Este script:</p>
+<ul>
+  <li>Apaga tabelas v2 que não deviam existir</li>
+  <li>Recria as 8 tabelas v1.0</li>
+  <li>Configura 24 policies RLS</li>
+  <li>Cria triggers (auto-create profile, API key, revisions, webhooks)</li>
+  <li>Define o primeiro user como super_admin</li>
+</ul>
+</div>
+
+<!-- ========== SECÇÃO 8 ========== -->
+<div class="section" id="s8">
+<h2>8. API — Endpoints e Autenticação</h2>
+
+<h3>Autenticação</h3>
+<p>A API suporta dois métodos:</p>
+
+<p><strong>1. JWT (para o admin panel)</strong></p>
+<pre><code>Authorization: Bearer eyJhbGci...</code></pre>
+<p>O admin envia o token Supabase automaticamente.</p>
+
+<p><strong>2. API Key (para frontends)</strong></p>
+<pre><code>Authorization: Bearer kiban_live_xxxxxxxxxxxxx</code></pre>
+<p>Usada por websites cliente para ler/escrever conteúdo.</p>
+
+<h3>Endpoints principais</h3>
+
+<h4>Collections</h4>
+<table>
+  <tr><th>Método</th><th>Rota</th><th>Auth</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/api/v1/collections</code></td><td>JWT</td><td>Listar collections</td></tr>
+  <tr><td>GET</td><td><code>/api/v1/collections/:slug</code></td><td>JWT</td><td>Obter uma collection</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/collections</code></td><td>JWT (admin)</td><td>Criar collection</td></tr>
+  <tr><td>PUT</td><td><code>/api/v1/collections/:slug</code></td><td>JWT (admin)</td><td>Atualizar collection</td></tr>
+  <tr><td>DELETE</td><td><code>/api/v1/collections/:slug</code></td><td>JWT (admin)</td><td>Apagar collection</td></tr>
+</table>
+
+<h4>Entries (conteúdo)</h4>
+<table>
+  <tr><th>Método</th><th>Rota</th><th>Auth</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/api/v1/entries/:collection</code></td><td>API Key ou JWT</td><td>Listar entries</td></tr>
+  <tr><td>GET</td><td><code>/api/v1/entries/:collection/:slug</code></td><td>API Key ou JWT</td><td>Obter entry</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/entries/:collection</code></td><td>API Key ou JWT</td><td>Criar entry</td></tr>
+  <tr><td>PUT</td><td><code>/api/v1/entries/:collection/:slug</code></td><td>API Key ou JWT</td><td>Atualizar entry</td></tr>
+  <tr><td>DELETE</td><td><code>/api/v1/entries/:collection/:slug</code></td><td>API Key ou JWT</td><td>Apagar entry</td></tr>
+</table>
+
+<p><strong>Query params do GET list:</strong> <code>status</code>, <code>search</code>, <code>tags</code>, <code>limit</code> (max 500), <code>offset</code>, <code>sort</code>, <code>order</code></p>
+
+<h4>Media</h4>
+<table>
+  <tr><th>Método</th><th>Rota</th><th>Auth</th><th>Descrição</th></tr>
+  <tr><td>GET</td><td><code>/api/v1/media</code></td><td>API Key ou JWT</td><td>Listar media</td></tr>
+  <tr><td>GET</td><td><code>/api/v1/media/:id</code></td><td>API Key ou JWT</td><td>Obter media</td></tr>
+  <tr><td>POST</td><td><code>/api/v1/media/upload</code></td><td>API Key ou JWT</td><td>Upload (multipart ou base64)</td></tr>
+  <tr><td>PATCH</td><td><code>/api/v1/media/:id</code></td><td>API Key ou JWT</td><td>Atualizar metadata</td></tr>
+  <tr><td>DELETE</td><td><code>/api/v1/media/:id</code></td><td>API Key ou JWT</td><td>Apagar media</td></tr>
+</table>
+
+<h4>Forms</h4>
+<table>
+  <tr><th>Método</th><th>Rota</th><th>Auth</th><th>Descrição</th></tr>
+  <tr><td>POST</td><td><code>/api/v1/forms/submit</code></td><td>API Key</td><td>Submeter formulário</td></tr>
+  <tr><td>GET</td><td><code>/api/v1/forms/submissions</code></td><td>API Key ou JWT</td><td>Listar submissões</td></tr>
+</table>
+
+<h4>Outros</h4>
+<table>
+  <tr><th>Rota</th><th>Auth</th><th>Descrição</th></tr>
+  <tr><td><code>GET /health</code></td><td>Nenhuma</td><td>Health check</td></tr>
+  <tr><td><code>GET /api/v1/dashboard/stats</code></td><td>JWT</td><td>Métricas do dashboard</td></tr>
+  <tr><td><code>GET /api/v1/activity</code></td><td>JWT</td><td>Feed de atividade</td></tr>
+  <tr><td><code>GET /api/v1/redirects/resolve?path=/x</code></td><td>Nenhuma</td><td>Resolver redirect</td></tr>
+</table>
+
+<p><strong>Documentação completa:</strong> ver <code>docs/API_ENDPOINTS.md</code></p>
+
+<h3>Formato de resposta</h3>
+<pre><code>// Sucesso
+{
+  "data": { ... },
+  "meta": { "pagination": { "limit": 100, "offset": 0, "total": 42 } },
+  "timestamp": "2026-04-06T12:00:00.000Z"
+}
+
+// Erro
+{
+  "error": { "message": "Descrição", "status": 400, "timestamp": "..." }
+}</code></pre>
+
+<h3>Rate Limiting</h3>
+<ul>
+  <li><strong>Geral:</strong> 100 requests / 15 min por IP</li>
+  <li><strong>Forms:</strong> 20 requests / 15 min por IP</li>
+</ul>
+</div>
+
+<!-- ========== SECÇÃO 9 ========== -->
+<div class="section" id="s9">
+<h2>9. Admin UI — Frontend do CMS</h2>
+
+<h3>Routing</h3>
+<pre><code>/login                              → Login
+/onboarding                         → Wizard de setup (só 1x)
+/                                   → Dashboard
+/content                            → Lista de collections
+/content/builder                    → Criar collection (visual)
+/content/:slug/edit-collection      → Editar collection
+/content/:collectionSlug            → Lista de entries
+/content/:collectionSlug/new        → Nova entry
+/content/:collectionSlug/edit/:id   → Editar entry
+/media                              → Biblioteca de media
+/users                              → Gestão de utilizadores
+/settings                           → Definições (General, API, Media, Permalinks, Privacy, Email)
+/addons                             → Add-ons disponíveis
+/activity                           → Log de atividade</code></pre>
+
+<h3>Design System</h3>
+<p>O admin usa design tokens em <code>shared/styles/design-tokens.ts</code>:</p>
+<ul>
+  <li><strong>Cores:</strong> Escala de cinzentos + accent cyan (<code>#06B6D4</code>)</li>
+  <li><strong>Tipografia:</strong> Inter (sans), JetBrains Mono (code)</li>
+  <li><strong>Spacing:</strong> Base 8px (spacing[1] = 0.25rem, spacing[4] = 1rem, etc.)</li>
+  <li><strong>Shadows:</strong> xs a 2xl</li>
+  <li><strong>Animações:</strong> fast (150ms), normal (250ms), slow (350ms)</li>
+</ul>
+
+<h3>Atalhos de teclado</h3>
+<table>
+  <tr><th>Atalho</th><th>Ação</th></tr>
+  <tr><td><code>Cmd+K</code></td><td>Abrir Command Palette</td></tr>
+  <tr><td><code>Cmd+S</code></td><td>Guardar</td></tr>
+  <tr><td><code>Cmd+N</code></td><td>Novo</td></tr>
+</table>
+
+<h3>i18n</h3>
+<p>Suporta <strong>Português</strong> e <strong>Inglês</strong>. Muda em Settings. Persistido em localStorage (<code>kiban-locale</code>).</p>
+</div>
+
+<!-- ========== SECÇÃO 10 ========== -->
+<div class="section" id="s10">
+<h2>10. Sistema de Add-ons</h2>
+
+<p>Os add-ons são módulos que criam collections automaticamente quando instalados.</p>
+
+<h3>Add-ons disponíveis</h3>
+<table>
+  <tr><th>Add-on</th><th>ID</th><th>Collections criadas</th></tr>
+  <tr><td>Newsletter</td><td><code>newsletter</code></td><td><code>newsletter-subscribers</code>, <code>newsletter-campaigns</code></td></tr>
+  <tr><td>SEO</td><td><code>seo</code></td><td><code>seo-settings</code></td></tr>
+  <tr><td><strong>Forms</strong></td><td><code>forms</code></td><td><code>form-submissions</code>, <code>forms-config</code></td></tr>
+  <tr><td>Bookings</td><td><code>bookings</code></td><td><code>bookings</code>, <code>booking-services</code></td></tr>
+  <tr><td>Redirects</td><td><code>redirects</code></td><td><code>redirects</code></td></tr>
+  <tr><td>Automations</td><td><code>webhooks-visual</code></td><td><code>automations</code></td></tr>
+  <tr><td>AI Content</td><td><code>ai-content</code></td><td>(nenhuma — integrado no editor)</td></tr>
+</table>
+
+<h3>Como funciona</h3>
+<ol>
+  <li>Definidos em <code>apps/admin/src/config/addons-registry.ts</code></li>
+  <li>Cada addon tem collections com fields pré-definidos</li>
+  <li>Instalar = criar as collections via API</li>
+  <li>Desinstalar = apagar as collections (e dados!)</li>
+  <li>Dados ficam acessíveis via API normal (<code>/api/v1/entries/:collection</code>)</li>
+</ol>
+
+<h3>Criar um novo add-on</h3>
+<p>Adiciona ao <code>addons-registry.ts</code>:</p>
+<pre><code>const meuAddon: AddonDefinition = {
+  id: 'meu-addon',
+  name: 'Meu Addon',
+  description: 'Descrição curta',
+  longDescription: 'Descrição longa...',
+  icon: 'star',           // nome do ícone Lucide
+  color: '#3B82F6',
+  category: 'tools',      // marketing | content | commerce | tools
+  version: '1.0.0',
+  author: 'AORUBRO',
+  collections: [
+    {
+      name: 'Minha Collection',
+      slug: 'meu-addon-data',
+      description: 'Descrição',
+      type: 'custom',
+      fields: [
+        { id: 'titulo', name: 'titulo', label: 'Título', type: 'text', required: true },
+        { id: 'descricao', name: 'descricao', label: 'Descrição', type: 'textarea' },
+      ],
+    },
+  ],
+};
+
+export const ADDONS_REGISTRY: AddonDefinition[] = [
+  // ... existentes
+  meuAddon,
+];</code></pre>
+
+<p><strong>Tipos de campo disponíveis:</strong> <code>text</code>, <code>textarea</code>, <code>richtext</code>, <code>image</code>, <code>number</code>, <code>date</code>, <code>boolean</code>, <code>select</code>, <code>url</code>, <code>email</code></p>
+</div>
+
+<!-- ========== SECÇÃO 11 ========== -->
+<div class="section" id="s11">
+<h2>11. Criar um Frontend (Projeto Cliente)</h2>
+
+<h3>Passo 1: Obter API Key</h3>
+<p>No admin do CMS, vai a <strong>Settings &gt; API</strong> e copia a key (<code>kiban_live_...</code>).</p>
+
+<h3>Passo 2: Buscar conteúdo</h3>
+<pre><code>const API_URL = 'https://kiban.pt/api/v1';
+const API_KEY = 'kiban_live_xxxxx';
+
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${API_KEY}`,
+};
+
+// Listar blog posts publicados
+const response = await fetch(
+  `${API_URL}/entries/blog?status=published&sort=published_at&order=desc`,
+  { headers }
+);
+const { data: posts, meta } = await response.json();
+
+// Obter um post específico
+const post = await fetch(
+  `${API_URL}/entries/blog/welcome-to-kibancms`,
+  { headers }
+).then(r => r.json());
+
+// Listar projetos do portfólio
+const projects = await fetch(
+  `${API_URL}/entries/projects?status=published`,
+  { headers }
+).then(r => r.json());</code></pre>
+
+<h3>Passo 3: Estrutura dos dados</h3>
+<p>Cada entry tem esta estrutura:</p>
+<pre><code>{
+  id: string;              // UUID
+  title: string;           // Título
+  slug: string;            // URL-friendly (único na collection)
+  content: {               // Campos definidos no schema da collection
+    body: string;
+    excerpt: string;
+    featured_image: string;
+    // ... outros campos
+  };
+  status: 'draft' | 'review' | 'scheduled' | 'published' | 'archived';
+  published_at: string;    // ISO date (null se não publicado)
+  tags: string[];
+  meta: object;
+  created_at: string;
+  updated_at: string;
+  author: {                // Autor (join automático)
+    id: string;
+    full_name: string;
+    email: string;
+  };
+}</code></pre>
+
+<h3>Passo 4: Media (imagens)</h3>
+<p>As imagens são guardadas no Supabase Storage. O campo <code>featured_image</code> guarda o UUID do media.</p>
+<pre><code>// Obter detalhes do media (inclui URL público)
+const media = await fetch(
+  `${API_URL}/media/${entry.featured_image}`,
+  { headers }
+).then(r => r.json());
+
+// media.data.storage_path → path no Supabase Storage
+// Construir URL: SUPABASE_URL/storage/v1/object/public/media/STORAGE_PATH</code></pre>
+
+<h3>Exemplo: Next.js</h3>
+<pre><code>// app/blog/page.tsx
+export default async function BlogPage() {
+  const res = await fetch(
+    `${process.env.KIBAN_API_URL}/entries/blog?status=published`,
+    {
+      headers: { Authorization: `Bearer ${process.env.KIBAN_API_KEY}` },
+      next: { revalidate: 60 }, // ISR: revalida a cada 60s
+    }
+  );
+  const { data: posts } = await res.json();
+
+  return (
+    &lt;div&gt;
+      {posts.map(post =&gt; (
+        &lt;article key={post.id}&gt;
+          &lt;h2&gt;&lt;a href={`/blog/${post.slug}`}&gt;{post.title}&lt;/a&gt;&lt;/h2&gt;
+          &lt;p&gt;{post.excerpt}&lt;/p&gt;
+        &lt;/article&gt;
+      ))}
+    &lt;/div&gt;
+  );
+}</code></pre>
+
+<h3>Exemplo: HTML/JS simples</h3>
+<pre><code>&lt;div id="blog-posts"&gt;&lt;/div&gt;
+
+&lt;script&gt;
+  const API = 'https://kiban.pt/api/v1';
+  const KEY = 'kiban_live_xxxxx';
+
+  fetch(`${API}/entries/blog?status=published&limit=10`, {
+    headers: { 'Authorization': `Bearer ${KEY}` }
+  })
+  .then(r =&gt; r.json())
+  .then(({ data }) =&gt; {
+    document.getElementById('blog-posts').innerHTML = data.map(p =&gt;
+      `&lt;article&gt;
+        &lt;h2&gt;${p.title}&lt;/h2&gt;
+        &lt;p&gt;${p.content.excerpt || p.excerpt || ''}&lt;/p&gt;
+      &lt;/article&gt;`
+    ).join('');
+  });
+&lt;/script&gt;</code></pre>
+</div>
+
+<!-- ========== SECÇÃO 12 ========== -->
+<div class="section" id="s12">
+<h2>12. Formulários de Contacto (Forms Addon)</h2>
+
+<h3>Configuração</h3>
+<ol>
+  <li>Instala o addon <strong>Forms</strong> no admin (Add-ons → Forms → Install)</li>
+  <li>Configura notificações em <strong>Content &gt; Forms Config</strong> (criar entry):
+    <ul>
+      <li><code>form_name</code>: nome do form (ex: <code>contact</code>)</li>
+      <li><code>notification_emails</code>: emails separados por vírgula</li>
+      <li><code>webhook_url</code>: URL do serviço de email (Zapier, Make, Resend)</li>
+      <li><code>is_active</code>: true</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Integração no frontend</h3>
+<pre><code>async function submitForm(data) {
+  const response = await fetch('https://kiban.pt/api/v1/forms/submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer kiban_live_xxxxx',
+    },
+    body: JSON.stringify({
+      form_name: 'contact',       // obrigatório
+      name: data.name,
+      email: data.email,          // obrigatório
+      phone: data.phone,
+      subject: data.subject,
+      message: data.message,      // obrigatório
+      source_url: window.location.href,
+    }),
+  });
+
+  if (!response.ok) throw new Error('Erro ao enviar');
+  return response.json();
+  // → { success: true, data: { id, form, received_at } }
+}</code></pre>
+
+<h3>Fluxo completo</h3>
+<div class="flow-box">
+  <div class="step"><span class="num">1</span> Frontend envia <code>POST /api/v1/forms/submit</code> (com API Key)</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">2</span> API valida dados e cria entry em <code>form-submissions</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">3</span> API procura config em <code>forms-config</code> para este <code>form_name</code></div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">4</span> Se webhook configurado → POST ao serviço externo com dados + emails destino</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">5</span> Lead aparece no admin (<strong>Content &gt; Form Submissions</strong>)</div>
+  <div class="arrow">↓</div>
+  <div class="step"><span class="num">6</span> Serviço externo (Zapier/Make/Resend) envia email de notificação</div>
+</div>
+
+<h3>Configurar email via Make.com (gratuito)</h3>
+<ol>
+  <li>Cria conta em make.com</li>
+  <li>Novo Scenario: <strong>Webhooks &gt; Custom Webhook</strong> → <strong>Email &gt; Send an Email</strong></li>
+  <li>No webhook, configura os campos:
+    <ul>
+      <li>To: <code>{{notification.to}}</code></li>
+      <li>Subject: <code>{{notification.subject}}</code></li>
+      <li>Body: monta com <code>{{submission.name}}</code>, <code>{{submission.email}}</code>, <code>{{submission.message}}</code></li>
+    </ul>
+  </li>
+  <li>Copia o URL do webhook para a config do form no CMS</li>
+</ol>
+</div>
+
+<!-- ========== SECÇÃO 13 ========== -->
+<div class="section" id="s13">
+<h2>13. Webhooks</h2>
+
+<p>O CMS dispara webhooks automaticamente quando entries são criadas, atualizadas ou apagadas.</p>
+
+<h3>Eventos disponíveis</h3>
+<table>
+  <tr><th>Evento</th><th>Quando</th></tr>
+  <tr><td><code>entry.created</code></td><td>Nova entry criada</td></tr>
+  <tr><td><code>entry.updated</code></td><td>Entry atualizada</td></tr>
+  <tr><td><code>entry.deleted</code></td><td>Entry apagada</td></tr>
+  <tr><td><code>media.uploaded</code></td><td>Novo ficheiro carregado</td></tr>
+  <tr><td><code>webhook.test</code></td><td>Teste manual</td></tr>
+  <tr><td><code>form.submitted</code></td><td>Formulário submetido (via forms addon)</td></tr>
+</table>
+
+<h3>Payload do webhook</h3>
+<pre><code>{
+  "event": "entry.created",
+  "collection": "blog",
+  "entry": { /* dados completos da entry */ },
+  "timestamp": "2026-04-06T12:00:00.000Z"
+}</code></pre>
+
+<h3>Segurança</h3>
+<p>Cada webhook tem um <strong>secret</strong> (<code>whsec_...</code>). O CMS envia:</p>
+<ul>
+  <li>Header <code>X-Webhook-Signature: sha256=HMAC_HEX</code></li>
+  <li>Header <code>X-Webhook-Event: entry.created</code></li>
+  <li>Header <code>X-Webhook-ID: uuid</code></li>
+</ul>
+
+<p>Para verificar no teu serviço:</p>
+<pre><code>const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+  return signature === expected;
+}</code></pre>
+
+<h3>Retry</h3>
+<ul>
+  <li>3 tentativas com delays: 1s, 5s, 30s</li>
+  <li>Timeout: 30s por tentativa</li>
+  <li>Worker poll: cada 5s</li>
+</ul>
+</div>
+
+<!-- ========== SECÇÃO 14 ========== -->
+<div class="section" id="s14">
+<h2>14. Deploy em Produção</h2>
+
+<h3>Railway (método atual)</h3>
+<p>O deploy é <strong>automático</strong> — cada push para <code>main</code> faz trigger do build no Railway.</p>
+<pre><code>git push origin main
+# Railway deteta o push, faz build Docker, e deploy automático</code></pre>
+
+<p><strong>Verificar:</strong></p>
+<pre><code># Health check
+curl https://kiban.pt/health
+# → { "status": "ok", "version": "1.3.0", "mode": "production" }</code></pre>
+
+<h3>Docker manual</h3>
+<pre><code># Build
+docker-compose build
+
+# Run
+docker-compose up -d
+
+# Logs
+docker-compose logs -f kiban</code></pre>
+
+<h3>Variáveis de ambiente em produção</h3>
+<p>Configura no Railway (ou no <code>.env</code>):</p>
+<pre><code>NODE_ENV=production
+PORT=5001
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+ALLOWED_ORIGINS=https://solfil.pt,https://kiban.pt
+GEMINI_API_KEY=AIza... (opcional, para features IA)</code></pre>
+
+<h3>Atualizar base de dados</h3>
+<p>Se houver novas migrações:</p>
+<ol>
+  <li>Abre <strong>Supabase Dashboard &gt; SQL Editor</strong></li>
+  <li>Corre o ficheiro SQL da migração</li>
+  <li>Verifica com: <code>SELECT tablename, policyname FROM pg_policies WHERE schemaname = 'public'</code></li>
+</ol>
+</div>
+
+<!-- ========== SECÇÃO 15 ========== -->
+<div class="section" id="s15">
+<h2>15. Troubleshooting</h2>
+
+<h3>Erros comuns e onde procurar</h3>
+<table>
+  <tr><th>Sintoma</th><th>Onde investigar</th></tr>
+  <tr><td>Site não carrega</td><td>Railway → Logs (servidor caiu?)</td></tr>
+  <tr><td>401 Unauthorized</td><td>Supabase → api_keys (key válida?)</td></tr>
+  <tr><td>403 Forbidden</td><td>Supabase → profiles (role correto?)</td></tr>
+  <tr><td>500 Internal Error</td><td>Railway → Logs (ver stack trace)</td></tr>
+  <tr><td>Login não funciona</td><td>Supabase → Authentication → Users</td></tr>
+  <tr><td>Imagens não carregam</td><td>Supabase → Storage → media bucket</td></tr>
+  <tr><td>Deploy falhou</td><td>Railway → Deployments (ver build log)</td></tr>
+  <tr><td>Base de dados vazia</td><td>Supabase → SQL Editor (correr migração)</td></tr>
+</table>
+
+<h3>Erro 403 ao criar collections</h3>
+<p><strong>Causa:</strong> User não tem role admin/super_admin.<br>
+<strong>Fix:</strong> No Supabase → Table Editor → profiles, mudar <code>role</code> para <code>super_admin</code>.</p>
+
+<h3>Erro 401 Unauthorized</h3>
+<p><strong>Causa:</strong> API Key inválida ou expirada.<br>
+<strong>Fix:</strong> Verificar a key em Settings → API. Se não existe, correr migration <code>007_api_keys.sql</code>.</p>
+
+<h3>Entries não aparecem no frontend</h3>
+<p><strong>Causa:</strong> Status não é <code>published</code>, ou API Key errada.<br>
+<strong>Fix:</strong> Verificar <code>?status=published</code> no request, e que a key está correta.</p>
+
+<h3>Onboarding fica em loop</h3>
+<p><strong>Causa:</strong> <code>onboarding_completed</code> não foi marcado como true.<br>
+<strong>Fix:</strong> No Supabase → profiles, mudar <code>onboarding_completed</code> para <code>true</code>.</p>
+
+<h3>Webhook não dispara</h3>
+<p><strong>Causa:</strong> Webhook desativado, ou URL inválido.<br>
+<strong>Fix:</strong> Verificar na tabela <code>webhooks</code> se <code>enabled = true</code>. Ver <code>webhook_deliveries</code> para erros.</p>
+
+<h3>Build Docker falha</h3>
+<p><strong>Causa:</strong> Dependências desatualizadas ou node_modules corrompidos.<br>
+<strong>Fix:</strong> <code>pnpm clean && pnpm install && docker-compose build --no-cache</code></p>
+
+<h3>Rate limit atingido</h3>
+<p><strong>Causa:</strong> Mais de 100 req/15min (geral) ou 20 req/15min (forms).<br>
+<strong>Fix:</strong> Esperar 15 minutos, ou aumentar o limite em <code>server.ts</code>.</p>
+</div>
+
+<!-- ========== SECÇÃO 16 ========== -->
+<div class="section" id="s16">
+<h2>16. Checklist de Novo Programador</h2>
+
+<p>Antes de começar a trabalhar, certifica-te que tens:</p>
+
+<ul class="checklist">
+  <li><strong>GitHub</strong> — conta adicionada como collaborator ao repo SEMRUMO-LDA/kibanCMS</li>
+  <li><strong>Railway</strong> — acesso ao projeto kibanCMS no dashboard</li>
+  <li><strong>Supabase</strong> — acesso ao dashboard da organização SEMRUMO-LDA</li>
+  <li><strong>CMS Admin</strong> — conta criada em kiban.pt com role admin ou super_admin</li>
+  <li><strong>Ficheiro .env</strong> — cópia do <code>.env.example</code> preenchido com as chaves reais</li>
+  <li><strong>Node.js 18+</strong> e <strong>pnpm 8+</strong> instalados na máquina</li>
+  <li><strong>Git</strong> configurado com SSH ou HTTPS para o GitHub</li>
+</ul>
+
+<div class="info">
+  <strong>📬 Pedir acessos:</strong> Contacta o <strong>Tiago Pacheco</strong> (responsável técnico) para ser adicionado ao GitHub (organização SEMRUMO-LDA), convidado para o Railway (projeto kibanCMS), convidado para o Supabase (organização SEMRUMO-LDA), e receber as variáveis de ambiente para o <code>.env</code> local.
+</div>
+</div>
+
+<!-- ========== SECÇÃO 17 ========== -->
+<div class="section" id="s17">
+<h2>17. Links Rápidos</h2>
+
+<table>
+  <tr><th>Recurso</th><th>URL</th></tr>
+  <tr><td>CMS Admin (produção)</td><td><a href="https://kiban.pt">https://kiban.pt</a></td></tr>
+  <tr><td>API Health Check</td><td><a href="https://kiban.pt/health">https://kiban.pt/health</a></td></tr>
+  <tr><td>GitHub Repo</td><td><a href="https://github.com/SEMRUMO-LDA/kibanCMS">https://github.com/SEMRUMO-LDA/kibanCMS</a></td></tr>
+  <tr><td>Railway Dashboard</td><td><a href="https://railway.app">https://railway.app</a></td></tr>
+  <tr><td>Supabase Dashboard</td><td><a href="https://supabase.com/dashboard">https://supabase.com/dashboard</a></td></tr>
+  <tr><td>Guia do Programador</td><td><code>docs/DEVELOPER_GUIDE.md</code></td></tr>
+  <tr><td>Endpoints da API</td><td><code>docs/API_ENDPOINTS.md</code></td></tr>
+  <tr><td>Setup Email Forms</td><td><code>docs/FORMS_EMAIL_SETUP.md</code></td></tr>
+</table>
+</div>
+
+<hr>
+
+<div style="text-align: center; padding: 30px 0; color: #6b7280;">
+  <p><strong>Repositório:</strong> https://github.com/SEMRUMO-LDA/kibanCMS</p>
+  <p><strong>Agência:</strong> AORUBRO — dev@kiban.pt</p>
+  <p><strong>Responsável técnico:</strong> Tiago Pacheco</p>
+  <p style="margin-top: 20px; font-size: 9pt;">kibanCMS v1.3.0 — Abril 2026</p>
+</div>
+
+</body>
+</html>

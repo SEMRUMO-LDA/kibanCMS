@@ -22,6 +22,7 @@ import bookingsRouter from './routes/bookings.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import authRouter from './routes/auth.js';
+import snapshotsRouter from './routes/snapshots.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
@@ -118,6 +119,36 @@ const formsLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// AI route rate limit — protect external API quotas (Gemini, etc.)
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 AI requests per minute per IP
+  message: {
+    error: {
+      message: 'Too many AI requests. Please try again in a moment.',
+      status: 429,
+      timestamp: new Date().toISOString(),
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Sensitive admin routes — prevent enumeration attacks
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 60, // 60 requests per 15 min per IP
+  message: {
+    error: {
+      message: 'Too many requests. Please try again later.',
+      status: 429,
+      timestamp: new Date().toISOString(),
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Health check endpoint (no auth required)
 app.get('/health', (req, res) => {
   const ctx = tenantStore.getStore();
@@ -154,13 +185,13 @@ app.use('/api/v1/auth', authRouter);
 
 // API routes
 // Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)
-app.use('/api/v1/collections', validateJWT, collectionsRouter);
-app.use('/api/v1/users', validateJWT, usersRouter);
+app.use('/api/v1/collections', adminLimiter, validateJWT, collectionsRouter);
+app.use('/api/v1/users', adminLimiter, validateJWT, usersRouter);
 app.use('/api/v1/entries', validateAny, entriesRouter);
 app.use('/api/v1/media', validateAny, mediaRouter);
 app.use('/api/v1/webhooks', validateAny, webhooksRouter);
-app.use('/api/v1/ai', validateJWT, aiRouter);
-app.use('/api/v1/ai', validateJWT, aiContentRouter);
+app.use('/api/v1/ai', aiLimiter, validateJWT, aiRouter);
+app.use('/api/v1/ai', aiLimiter, validateJWT, aiContentRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
@@ -169,6 +200,7 @@ app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); /
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
 app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend)
+app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
 app.get('/api/v1/i18n/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');

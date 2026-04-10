@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { validateContent } from '../lib/validate-content.js';
 import { audit } from '../lib/audit.js';
+import { LRUCache } from '../lib/lru-cache.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -21,14 +22,12 @@ interface CachedCollection {
   name: string;
   slug: string;
   fields: any[];
-  fetchedAt: number;
 }
-const collectionCache = new Map<string, CachedCollection>();
-const CACHE_TTL = 60_000; // 60 seconds
+const collectionCache = new LRUCache<CachedCollection>({ maxSize: 200, ttlMs: 60_000 });
 
 async function getCollection(slug: string): Promise<CachedCollection | null> {
   const cached = collectionCache.get(slug);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached;
+  if (cached) return cached;
 
   const { data, error } = await supabase
     .from('collections')
@@ -38,7 +37,7 @@ async function getCollection(slug: string): Promise<CachedCollection | null> {
 
   if (error || !data) return null;
 
-  const entry: CachedCollection = { ...data, fields: data.fields || [], fetchedAt: Date.now() };
+  const entry: CachedCollection = { ...data, fields: data.fields || [] };
   collectionCache.set(slug, entry);
   return entry;
 }
@@ -365,7 +364,7 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
 
     const { data: existing } = await supabase
       .from('entries')
-      .select('id, author_id')
+      .select('id, author_id, version')
       .eq('collection_id', collection.id)
       .eq('slug', entrySlug)
       .single();
@@ -382,6 +381,9 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
         error: { message: 'Forbidden: You can only update your own entries', status: 403, timestamp: new Date().toISOString() },
       });
     }
+
+    // Optimistic locking — client must send the version it last fetched
+    const clientVersion = req.body.version as number | undefined;
 
     const updateData: Record<string, any> = {};
     const allowedFields = ['title', 'content', 'excerpt', 'status', 'tags', 'meta', 'featured_image'];
@@ -436,14 +438,33 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: entry, error } = await supabase
+    // Build update query with optimistic locking when client sends version
+    let updateQuery = supabase
       .from('entries')
       .update(updateData)
-      .eq('id', existing.id)
+      .eq('id', existing.id);
+
+    if (clientVersion !== undefined) {
+      updateQuery = updateQuery.eq('version', clientVersion);
+    }
+
+    const { data: entry, error } = await updateQuery
       .select(ENTRY_SELECT_COMPACT)
       .single();
 
     if (error) {
+      // Optimistic locking conflict — version mismatch (row matched by id but not by version)
+      if (error.code === 'PGRST116' && clientVersion !== undefined) {
+        return res.status(409).json({
+          error: {
+            message: 'Conflict: this entry was modified by another user. Please refresh and try again.',
+            status: 409,
+            currentVersion: existing.version,
+            yourVersion: clientVersion,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
       if (error.code === '23505') {
         return res.status(409).json({
           error: { message: 'An entry with this slug already exists', status: 409, timestamp: new Date().toISOString() },

@@ -5,6 +5,46 @@ import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
 
+// ============================================
+// SSRF PROTECTION — block internal/private URLs
+// ============================================
+function isPrivateUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname.toLowerCase();
+
+    // Block localhost variants
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
+      return true;
+    }
+
+    // Block private IPv4 ranges (10.x, 172.16-31.x, 192.168.x)
+    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4Match) {
+      const [, a, b] = ipv4Match.map(Number);
+      if (a === 10) return true;                          // 10.0.0.0/8
+      if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+      if (a === 192 && b === 168) return true;            // 192.168.0.0/16
+      if (a === 169 && b === 254) return true;            // 169.254.0.0/16 (link-local / cloud metadata)
+      if (a === 0) return true;                           // 0.0.0.0/8
+    }
+
+    // Block IPv6 loopback and link-local
+    if (hostname.startsWith('[::1]') || hostname.startsWith('[fe80:') || hostname.startsWith('[fc') || hostname.startsWith('[fd')) {
+      return true;
+    }
+
+    // Block common cloud metadata endpoints
+    if (hostname === 'metadata.google.internal' || hostname === 'metadata.google.com') {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return true; // Invalid URL = block
+  }
+}
+
 // Fields to return (never expose secret in list/get)
 const WEBHOOK_SELECT = 'id, name, url, events, collections, enabled, total_deliveries, failed_deliveries, last_delivery_at, last_error, profile_id, created_at, updated_at';
 
@@ -54,12 +94,18 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Validate URL
+    // Validate URL (protocol + SSRF protection)
     try {
       const webhookUrl = new URL(url);
       if (!['http:', 'https:'].includes(webhookUrl.protocol)) {
         res.status(400).json({
           error: { message: 'URL must use http or https protocol', status: 400, timestamp: new Date().toISOString() },
+        });
+        return;
+      }
+      if (isPrivateUrl(url)) {
+        res.status(400).json({
+          error: { message: 'Webhook URLs must not point to internal or private addresses', status: 400, timestamp: new Date().toISOString() },
         });
         return;
       }
@@ -197,13 +243,19 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Validate URL if changing
+    // Validate URL if changing (protocol + SSRF protection)
     if (updateData.url) {
       try {
         const webhookUrl = new URL(updateData.url);
         if (!['http:', 'https:'].includes(webhookUrl.protocol)) {
           res.status(400).json({
             error: { message: 'URL must use http or https', status: 400, timestamp: new Date().toISOString() },
+          });
+          return;
+        }
+        if (isPrivateUrl(updateData.url)) {
+          res.status(400).json({
+            error: { message: 'Webhook URLs must not point to internal or private addresses', status: 400, timestamp: new Date().toISOString() },
           });
           return;
         }

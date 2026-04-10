@@ -31,10 +31,7 @@ async function apiRequest<T = any>(
     }
 
     const url = `${API_URL}${endpoint}`;
-    console.log('[API Client] Request:', options.method || 'GET', url);
-    console.log('[API Client] Token preview:', token.substring(0, 20) + '...');
 
-    console.log('[API Client] Sending fetch...');
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -44,11 +41,8 @@ async function apiRequest<T = any>(
       },
     });
 
-    console.log('[API Client] Response:', response.status, response.statusText);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[API Client] Error response:', errorText);
 
       let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
       try {
@@ -62,7 +56,6 @@ async function apiRequest<T = any>(
     }
 
     const responseData = await response.json();
-    console.log('[API Client] Success:', { dataType: typeof responseData });
 
     // API returns { data: T, meta?: any, timestamp: string }
     // Extract the actual data

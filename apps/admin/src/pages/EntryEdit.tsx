@@ -123,6 +123,7 @@ interface Entry {
   slug: string;
   content: EntryData;
   status: 'draft' | 'published' | 'archived';
+  version?: number;
 }
 
 export function EntryEdit() {
@@ -208,10 +209,31 @@ export function EntryEdit() {
 
     try {
       if (isEditMode && entry && collectionSlug) {
-        const { error } = await api.updateEntry(collectionSlug, entry.slug, {
+        const { data: result, error } = await api.updateEntry(collectionSlug, entry.slug, {
           title, slug, content: data, status,
+          version: entry.version, // Optimistic locking — server rejects if version changed
         });
-        if (error) throw new Error(error);
+        if (error) {
+          // Conflict: another user modified this entry since we loaded it
+          if (error.includes('Conflict') || error.includes('409')) {
+            const reload = confirm(
+              'This entry was modified by another user since you opened it.\n\n' +
+              'Click OK to reload the latest version (your unsaved changes will be lost), ' +
+              'or Cancel to keep editing (you will need to copy your changes and reload manually).'
+            );
+            if (reload) {
+              window.location.reload();
+              return;
+            }
+            setSaveStatus('idle');
+            return;
+          }
+          throw new Error(error);
+        }
+        // Update local version to match server after successful save
+        if (result?.version) {
+          setEntry(prev => prev ? { ...prev, version: result.version } : prev);
+        }
         setIsDirty(false);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);

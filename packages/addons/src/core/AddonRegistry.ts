@@ -422,11 +422,13 @@ export class AddonRegistry {
     const { ContactFormAddon } = require('../addons/contact-form');
     const { NewsletterAddon } = require('../addons/newsletter');
     const { SEOMetaAddon } = require('../addons/seo-meta');
+    const { AccessibilityAddon } = require('../addons/accessibility');
 
     // Register them
     this.register(CookieNoticeAddon);
     this.register(ContactFormAddon);
     this.register(NewsletterAddon);
     this.register(SEOMetaAddon);
+    this.register(AccessibilityAddon);
   }
 }

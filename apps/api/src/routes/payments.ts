@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from 'express';
 import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { LRUCache } from '../lib/lru-cache.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -80,8 +81,8 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
   return null;
 }
 
-// Stripe clients cached by secret key (supports config changes without restart)
-const stripeClients = new Map<string, any>();
+// Stripe clients cached by secret key (LRU — evicts stale clients on key rotation)
+const stripeClients = new LRUCache<any>({ maxSize: 20, ttlMs: 24 * 60 * 60_000 }); // 24h TTL
 
 function getStripeClient(secretKey: string): any {
   let client = stripeClients.get(secretKey);

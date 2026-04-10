@@ -312,52 +312,114 @@
     document.body.appendChild(widgetEl);
   }
 
+  // ── Background Luminance Detection ──
+  function sampleBackgroundLuminance(el) {
+    // Walk up the DOM to find the effective background color behind the widget
+    var r = 255, g = 255, b = 255; // default to white (assume light)
+    var chain = [];
+    var node = el.parentElement;
+    while (node && node !== document) {
+      chain.unshift(node);
+      node = node.parentElement;
+    }
+    // Also sample the body/html computed bg
+    chain.unshift(document.documentElement);
+    if (document.body && chain.indexOf(document.body) === -1) chain.splice(1, 0, document.body);
+
+    for (var i = 0; i < chain.length; i++) {
+      var bg = getComputedStyle(chain[i]).backgroundColor;
+      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') continue;
+      var match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (match) {
+        r = parseInt(match[1], 10);
+        g = parseInt(match[2], 10);
+        b = parseInt(match[3], 10);
+      }
+    }
+    // Relative luminance (perceived brightness 0-255)
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+
+  function getMinimalTheme(el) {
+    var lum = sampleBackgroundLuminance(el);
+    var isLight = lum > 140;
+    return {
+      isLight: isLight,
+      circleBg:     isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)',
+      pillBg:       isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)',
+      text:         isLight ? '#1a1a1a' : '#fff',
+      textMuted:    isLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.5)',
+      activeBg:     isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.18)',
+      shadow:       isLight
+        ? '0 4px 24px rgba(0,0,0,0.08),inset 0 0 0 1px rgba(0,0,0,0.08)'
+        : '0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15)',
+    };
+  }
+
   function renderMinimalWidget() {
     var isExpanded = false;
-    var glass = 'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
-      'box-shadow:0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15);' +
-      'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;' +
-      'cursor:pointer;';
 
     var circleEl = document.createElement('div');
     circleEl.className = 'kiban-circle';
-    circleEl.style.cssText = glass +
-      'background:rgba(255,255,255,0.12);' +
-      'width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;' +
-      'color:#fff;text-transform:uppercase;font-weight:600;font-size:11px;' +
-      'transition:opacity 0.3s ease,transform 0.3s ease;';
     circleEl.textContent = (currentLang || defaultLang).toUpperCase();
 
     var pillEl = document.createElement('div');
     pillEl.className = 'kiban-pill';
-    pillEl.style.cssText = glass +
-      'background:rgba(255,255,255,0.12);' +
-      'display:none;align-items:center;gap:2px;padding:4px;border-radius:999px;';
 
-    var pillHtml = '';
     languages.forEach(function (lang) {
-      var isActive = lang.code === (currentLang || defaultLang);
-      pillHtml += '<a href="#" data-lang="' + lang.code + '" style="' +
-        'text-decoration:none;padding:8px 14px;border-radius:999px;' +
-        'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;white-space:nowrap;' +
-        'color:' + (isActive ? '#fff' : 'rgba(255,255,255,0.5)') + ';' +
-        'background:' + (isActive ? 'rgba(255,255,255,0.18)' : 'transparent') + ';">' +
-        lang.code + '</a>';
+      var a = document.createElement('a');
+      a.href = '#';
+      a.setAttribute('data-lang', lang.code);
+      a.textContent = lang.code;
+      pillEl.appendChild(a);
     });
-    pillEl.innerHTML = pillHtml;
 
     widgetEl.appendChild(circleEl);
     widgetEl.appendChild(pillEl);
 
+    // Apply theme based on background luminance
+    function applyTheme() {
+      var t = getMinimalTheme(widgetEl);
+
+      var glassBase = 'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
+        'box-shadow:' + t.shadow + ';' +
+        'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;' +
+        'cursor:pointer;';
+
+      circleEl.style.cssText = glassBase +
+        'background:' + t.circleBg + ';' +
+        'width:44px;height:44px;border-radius:50%;display:' + (isExpanded ? 'none' : 'flex') + ';align-items:center;justify-content:center;' +
+        'color:' + t.text + ';text-transform:uppercase;font-weight:600;font-size:11px;' +
+        'transition:opacity 0.3s ease,transform 0.3s ease;';
+
+      pillEl.style.cssText = glassBase +
+        'background:' + t.pillBg + ';' +
+        'display:' + (isExpanded ? 'flex' : 'none') + ';align-items:center;gap:2px;padding:4px;border-radius:999px;';
+
+      pillEl.querySelectorAll('a[data-lang]').forEach(function (a) {
+        var isActive = a.getAttribute('data-lang') === (currentLang || defaultLang);
+        a.style.cssText =
+          'text-decoration:none;padding:8px 14px;border-radius:999px;' +
+          'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;white-space:nowrap;' +
+          'color:' + (isActive ? t.text : t.textMuted) + ';' +
+          'background:' + (isActive ? t.activeBg : 'transparent') + ';';
+      });
+    }
+
+    applyTheme();
+
+    // Re-check on scroll/resize since background can change
+    var debounceTimer;
+    function debouncedApply() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applyTheme, 150);
+    }
+    window.addEventListener('scroll', debouncedApply, { passive: true });
+    window.addEventListener('resize', debouncedApply, { passive: true });
+
     function toggle() {
       isExpanded = !isExpanded;
-      if (isExpanded) {
-        circleEl.style.display = 'none';
-        pillEl.style.display = 'flex';
-      } else {
-        circleEl.style.display = 'flex';
-        pillEl.style.display = 'none';
-      }
+      applyTheme();
     }
 
     circleEl.addEventListener('click', toggle);
@@ -366,11 +428,7 @@
       a.addEventListener('click', function (e) {
         e.preventDefault();
         onLanguageChange(a.getAttribute('data-lang'));
-        pillEl.querySelectorAll('a[data-lang]').forEach(function (link) {
-          var active = link.getAttribute('data-lang') === currentLang;
-          link.style.color = active ? '#fff' : 'rgba(255,255,255,0.5)';
-          link.style.background = active ? 'rgba(255,255,255,0.18)' : 'transparent';
-        });
+        applyTheme();
         setTimeout(toggle, 200);
       });
     });
@@ -381,23 +439,116 @@
   }
 
   function renderFlagsWidget() {
-    var html = '<div style="display:flex;gap:6px;background:#fff;padding:8px 12px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.12);border:1px solid rgba(0,0,0,0.08);">';
-    languages.forEach(function (lang) {
-      var isActive = lang.code === (currentLang || defaultLang);
-      html += '<button data-lang="' + lang.code + '" style="background:none;border:' + (isActive ? '2px solid #06b6d4' : '2px solid transparent') + ';border-radius:8px;padding:4px 8px;cursor:pointer;font-size:20px;line-height:1;transition:all 0.15s;opacity:' + (isActive ? '1' : '0.6') + ';" title="' + lang.name + '">' + flagEmoji(lang.flag || lang.code) + '</button>';
-    });
-    html += '</div>';
-    widgetEl.innerHTML = html;
+    var isExpanded = false;
+    var activeLang = currentLang || defaultLang;
 
-    widgetEl.querySelectorAll('button[data-lang]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        onLanguageChange(btn.getAttribute('data-lang'));
-        widgetEl.querySelectorAll('button[data-lang]').forEach(function (b) {
-          var active = b.getAttribute('data-lang') === currentLang;
-          b.style.borderColor = active ? '#06b6d4' : 'transparent';
-          b.style.opacity = active ? '1' : '0.6';
-        });
+    function getFlag(code) {
+      var lang = languages.find(function (l) { return l.code === code; });
+      return flagEmoji(lang ? (lang.flag || lang.code) : code);
+    }
+
+    // Container
+    var container = document.createElement('div');
+    container.style.cssText = 'display:flex;align-items:center;gap:0;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+
+    // Active flag button (always visible)
+    var activeBtn = document.createElement('button');
+    activeBtn.className = 'kiban-flag-active';
+    activeBtn.style.cssText = 'background:#fff;border:none;border-radius:50%;width:46px;height:46px;' +
+      'display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;line-height:1;' +
+      'box-shadow:0 2px 12px rgba(0,0,0,0.12);transition:transform 0.2s ease,box-shadow 0.2s ease;position:relative;z-index:2;';
+    activeBtn.textContent = getFlag(activeLang);
+    activeBtn.title = 'Change language';
+
+    activeBtn.addEventListener('mouseenter', function () { activeBtn.style.transform = 'scale(1.08)'; });
+    activeBtn.addEventListener('mouseleave', function () { if (!isExpanded) activeBtn.style.transform = 'scale(1)'; });
+
+    // Expandable tray (hidden by default)
+    var tray = document.createElement('div');
+    tray.className = 'kiban-flag-tray';
+    tray.style.cssText = 'display:flex;align-items:center;gap:2px;background:#fff;' +
+      'border-radius:23px;padding:4px 6px;margin-left:-8px;padding-left:14px;' +
+      'box-shadow:0 2px 12px rgba(0,0,0,0.12);' +
+      'max-width:0;overflow:hidden;opacity:0;' +
+      'transition:max-width 0.25s ease,opacity 0.2s ease,padding 0.25s ease;';
+
+    // Build other language buttons
+    languages.forEach(function (lang) {
+      if (lang.code === activeLang) return;
+      var btn = document.createElement('button');
+      btn.setAttribute('data-lang', lang.code);
+      btn.style.cssText = 'background:none;border:none;border-radius:50%;width:36px;height:36px;' +
+        'display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;' +
+        'opacity:0.7;transition:opacity 0.15s,transform 0.15s,background 0.15s;flex-shrink:0;';
+      btn.textContent = getFlag(lang.code);
+      btn.title = lang.name;
+
+      btn.addEventListener('mouseenter', function () { btn.style.opacity = '1'; btn.style.background = 'rgba(0,0,0,0.05)'; });
+      btn.addEventListener('mouseleave', function () { btn.style.opacity = '0.7'; btn.style.background = 'none'; });
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        onLanguageChange(lang.code);
+        activeLang = lang.code;
+        activeBtn.textContent = getFlag(lang.code);
+        collapse();
+        setTimeout(function () { rebuildTray(); }, 250);
       });
+      tray.appendChild(btn);
+    });
+
+    container.appendChild(activeBtn);
+    container.appendChild(tray);
+    widgetEl.appendChild(container);
+
+    function expand() {
+      isExpanded = true;
+      tray.style.maxWidth = (languages.length * 44) + 'px';
+      tray.style.opacity = '1';
+      tray.style.padding = '4px 6px 4px 14px';
+      activeBtn.style.transform = 'scale(1.08)';
+    }
+
+    function collapse() {
+      isExpanded = false;
+      tray.style.maxWidth = '0';
+      tray.style.opacity = '0';
+      tray.style.padding = '4px 0 4px 0';
+      activeBtn.style.transform = 'scale(1)';
+    }
+
+    function rebuildTray() {
+      tray.innerHTML = '';
+      languages.forEach(function (lang) {
+        if (lang.code === activeLang) return;
+        var btn = document.createElement('button');
+        btn.setAttribute('data-lang', lang.code);
+        btn.style.cssText = 'background:none;border:none;border-radius:50%;width:36px;height:36px;' +
+          'display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;line-height:1;' +
+          'opacity:0.7;transition:opacity 0.15s,transform 0.15s,background 0.15s;flex-shrink:0;';
+        btn.textContent = getFlag(lang.code);
+        btn.title = lang.name;
+
+        btn.addEventListener('mouseenter', function () { btn.style.opacity = '1'; btn.style.background = 'rgba(0,0,0,0.05)'; });
+        btn.addEventListener('mouseleave', function () { btn.style.opacity = '0.7'; btn.style.background = 'none'; });
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          onLanguageChange(lang.code);
+          activeLang = lang.code;
+          activeBtn.textContent = getFlag(lang.code);
+          collapse();
+          setTimeout(function () { rebuildTray(); }, 250);
+        });
+        tray.appendChild(btn);
+      });
+    }
+
+    activeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (isExpanded) collapse(); else expand();
+    });
+
+    document.addEventListener('click', function (e) {
+      if (isExpanded && !widgetEl.contains(e.target)) collapse();
     });
   }
 

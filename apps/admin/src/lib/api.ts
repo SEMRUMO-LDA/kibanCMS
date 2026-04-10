@@ -216,6 +216,23 @@ class ApiClient {
     return this.request<any>('POST', '/media-intel/check-duplicate', { hash, filename });
   }
 
+  // ── Snapshots ──
+  async getSnapshots(collectionSlug: string) {
+    return this.request<any[]>('GET', `/snapshots/${collectionSlug}`);
+  }
+
+  async createSnapshot(collectionSlug: string, data: { name: string; description?: string }) {
+    return this.request<any>('POST', `/snapshots/${collectionSlug}`, data);
+  }
+
+  async rollbackSnapshot(collectionSlug: string, snapshotId: string) {
+    return this.request<any>('POST', `/snapshots/${collectionSlug}/${snapshotId}/rollback`, {}, 30000);
+  }
+
+  async deleteSnapshot(collectionSlug: string, snapshotId: string) {
+    return this.request<any>('DELETE', `/snapshots/${collectionSlug}/${snapshotId}`);
+  }
+
   // ── Dashboard Stats ──
   async getDashboardStats() {
     return this.request<any>('GET', '/dashboard/stats');

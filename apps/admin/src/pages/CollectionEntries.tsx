@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Camera } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
+import { SnapshotManager } from '../components/SnapshotManager';
 
 // ============================================
 // ANIMATIONS
@@ -780,6 +781,7 @@ export const CollectionEntries = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [collectionName, setCollectionName] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showSnapshots, setShowSnapshots] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string>('');
@@ -994,6 +996,10 @@ export const CollectionEntries = () => {
           </TitleSection>
         </HeaderLeft>
         <div style={{ display: 'flex', gap: spacing[3], alignItems: 'center' }}>
+          <CodeButton onClick={() => setShowSnapshots(true)}>
+            <Camera size={18} />
+            Snapshots
+          </CodeButton>
           {entries.length > 0 && (
             <CodeButton onClick={handleExportCSV}>
               <Download size={18} />
@@ -1296,6 +1302,14 @@ export const CollectionEntries = () => {
             </ModalFooter>
           </ModalContent>
         </Modal>
+      )}
+      {showSnapshots && collectionSlug && (
+        <SnapshotManager
+          collectionSlug={collectionSlug}
+          collectionName={collectionName || collectionSlug}
+          onClose={() => setShowSnapshots(false)}
+          onRollback={() => window.location.reload()}
+        />
       )}
     </Container>
   );

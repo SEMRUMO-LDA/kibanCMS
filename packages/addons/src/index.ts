@@ -11,3 +11,4 @@ export * from './addons/cookie-notice';
 export * from './addons/contact-form';
 export * from './addons/newsletter';
 export * from './addons/seo-meta';
+export * from './addons/accessibility';

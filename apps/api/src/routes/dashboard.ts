@@ -23,14 +23,20 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       supabase.from('entries').select('id, title, status, created_at, updated_at, author_id').order('updated_at', { ascending: false }).limit(8),
     ]);
 
-    // Collection stats — entry count per collection
-    const { data: allEntries } = await supabase.from('entries').select('collection_id');
-    const countMap = new Map<string, number>();
-    (allEntries || []).forEach(e => {
-      countMap.set(e.collection_id, (countMap.get(e.collection_id) || 0) + 1);
-    });
-
+    // Collection stats — count per collection using head-only queries (no row data fetched)
     const cols = colsR.data || [];
+    const countResults = await Promise.all(
+      cols.map(async (col: any) => {
+        const { count } = await supabase
+          .from('entries')
+          .select('id', { count: 'exact', head: true })
+          .eq('collection_id', col.id);
+        return { collection_id: col.id, count: count || 0 };
+      })
+    );
+    const countMap = new Map<string, number>();
+    countResults.forEach(e => countMap.set(e.collection_id, e.count));
+
     const colMap = new Map(cols.map(c => [c.id, c.slug]));
 
     const collectionStats = cols.map(col => ({
