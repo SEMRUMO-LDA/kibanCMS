@@ -24,6 +24,9 @@ build/
 .env.*
 !.env.example
 
+# Client configs (contain secrets)
+clients/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
