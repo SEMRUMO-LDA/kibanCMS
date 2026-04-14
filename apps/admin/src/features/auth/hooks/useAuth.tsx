@@ -8,6 +8,7 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   signOut: async () => {},
+  refreshAuth: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -143,6 +145,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [fetchProfile]);
 
+  // ── Refresh auth — re-read session from the current Supabase client ──
+  // Called by Login after initSupabaseWithConfig + setSession so the
+  // AuthProvider picks up the session even if the onAuthStateChange
+  // listener was bound to a previous (or null) client instance.
+  const refreshAuth = useCallback(async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setSession(data.session);
+        setUser(data.session.user);
+        setLoading(false);
+        if (profileFetchedForId.current !== data.session.user.id) {
+          profileFetchedForId.current = data.session.user.id;
+          const p = await fetchProfile(data.session.user.id);
+          if (p) setProfile(p);
+        }
+      }
+    } catch {
+      // Ignore — Login will handle errors
+    }
+  }, [fetchProfile]);
+
   // ── Sign out — with 3s timeout to prevent hanging ──
   const signOut = useCallback(async () => {
     // Clear state FIRST, then try to tell Supabase
@@ -168,7 +192,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, signOut, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   );

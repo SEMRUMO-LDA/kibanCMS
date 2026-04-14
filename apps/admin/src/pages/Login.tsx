@@ -220,7 +220,7 @@ export const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { session, refreshAuth } = useAuth();
   const { t } = useI18n();
 
   useEffect(() => {
@@ -253,22 +253,14 @@ export const Login = () => {
       const { tenantId, supabaseUrl, supabaseAnonKey, session } = json.data;
       const client = initSupabaseWithConfig({ tenantId, supabaseUrl, supabaseAnonKey });
 
-      // Set the session and wait for auth state to propagate
+      // Set the session on the new Supabase client
       await client.auth.setSession({
         access_token: session.access_token,
         refresh_token: session.refresh_token,
       });
 
-      // Wait for AuthProvider to pick up the session
-      await new Promise<void>((resolve) => {
-        const { data: { subscription } } = client.auth.onAuthStateChange((event) => {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            subscription.unsubscribe();
-            resolve();
-          }
-        });
-        setTimeout(() => { subscription.unsubscribe(); resolve(); }, 3000);
-      });
+      // Tell AuthProvider to re-read the session from the (now active) client
+      await refreshAuth();
 
       navigate('/', { replace: true });
     } catch (err: any) {
