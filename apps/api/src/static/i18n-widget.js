@@ -22,7 +22,8 @@
   var API_KEY = scriptTag.getAttribute('data-api-key');
   if (!API_KEY) return;
 
-  var BASE_URL = scriptTag.src.replace('/api/v1/i18n/widget.js', '');
+  var srcUrl = new URL(scriptTag.src, window.location.href);
+  var BASE_URL = srcUrl.origin;
   var POSITION_OVERRIDE = scriptTag.getAttribute('data-position');
   var STYLE_OVERRIDE = scriptTag.getAttribute('data-style');
 

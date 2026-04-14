@@ -17,7 +17,8 @@
   var API_KEY = scriptTag.getAttribute('data-api-key');
   if (!API_KEY) return;
 
-  var BASE_URL = scriptTag.src.replace('/api/v1/cookie-notice/widget.js', '');
+  var srcUrl = new URL(scriptTag.src, window.location.href);
+  var BASE_URL = srcUrl.origin;
   var CONSENT_KEY = 'kiban_cookie_consent';
   var VISITOR_KEY = 'kiban_visitor_id';
 
@@ -37,7 +38,7 @@
   function getVisitorId() {
     var id = localStorage.getItem(VISITOR_KEY);
     if (!id) {
-      id = 'v_' + Math.random().toString(36).substr(2, 12) + Date.now().toString(36);
+      id = 'v_' + Math.random().toString(36).substring(2, 14) + Date.now().toString(36);
       try { localStorage.setItem(VISITOR_KEY, id); } catch (e) {}
     }
     return id;
