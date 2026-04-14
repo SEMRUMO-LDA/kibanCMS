@@ -23,6 +23,7 @@ import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import authRouter from './routes/auth.js';
 import snapshotsRouter from './routes/snapshots.js';
+import { supabase as supabaseImport } from './lib/supabase.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
@@ -214,6 +215,54 @@ app.get('/api/v1/i18n/widget.js', (req, res) => {
 });
 app.use('/api/v1/i18n', validateAny, i18nRouter); // i18n — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
+
+// Cookie Notice widget — public static JS file (no auth)
+app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const staticPath = NODE_ENV === 'production'
+    ? path.join(__dirname, '../static/cookie-notice-widget.js')
+    : path.join(__dirname, 'static/cookie-notice-widget.js');
+  res.sendFile(staticPath);
+});
+// Cookie Notice config — API Key auth (frontend reads config)
+app.get('/api/v1/cookie-notice/config', validateApiKey, async (req, res) => {
+  try {
+    const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'cookie-notice').single();
+    const config = data?.config || { enabled: false };
+    res.json({ data: config, timestamp: new Date().toISOString() });
+  } catch { res.json({ data: { enabled: false }, timestamp: new Date().toISOString() }); }
+});
+// Cookie Notice consent — API Key auth (frontend sends consent)
+app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
+  try {
+    const { visitor_id, consent_given, categories } = req.body;
+    if (!visitor_id) return res.status(400).json({ error: { message: 'Missing visitor_id', status: 400 } });
+    await supabaseImport.from('addon_cookie_notice_consents').insert({
+      visitor_id, consent_given: !!consent_given, categories: categories || {},
+      ip_address: req.ip, user_agent: req.headers['user-agent'] || '',
+    });
+    res.json({ data: { ok: true }, timestamp: new Date().toISOString() });
+  } catch (err: any) { res.status(500).json({ error: { message: err.message, status: 500 } }); }
+});
+
+// Accessibility widget — public static JS file (no auth)
+app.get('/api/v1/accessibility/widget.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  const staticPath = NODE_ENV === 'production'
+    ? path.join(__dirname, '../static/accessibility-widget.js')
+    : path.join(__dirname, 'static/accessibility-widget.js');
+  res.sendFile(staticPath);
+});
+// Accessibility config — API Key auth (frontend reads config)
+app.get('/api/v1/accessibility/config', validateApiKey, async (req, res) => {
+  try {
+    const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'accessibility').single();
+    const config = data?.config || { enabled: false };
+    res.json({ data: config, timestamp: new Date().toISOString() });
+  } catch { res.json({ data: { enabled: false }, timestamp: new Date().toISOString() }); }
+});
 
 // Serve Admin UI (static files from admin build)
 if (NODE_ENV === 'production') {
