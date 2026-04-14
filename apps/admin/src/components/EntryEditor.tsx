@@ -303,7 +303,7 @@ export function EntryEditor({
             </ErrorSummary>
           )}
 
-          {fields.map(field => (
+          {fields.length > 0 ? fields.map(field => (
             <FieldRenderer
               key={field.id}
               field={field}
@@ -311,7 +311,34 @@ export function EntryEditor({
               onChange={(value) => handleFieldChange(field.id, value)}
               error={errors[field.id]}
             />
-          ))}
+          )) : (
+            /* No fields defined — auto-generate from existing content */
+            Object.keys(data).length > 0 ? Object.entries(data).map(([key, value]) => {
+              const inferredType = typeof value === 'boolean' ? 'boolean'
+                : typeof value === 'number' ? 'number'
+                : (typeof value === 'string' && value.length > 200) ? 'richtext'
+                : 'text';
+              const autoField: FieldDefinition = {
+                id: key,
+                name: key.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                type: inferredType,
+                required: false,
+              };
+              return (
+                <FieldRenderer
+                  key={key}
+                  field={autoField}
+                  value={value}
+                  onChange={(v) => handleFieldChange(key, v)}
+                  error={errors[key]}
+                />
+              );
+            }) : (
+              <p style={{ color: '#9ca3af', fontSize: '14px', textAlign: 'center', padding: '24px 0' }}>
+                No fields defined for this collection. Add fields in the collection settings.
+              </p>
+            )
+          )}
         </FormBody>
 
         <FormFooter>
