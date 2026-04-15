@@ -4,6 +4,7 @@ import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { CommandPalette } from '../components/CommandPalette';
 import { useI18n } from '../lib/i18n';
+import { api } from '../lib/api';
 import {
   LayoutDashboard,
   Files,
@@ -463,7 +464,18 @@ export const DashboardLayout = () => {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('kiban-sidebar-collapsed') === 'true'; } catch { return false; }
   });
+  const [hasBookings, setHasBookings] = useState(false);
   const { user, profile, signOut } = useAuth();
+
+  // Check if bookings addon is installed
+  useEffect(() => {
+    api.getCollections().then(({ data }) => {
+      if (data) {
+        const slugs = new Set(data.map((c: any) => c.slug));
+        setHasBookings(slugs.has('tours') || slugs.has('bookings'));
+      }
+    }).catch(() => {});
+  }, []);
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
@@ -549,10 +561,12 @@ export const DashboardLayout = () => {
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
-              <CalendarCheck size={20} />
-              <span>Bookings</span>
-            </NavItem>
+            {hasBookings && (
+              <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
+                <CalendarCheck size={20} />
+                <span>Bookings</span>
+              </NavItem>
+            )}
           </NavSection>
 
           <NavSection>
