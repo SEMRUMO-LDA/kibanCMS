@@ -10,12 +10,13 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
-  Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility,
+  Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility, Power, PowerOff,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { ADDONS_REGISTRY, type AddonDefinition } from '../config/addons-registry';
 import { api } from '../lib/api';
+import { getSupabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 
@@ -200,6 +201,7 @@ export const Addons = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState<'all' | 'installed'>('all');
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
+  const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -214,17 +216,34 @@ export const Addons = () => {
       const { data: collections } = await api.getCollections();
       const existingSlugs = new Set((collections || []).map((c: any) => c.slug));
       const installed = new Set<string>();
+      const disabled = new Set<string>();
+
+      // Check widget addon states from addon_configs
+      const supabase = getSupabase();
+      if (supabase) {
+        const { data: configs } = await supabase.from('addon_configs').select('addon_id, config');
+        if (configs) {
+          for (const cfg of configs) {
+            if (cfg.config && cfg.config.enabled === false) {
+              disabled.add(cfg.addon_id);
+            }
+          }
+        }
+      }
 
       for (const addon of ADDONS_REGISTRY) {
-        // Addons with settingsRoute (no collections) are always "available"
         if (addon.settingsRoute) {
-          installed.add(addon.id);
+          // Widget addons: installed if not explicitly disabled
+          if (!disabled.has(addon.id)) {
+            installed.add(addon.id);
+          }
         } else if (addon.collections.length > 0 && existingSlugs.has(addon.collections[0].slug)) {
           installed.add(addon.id);
         }
       }
 
       setInstalledIds(installed);
+      setDisabledIds(disabled);
     } catch (err) {
       console.error('Error checking addons:', err);
     } finally {
@@ -273,8 +292,48 @@ export const Addons = () => {
     }
   };
 
+  const handleDisableWidget = async (addon: AddonDefinition) => {
+    if (!confirm(`Disable "${addon.name}"? The widget will stop appearing on your sites.`)) return;
+    setInstalling(addon.id);
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Not connected');
+
+      // Load existing config, set enabled=false
+      const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
+      const config = { ...(existing?.config || {}), enabled: false };
+      await supabase.from('addon_configs').upsert({ addon_id: addon.id, config });
+
+      setInstalledIds(prev => { const next = new Set(prev); next.delete(addon.id); return next; });
+      setDisabledIds(prev => new Set([...prev, addon.id]));
+    } catch (err: any) {
+      toast.error('Failed to disable: ' + (err.message || 'Unknown error'));
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  const handleEnableWidget = async (addon: AddonDefinition) => {
+    setInstalling(addon.id);
+    try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error('Not connected');
+
+      const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
+      const config = { ...(existing?.config || {}), enabled: true };
+      await supabase.from('addon_configs').upsert({ addon_id: addon.id, config });
+
+      setInstalledIds(prev => new Set([...prev, addon.id]));
+      setDisabledIds(prev => { const next = new Set(prev); next.delete(addon.id); return next; });
+    } catch (err: any) {
+      toast.error('Failed to enable: ' + (err.message || 'Unknown error'));
+    } finally {
+      setInstalling(null);
+    }
+  };
+
   const displayAddons = tab === 'installed'
-    ? ADDONS_REGISTRY.filter(a => installedIds.has(a.id))
+    ? ADDONS_REGISTRY.filter(a => installedIds.has(a.id) || disabledIds.has(a.id))
     : ADDONS_REGISTRY;
 
   const categoryLabel = (cat: string) => {
@@ -356,19 +415,37 @@ export const Addons = () => {
                         )}>
                           {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
                         </Btn>
-                        {!addon.settingsRoute && (
+                        {addon.settingsRoute ? (
+                          <Btn $variant="danger" onClick={() => handleDisableWidget(addon)} disabled={isInstalling}>
+                            <PowerOff /> Disable
+                          </Btn>
+                        ) : (
                           <Btn $variant="danger" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
                             <Trash2 /> Uninstall
                           </Btn>
                         )}
                       </div>
                     </>
+                  ) : disabledIds.has(addon.id) ? (
+                    <>
+                      <span style={{ fontSize: 13, color: colors.gray[400], fontWeight: 500 }}>
+                        Disabled
+                      </span>
+                      <div style={{ display: 'flex', gap: spacing[2] }}>
+                        <Btn $variant="ghost" onClick={() => navigate(addon.settingsRoute!)}>
+                          Settings <ArrowRight />
+                        </Btn>
+                        <Btn $variant="primary" onClick={() => handleEnableWidget(addon)} disabled={isInstalling}>
+                          {isInstalling ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enabling...</> : <><Power /> Enable</>}
+                        </Btn>
+                      </div>
+                    </>
                   ) : (
                     <>
                       <span style={{ fontSize: 13, color: colors.gray[400] }}>
-                        {addon.collections.reduce((sum, c) => sum + c.fields.length, 0)} fields
+                        {addon.collections.length > 0 ? `${addon.collections.reduce((sum, c) => sum + c.fields.length, 0)} fields` : 'Widget'}
                       </span>
-                      <Btn $variant="primary" onClick={() => handleInstall(addon)} disabled={isInstalling}>
+                      <Btn $variant="primary" onClick={() => addon.settingsRoute ? handleEnableWidget(addon) : handleInstall(addon)} disabled={isInstalling}>
                         {isInstalling ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Installing...</> : <><Download /> Install</>}
                       </Btn>
                     </>
