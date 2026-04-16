@@ -81,14 +81,6 @@
   function renderBanner(config) {
     if (!config.enabled) return;
 
-    var isDark = config.theme === 'dark';
-    var bg = isDark ? 'rgba(17,24,39,0.97)' : 'rgba(255,255,255,0.97)';
-    var text = isDark ? '#f3f4f6' : '#1f2937';
-    var muted = isDark ? '#9ca3af' : '#6b7280';
-    var btnBg = isDark ? '#4f46e5' : '#4f46e5';
-    var btnText = '#fff';
-    var borderC = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-
     var position = config.position || 'bottom';
     var isCenter = position === 'center';
     var isTop = position === 'top';
@@ -98,7 +90,7 @@
     if (isCenter) {
       overlay = document.createElement('div');
       overlay.id = 'kiban-cookie-overlay';
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99998;';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:99998;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
       document.body.appendChild(overlay);
     }
 
@@ -108,61 +100,66 @@
     banner.setAttribute('aria-label', 'Cookie consent');
 
     var posCSS = isCenter
-      ? 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:480px;width:90%;border-radius:16px;'
+      ? 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:440px;width:calc(100% - 32px);border-radius:12px;'
       : isTop
         ? 'position:fixed;top:0;left:0;right:0;'
         : 'position:fixed;bottom:0;left:0;right:0;';
 
     banner.style.cssText = posCSS +
-      'z-index:99999;background:' + bg + ';color:' + text + ';' +
-      'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
-      'box-shadow:0 -4px 32px rgba(0,0,0,0.15);' +
-      'border' + (isCenter ? '' : (isTop ? '-bottom' : '-top')) + ':1px solid ' + borderC + ';' +
+      'z-index:99999;background:#fff;color:#1a1a1a;' +
+      'box-shadow:0 -1px 24px rgba(0,0,0,0.08);' +
+      'border' + (isCenter ? '' : (isTop ? '-bottom' : '-top')) + ':1px solid rgba(0,0,0,0.06);' +
       'padding:20px 24px;' +
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;' +
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;' +
       'animation:kibanCookieFadeIn 0.3s ease-out;';
 
     var html = '';
-    html += '<style>@keyframes kibanCookieFadeIn{from{opacity:0;transform:' +
-      (isCenter ? 'translate(-50%,-50%) scale(0.95)' : 'translateY(' + (isTop ? '-' : '') + '20px)') +
+    html += '<style>';
+    html += '@keyframes kibanCookieFadeIn{from{opacity:0;transform:' +
+      (isCenter ? 'translate(-50%,-50%) scale(0.97)' : 'translateY(' + (isTop ? '-' : '') + '12px)') +
       '}to{opacity:1;transform:' +
-      (isCenter ? 'translate(-50%,-50%) scale(1)' : 'translateY(0)') + '}}</style>';
+      (isCenter ? 'translate(-50%,-50%) scale(1)' : 'translateY(0)') + '}}';
+    html += '#kiban-cookie-notice *{box-sizing:border-box;}';
+    html += '#kiban-cookie-notice button{transition:opacity 0.15s ease;}';
+    html += '#kiban-cookie-notice button:hover{opacity:0.85;}';
+    html += '</style>';
 
     // Message
-    html += '<p style="margin:0 0 16px;line-height:1.6;color:' + text + ';">' + escapeHtml(config.message) + '</p>';
+    var message = config.message || 'We use cookies to improve your experience. By continuing to visit this site you agree to our use of cookies.';
+    html += '<p style="margin:0 0 16px;color:#3d3d3d;font-size:14px;line-height:1.6;">' + escapeHtml(message) + '</p>';
 
     // Cookie categories (if granular)
     var cats = config.cookieTypes || {};
     var showCategories = cats.analytics || cats.marketing || cats.preferences;
 
     if (showCategories) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">';
-      html += '<label style="opacity:0.6;font-size:13px;display:flex;align-items:center;gap:6px;color:' + muted + ';">' +
-        '<input type="checkbox" checked disabled> Necessary</label>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;">';
+      html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:#999;cursor:default;">' +
+        '<input type="checkbox" checked disabled style="accent-color:#1a1a1a;"> Necessary</label>';
       if (cats.analytics) {
-        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:' + text + ';">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="analytics"> Analytics</label>';
+        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:#3d3d3d;cursor:pointer;">' +
+          '<input type="checkbox" class="kiban-cat" data-cat="analytics" style="accent-color:#1a1a1a;"> Analytics</label>';
       }
       if (cats.marketing) {
-        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:' + text + ';">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="marketing"> Marketing</label>';
+        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:#3d3d3d;cursor:pointer;">' +
+          '<input type="checkbox" class="kiban-cat" data-cat="marketing" style="accent-color:#1a1a1a;"> Marketing</label>';
       }
       if (cats.preferences) {
-        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:' + text + ';">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="preferences"> Preferences</label>';
+        html += '<label style="font-size:13px;display:flex;align-items:center;gap:6px;color:#3d3d3d;cursor:pointer;">' +
+          '<input type="checkbox" class="kiban-cat" data-cat="preferences" style="accent-color:#1a1a1a;"> Preferences</label>';
       }
       html += '</div>';
     }
 
     // Buttons
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
-    html += '<button id="kiban-cookie-accept" style="padding:10px 20px;background:' + btnBg + ';color:' + btnText + ';border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">' +
+    html += '<div style="display:flex;gap:10px;align-items:center;">';
+    html += '<button id="kiban-cookie-accept" style="padding:9px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;letter-spacing:0.01em;">' +
       escapeHtml(config.buttonText || 'Accept') + '</button>';
-    html += '<button id="kiban-cookie-decline" style="padding:10px 20px;background:transparent;color:' + muted + ';border:1px solid ' + borderC + ';border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">' +
+    html += '<button id="kiban-cookie-decline" style="padding:9px 20px;background:transparent;color:#888;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;">' +
       escapeHtml(config.declineText || 'Decline') + '</button>';
 
     if (config.policyUrl) {
-      html += '<a href="' + escapeHtml(config.policyUrl) + '" target="_blank" rel="noopener" style="font-size:13px;color:' + muted + ';text-decoration:underline;margin-left:auto;">' +
+      html += '<a href="' + escapeHtml(config.policyUrl) + '" target="_blank" rel="noopener" style="font-size:12px;color:#999;text-decoration:none;margin-left:auto;border-bottom:1px solid #ddd;">' +
         'Privacy Policy</a>';
     }
     html += '</div>';
