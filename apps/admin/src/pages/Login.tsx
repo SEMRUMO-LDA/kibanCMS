@@ -300,7 +300,7 @@ export const Login = () => {
         </Form>
 
         <Footer>
-          <p>Powered by <strong>kibanCMS</strong> v1.4</p>
+          <p>Powered by <strong>kibanCMS</strong> v1.5</p>
         </Footer>
       </FormBox>
     </Container>
