@@ -27,7 +27,7 @@ import { supabase as supabaseImport } from './lib/supabase.js';
 import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
-import { loadTenants, resolveTenant } from './config/tenants.js';
+import { loadTenants, resolveTenant, getAllTenants } from './config/tenants.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 
 // ES Module __dirname equivalent
@@ -43,7 +43,10 @@ loadTenants();
 const app: express.Express = express();
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
+const envOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
+// Merge env origins with tenant origins so widgets work cross-origin
+const tenantOrigins = getAllTenants().flatMap(t => t.origins);
+const allowedOrigins = [...new Set([...envOrigins, ...tenantOrigins])];
 
 // CORS configuration - MUST BE FIRST, before helmet
 app.use(cors({
