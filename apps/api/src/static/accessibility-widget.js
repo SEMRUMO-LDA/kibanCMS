@@ -139,7 +139,7 @@
       'width:44px;height:44px;border-radius:50%;border:none;background:#2c2c2c;color:#fff;' +
       'cursor:pointer;display:flex;align-items:center;justify-content:center;' +
       'box-shadow:0 2px 12px rgba(0,0,0,0.15);transition:transform 0.2s ease;';
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M7 21l3-9H8l1-4h6l1 4h-2l3 9"/><path d="M12 11.5v-1"/></svg>';
+    btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><circle cx="12" cy="2.5" r="2.5"/><path d="M12 7c-1.1 0-2 .9-2 2v4h-3l1.5 8h1.6L11.5 15h1l1.4 6h1.6l1.5-8h-3V9c0-1.1-.9-2-2-2z"/><path d="M16.5 9.5L19 8M7.5 9.5L5 8" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>';
     btn.addEventListener('mouseenter', function () { btn.style.transform = 'scale(1.1)'; });
     btn.addEventListener('mouseleave', function () { btn.style.transform = 'scale(1)'; });
 
