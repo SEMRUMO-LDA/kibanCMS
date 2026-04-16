@@ -132,7 +132,13 @@ export const supabase: SupabaseClient<Database> = new Proxy({} as SupabaseClient
     if (!_supabase) {
       if (prop === 'auth') {
         return new Proxy({}, {
-          get() {
+          get(_, authProp: string) {
+            if (authProp === 'onAuthStateChange') {
+              return () => ({ data: { subscription: { unsubscribe: () => {} } } });
+            }
+            if (authProp === 'getSession' || authProp === 'getUser') {
+              return () => Promise.resolve({ data: { session: null, user: null }, error: null });
+            }
             return () => Promise.resolve({ data: null, error: null });
           },
         });
