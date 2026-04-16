@@ -160,7 +160,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
-    version: '1.4.0',
+    version: '1.5.0',
     mode: NODE_ENV,
     tenant: ctx?.tenant?.id || 'default',
   });
