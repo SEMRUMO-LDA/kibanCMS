@@ -152,7 +152,7 @@
     }
 
     // Buttons
-    html += '<div style="display:flex;gap:10px;align-items:center;">';
+    html += '<div style="display:flex;gap:10px;align-items:center;justify-content:flex-end;">';
     html += '<button id="kiban-cookie-accept" style="padding:9px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;letter-spacing:0.01em;">' +
       escapeHtml(config.buttonText || 'Accept') + '</button>';
     html += '<button id="kiban-cookie-decline" style="padding:9px 20px;background:transparent;color:#888;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;">' +
