@@ -313,50 +313,6 @@
     document.body.appendChild(widgetEl);
   }
 
-  // ── Background Luminance Detection ──
-  function sampleBackgroundLuminance(el) {
-    // Walk up the DOM to find the effective background color behind the widget
-    var r = 255, g = 255, b = 255; // default to white (assume light)
-    var chain = [];
-    var node = el.parentElement;
-    while (node && node !== document) {
-      chain.unshift(node);
-      node = node.parentElement;
-    }
-    // Also sample the body/html computed bg
-    chain.unshift(document.documentElement);
-    if (document.body && chain.indexOf(document.body) === -1) chain.splice(1, 0, document.body);
-
-    for (var i = 0; i < chain.length; i++) {
-      var bg = getComputedStyle(chain[i]).backgroundColor;
-      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') continue;
-      var match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (match) {
-        r = parseInt(match[1], 10);
-        g = parseInt(match[2], 10);
-        b = parseInt(match[3], 10);
-      }
-    }
-    // Relative luminance (perceived brightness 0-255)
-    return 0.299 * r + 0.587 * g + 0.114 * b;
-  }
-
-  function getMinimalTheme(el) {
-    var lum = sampleBackgroundLuminance(el);
-    var isLight = lum > 140;
-    return {
-      isLight: isLight,
-      circleBg:     isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)',
-      pillBg:       isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.12)',
-      text:         isLight ? '#1a1a1a' : '#fff',
-      textMuted:    isLight ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.5)',
-      activeBg:     isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.18)',
-      shadow:       isLight
-        ? '0 4px 24px rgba(0,0,0,0.08),inset 0 0 0 1px rgba(0,0,0,0.08)'
-        : '0 4px 24px rgba(0,0,0,0.15),inset 0 0 0 1px rgba(255,255,255,0.15)',
-    };
-  }
-
   function renderMinimalWidget() {
     var isExpanded = false;
 
@@ -378,45 +334,33 @@
     widgetEl.appendChild(circleEl);
     widgetEl.appendChild(pillEl);
 
-    // Apply theme based on background luminance
+    // Solid theme — works on any background
     function applyTheme() {
-      var t = getMinimalTheme(widgetEl);
+      var base = 'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;cursor:pointer;';
 
-      var glassBase = 'backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
-        'box-shadow:' + t.shadow + ';' +
-        'font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;letter-spacing:0.06em;' +
-        'cursor:pointer;';
-
-      circleEl.style.cssText = glassBase +
-        'background:' + t.circleBg + ';' +
+      circleEl.style.cssText = base +
+        'background:#2c2c2c;color:#fff;' +
         'width:44px;height:44px;border-radius:50%;display:' + (isExpanded ? 'none' : 'flex') + ';align-items:center;justify-content:center;' +
-        'color:' + t.text + ';text-transform:uppercase;font-weight:600;font-size:11px;' +
+        'text-transform:uppercase;font-weight:600;font-size:11px;' +
+        'box-shadow:0 2px 12px rgba(0,0,0,0.15);' +
         'transition:opacity 0.3s ease,transform 0.3s ease;';
 
-      pillEl.style.cssText = glassBase +
-        'background:' + t.pillBg + ';' +
-        'display:' + (isExpanded ? 'flex' : 'none') + ';align-items:center;gap:2px;padding:4px;border-radius:999px;';
+      pillEl.style.cssText = base +
+        'background:#2c2c2c;' +
+        'display:' + (isExpanded ? 'flex' : 'none') + ';align-items:center;gap:2px;padding:4px;border-radius:999px;' +
+        'box-shadow:0 2px 12px rgba(0,0,0,0.15);';
 
       pillEl.querySelectorAll('a[data-lang]').forEach(function (a) {
         var isActive = a.getAttribute('data-lang') === (currentLang || defaultLang);
         a.style.cssText =
           'text-decoration:none;padding:8px 14px;border-radius:999px;' +
           'text-transform:uppercase;font-weight:500;transition:all 0.2s ease;white-space:nowrap;' +
-          'color:' + (isActive ? t.text : t.textMuted) + ';' +
-          'background:' + (isActive ? t.activeBg : 'transparent') + ';';
+          'color:' + (isActive ? '#fff' : 'rgba(255,255,255,0.5)') + ';' +
+          'background:' + (isActive ? 'rgba(255,255,255,0.15)' : 'transparent') + ';';
       });
     }
 
     applyTheme();
-
-    // Re-check on scroll/resize since background can change
-    var debounceTimer;
-    function debouncedApply() {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(applyTheme, 150);
-    }
-    window.addEventListener('scroll', debouncedApply, { passive: true });
-    window.addEventListener('resize', debouncedApply, { passive: true });
 
     function toggle() {
       isExpanded = !isExpanded;
