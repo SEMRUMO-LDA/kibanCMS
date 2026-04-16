@@ -232,9 +232,10 @@ app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
 app.get('/api/v1/cookie-notice/config', validateApiKey, async (req, res) => {
   try {
     const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'cookie-notice').single();
-    const config = data?.config || { enabled: false };
+    // No row = installed but never configured → default to enabled (matches admin logic)
+    const config = data?.config || { enabled: true };
     res.json({ data: config, timestamp: new Date().toISOString() });
-  } catch { res.json({ data: { enabled: false }, timestamp: new Date().toISOString() }); }
+  } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
 // Cookie Notice consent — API Key auth (frontend sends consent)
 app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
@@ -262,9 +263,10 @@ app.get('/api/v1/accessibility/widget.js', (req, res) => {
 app.get('/api/v1/accessibility/config', validateApiKey, async (req, res) => {
   try {
     const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'accessibility').single();
-    const config = data?.config || { enabled: false };
+    // No row = installed but never configured → default to enabled (matches admin logic)
+    const config = data?.config || { enabled: true };
     res.json({ data: config, timestamp: new Date().toISOString() });
-  } catch { res.json({ data: { enabled: false }, timestamp: new Date().toISOString() }); }
+  } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
 
 // Serve Admin UI (static files from admin build)
