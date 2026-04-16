@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
+import { sendBookingConfirmation } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -382,6 +383,11 @@ router.post('/webhook', async (req: Request, res: Response) => {
             .eq('id', bookingId);
 
           logger.info('Booking confirmed via payment', { bookingId, sessionId: session.id });
+
+          // Send confirmation email (non-blocking)
+          sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
+            logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
+          );
         }
       }
     }

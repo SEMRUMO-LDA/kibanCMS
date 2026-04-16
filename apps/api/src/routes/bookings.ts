@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
+import { sendBookingConfirmation } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -611,6 +612,12 @@ router.post('/:bookingId/confirm', async (req: AuthRequest, res: Response) => {
     if (updateErr) throw updateErr;
 
     logger.info('Booking manually confirmed', { bookingId });
+
+    // Send confirmation email (non-blocking)
+    sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
+      logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
+    );
+
     res.json({ data: { message: 'Booking confirmed' }, timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error confirming booking', { error: error.message });

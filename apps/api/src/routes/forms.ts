@@ -1,16 +1,18 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { sendFormNotification, sendFormAutoReply } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
 /**
- * Fire notification webhook for a form submission.
- * Reads config from "forms-config" collection entries to find
- * per-form or global webhook URLs, then POSTs the submission data.
+ * Fire all notifications for a form submission:
+ * 1. Email notification to admin(s) via Resend
+ * 2. Auto-reply to visitor via Resend
+ * 3. Webhook to external service (Make.com, Zapier, etc.)
  */
-async function fireFormWebhook(
+async function fireFormNotifications(
   formName: string,
   content: Record<string, any>,
   entryId: string
@@ -28,7 +30,6 @@ async function fireFormWebhook(
   let autoReply: string | null = null;
 
   if (configCollection) {
-    // Find config for this specific form
     const { data: formConfig } = await supabase
       .from('entries')
       .select('content')
@@ -39,7 +40,7 @@ async function fireFormWebhook(
 
     if (formConfig?.content) {
       const cfg = formConfig.content as Record<string, any>;
-      if (cfg.is_active === false) return; // Notifications disabled for this form
+      if (cfg.is_active === false) return;
       webhookUrl = cfg.webhook_url || null;
       notificationEmails = cfg.notification_emails || null;
       emailSubjectTemplate = cfg.email_subject_template || null;
@@ -47,8 +48,8 @@ async function fireFormWebhook(
     }
   }
 
-  // 2. Fallback: check global site-settings for default webhook
-  if (!webhookUrl) {
+  // 2. Fallback: check global site-settings
+  if (!webhookUrl || !notificationEmails) {
     const { data: settingsCol } = await supabase
       .from('collections')
       .select('id')
@@ -63,50 +64,56 @@ async function fireFormWebhook(
         .eq('slug', 'global')
         .single();
 
-      // Check for forms webhook in site settings
       if (globalEntry?.content) {
         const sc = globalEntry.content as Record<string, any>;
-        webhookUrl = sc.forms_webhook_url || null;
+        if (!webhookUrl) webhookUrl = sc.forms_webhook_url || null;
         if (!notificationEmails) notificationEmails = sc.contact_email || null;
       }
     }
   }
 
-  if (!webhookUrl) return; // No webhook configured — skip silently
+  // 3. Fire email + webhook in parallel
+  const promises: Promise<any>[] = [];
 
-  // 3. Build subject from template
-  const subject = (emailSubjectTemplate || 'New {form_name} from {name}')
-    .replace('{form_name}', formName)
-    .replace('{name}', (content.name || 'Anonymous').replace(/[\r\n]/g, ''))
-    .replace('{email}', (content.email || '').replace(/[\r\n]/g, ''))
-    .replace('{subject}', (content.subject || '').replace(/[\r\n]/g, ''));
+  // Email notification to admin(s)
+  promises.push(
+    sendFormNotification(formName, content, entryId, notificationEmails || undefined, emailSubjectTemplate || undefined)
+      .catch(err => logger.warn('Form email notification failed', { form: formName, error: err.message }))
+  );
 
-  // 4. POST to webhook
-  const payload = {
-    event: 'form.submitted',
-    form_name: formName,
-    entry_id: entryId,
-    submission: content,
-    notification: {
-      to: notificationEmails,
-      subject,
-      auto_reply: autoReply,
-    },
-    timestamp: new Date().toISOString(),
-  };
-
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(10000), // 10s timeout
-  });
-
-  if (!response.ok) {
-    throw new Error(`Webhook returned ${response.status}: ${response.statusText}`);
+  // Auto-reply to visitor
+  if (autoReply && content.email) {
+    promises.push(
+      sendFormAutoReply(formName, content, autoReply)
+        .catch(err => logger.warn('Form auto-reply failed', { form: formName, error: err.message }))
+    );
   }
 
-  logger.info('Form webhook dispatched', { form: formName, url: webhookUrl, status: response.status });
+  // Webhook (existing behavior)
+  if (webhookUrl) {
+    const payload = {
+      event: 'form.submitted',
+      form_name: formName,
+      entry_id: entryId,
+      submission: content,
+      notification: { to: notificationEmails, auto_reply: autoReply },
+      timestamp: new Date().toISOString(),
+    };
+
+    promises.push(
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000),
+      }).then(response => {
+        if (!response.ok) throw new Error(`Webhook returned ${response.status}`);
+        logger.info('Form webhook dispatched', { form: formName, url: webhookUrl, status: response.status });
+      })
+    );
+  }
+
+  await Promise.allSettled(promises);
 }
 
 /**
@@ -236,9 +243,9 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
       entryId: entry.id,
     });
 
-    // Fire form-specific notification webhook (non-blocking)
-    fireFormWebhook(cleanFormName, content, entry.id).catch(err =>
-      logger.warn('Form webhook dispatch failed', { error: err.message })
+    // Fire email + webhook notifications (non-blocking)
+    fireFormNotifications(cleanFormName, content, entry.id).catch(err =>
+      logger.warn('Form notification dispatch failed', { error: err.message })
     );
 
     // Return minimal response (don't leak internal data to public frontends)
