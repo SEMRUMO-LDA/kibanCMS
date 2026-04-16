@@ -7,8 +7,7 @@ import React, { useState, useEffect } from 'react';
 
 interface CookieConfig {
   enabled: boolean;
-  theme: 'light' | 'dark';
-  position: 'top' | 'bottom' | 'center';
+  title: string;
   message: string;
   buttonText: string;
   declineText: string;
@@ -37,11 +36,10 @@ interface CookieSettingsProps {
 
 const DEFAULT_CONFIG: CookieConfig = {
   enabled: true,
-  theme: 'dark',
-  position: 'bottom',
-  message: 'We use cookies to enhance your experience. By continuing to visit this site you agree to our use of cookies.',
-  buttonText: 'Accept',
-  declineText: 'Decline',
+  title: 'Informação sobre cookies',
+  message: 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros. Estes cookies podem ser utilizados para melhorar o funcionamento do website ou para lhe oferecer uma experiência de navegação mais personalizada. Poderá aceitar ou personalizar as suas definições de cookies através dos botões disponibilizados.',
+  buttonText: 'Aceitar todos',
+  declineText: 'Gerir cookies',
   policyUrl: '/privacy-policy',
   cookieTypes: { necessary: true, analytics: false, marketing: false, preferences: false },
   customCSS: '',
@@ -221,56 +219,37 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
         </div>
       </div>
 
-      {/* Appearance */}
+      {/* Settings */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Appearance</h3>
+        <h3 style={styles.sectionTitle}>Definições</h3>
 
         <div style={styles.field}>
-          <label style={styles.label}>Enabled</label>
           <label style={styles.checkbox}>
             <input
               type="checkbox"
               checked={config.enabled}
               onChange={e => setConfig(c => ({ ...c, enabled: e.target.checked }))}
             />
-            Show cookie notice to visitors
+            Mostrar aviso de cookies aos visitantes
           </label>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Theme</label>
-            <select
-              style={styles.select}
-              value={config.theme}
-              onChange={e => setConfig(c => ({ ...c, theme: e.target.value as 'light' | 'dark' }))}
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </div>
-
-          <div style={styles.field}>
-            <label style={styles.label}>Position</label>
-            <select
-              style={styles.select}
-              value={config.position}
-              onChange={e => setConfig(c => ({ ...c, position: e.target.value as 'top' | 'bottom' | 'center' }))}
-            >
-              <option value="bottom">Bottom</option>
-              <option value="top">Top</option>
-              <option value="center">Center (Modal)</option>
-            </select>
-          </div>
         </div>
       </div>
 
       {/* Text */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Text & Links</h3>
+        <h3 style={styles.sectionTitle}>Texto & Links</h3>
 
         <div style={styles.field}>
-          <label style={styles.label}>Consent Message</label>
+          <label style={styles.label}>Título</label>
+          <input
+            style={styles.input}
+            value={config.title}
+            onChange={e => setConfig(c => ({ ...c, title: e.target.value }))}
+          />
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label}>Mensagem</label>
           <textarea
             style={styles.textarea}
             value={config.message}

@@ -136,10 +136,10 @@
     btn.id = 'kiban-a11y-btn';
     btn.setAttribute('aria-label', buttonLabel);
     btn.style.cssText = 'position:fixed;z-index:99998;' + (posMap[position] || posMap['bottom-left']) +
-      'width:48px;height:48px;border-radius:50%;border:none;background:' + accent + ';color:#fff;' +
+      'width:44px;height:44px;border-radius:50%;border:none;background:#2c2c2c;color:#fff;' +
       'cursor:pointer;display:flex;align-items:center;justify-content:center;' +
-      'box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s ease;font-size:22px;line-height:1;';
-    btn.textContent = '\u267F'; // wheelchair symbol
+      'box-shadow:0 2px 12px rgba(0,0,0,0.15);transition:transform 0.2s ease;';
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M7 21l3-9H8l1-4h6l1 4h-2l3 9"/><path d="M12 11.5v-1"/></svg>';
     btn.addEventListener('mouseenter', function () { btn.style.transform = 'scale(1.1)'; });
     btn.addEventListener('mouseleave', function () { btn.style.transform = 'scale(1)'; });
 
