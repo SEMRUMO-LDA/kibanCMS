@@ -260,8 +260,16 @@ export const Addons = () => {
           name: col.name, slug: col.slug, description: col.description,
           type: col.type, fields: col.fields,
         });
-        // Ignore errors for existing collections
-        if (error && !error.includes('already exists')) throw new Error(error);
+        // If collection already exists, update its schema so reinstalling
+        // delivers new/renamed fields, options, or helpText without losing data.
+        if (error && error.includes('already exists')) {
+          const { error: updateErr } = await api.updateCollection(col.slug, {
+            name: col.name, description: col.description, fields: col.fields,
+          });
+          if (updateErr) throw new Error(updateErr);
+        } else if (error) {
+          throw new Error(error);
+        }
       }
 
       setInstalledIds(prev => new Set([...prev, addon.id]));

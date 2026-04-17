@@ -229,7 +229,10 @@ const bookings: AddonDefinition = {
         { id: 'price_secondary', name: 'price_secondary', label: 'Secondary Price', type: 'number', helpText: 'Optional — e.g. child price for group activities' },
         { id: 'price_secondary_label', name: 'price_secondary_label', label: 'Secondary Price Label', type: 'text', placeholder: 'Child (4–12 years)' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
-        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'recurring = weekly hours (e.g. Mon-Fri 9-18). fixed_slots = fixed daily times (e.g. 10:00, 14:00, 17:00)' },
+        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'Weekly recurring hours or fixed daily times', options: [
+          { label: 'Recurring (weekly hours)', value: 'recurring' },
+          { label: 'Fixed time slots', value: 'fixed_slots' },
+        ] },
         { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used when schedule_type=recurring. Set open windows per day of week.' },
         { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval (minutes)', type: 'number', helpText: 'Used with recurring. Gap between generated slots (e.g. 30 = slots every 30 min)', placeholder: '30' },
         { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used when schedule_type=fixed_slots. Add each daily start time.' },
@@ -257,7 +260,12 @@ const bookings: AddonDefinition = {
         { id: 'total_participants', name: 'total_participants', label: 'Total Participants', type: 'number' },
         { id: 'amount', name: 'amount', label: 'Amount (cents)', type: 'number' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur' },
-        { id: 'booking_status', name: 'booking_status', label: 'Status', type: 'select', required: true, helpText: 'pending, confirmed, cancelled, refunded' },
+        { id: 'booking_status', name: 'booking_status', label: 'Status', type: 'select', required: true, options: [
+          { label: 'Pending', value: 'pending' },
+          { label: 'Confirmed', value: 'confirmed' },
+          { label: 'Cancelled', value: 'cancelled' },
+          { label: 'Refunded', value: 'refunded' },
+        ] },
         { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Stripe Session', type: 'text' },
         { id: 'source', name: 'source', label: 'Source', type: 'text', helpText: 'Origin: direct, tours-addon, import' },
         { id: 'metadata', name: 'metadata', label: 'Metadata (JSON)', type: 'textarea', helpText: 'Extra data from integrating addons (e.g. tour_id). JSON object.' },
@@ -297,9 +305,26 @@ const tours: AddonDefinition = {
         { id: 'full_description', name: 'full_description', label: 'Full Description', type: 'richtext', required: true },
         { id: 'product_code', name: 'product_code', label: 'Product Code', type: 'text', helpText: 'Internal reference (e.g. 404454P3)' },
         // Categorization
-        { id: 'tour_type', name: 'tour_type', label: 'Tour Type', type: 'select', required: true, helpText: 'walking, boat, kayak, bus, private, coasteering, tuktuk, safari, tasting' },
+        { id: 'tour_type', name: 'tour_type', label: 'Tour Type', type: 'select', required: true, options: [
+          { label: 'Walking tour', value: 'walking' },
+          { label: 'Boat tour', value: 'boat' },
+          { label: 'Kayak', value: 'kayak' },
+          { label: 'Bus / coach', value: 'bus' },
+          { label: 'Private tour', value: 'private' },
+          { label: 'Coasteering', value: 'coasteering' },
+          { label: 'Tuk-tuk', value: 'tuktuk' },
+          { label: 'Safari / off-road', value: 'safari' },
+          { label: 'Food & wine tasting', value: 'tasting' },
+          { label: 'Cultural / heritage', value: 'cultural' },
+          { label: 'Other', value: 'other' },
+        ] },
         { id: 'categories', name: 'categories', label: 'Categories', type: 'textarea', helpText: 'One per line: nature, adventure, coastal, cultural, family, romantic' },
-        { id: 'difficulty_level', name: 'difficulty_level', label: 'Difficulty', type: 'select', helpText: 'easy, moderate, challenging, extreme' },
+        { id: 'difficulty_level', name: 'difficulty_level', label: 'Difficulty', type: 'select', options: [
+          { label: 'Easy', value: 'easy' },
+          { label: 'Moderate', value: 'moderate' },
+          { label: 'Challenging', value: 'challenging' },
+          { label: 'Extreme', value: 'extreme' },
+        ] },
         // Capacity & duration
         { id: 'duration_minutes', name: 'duration_minutes', label: 'Duration (minutes)', type: 'number', required: true, placeholder: '300' },
         { id: 'capacity', name: 'capacity', label: 'Capacity', type: 'number', required: true, placeholder: '15', helpText: 'Maximum number of participants per tour departure' },
@@ -321,7 +346,10 @@ const tours: AddonDefinition = {
         { id: 'child_age_range', name: 'child_age_range', label: 'Child Age Range', type: 'text', placeholder: '4–12 years' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur' },
         // Schedule
-        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'recurring or fixed_slots' },
+        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, options: [
+          { label: 'Recurring (weekly hours)', value: 'recurring' },
+          { label: 'Fixed time slots', value: 'fixed_slots' },
+        ] },
         { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used if schedule_type=fixed_slots. Each daily start time.' },
         { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used if schedule_type=recurring. Open windows per day of week.' },
         { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval', type: 'number', placeholder: '30' },
@@ -342,7 +370,12 @@ const tours: AddonDefinition = {
         { id: 'physical_requirements', name: 'physical_requirements', label: 'Physical Requirements', type: 'textarea' },
         // Policies
         { id: 'cancellation_policy', name: 'cancellation_policy', label: 'Cancellation Policy (JSON)', type: 'textarea', helpText: 'JSON tiers: [{"hours_before":24,"refund_percent":100}]' },
-        { id: 'weather_policy', name: 'weather_policy', label: 'Weather Policy', type: 'select', helpText: 'full_refund, reschedule, partial, no_refund' },
+        { id: 'weather_policy', name: 'weather_policy', label: 'Weather Policy', type: 'select', options: [
+          { label: 'Full refund if cancelled', value: 'full_refund' },
+          { label: 'Reschedule to another date', value: 'reschedule' },
+          { label: 'Partial refund', value: 'partial' },
+          { label: 'No refund', value: 'no_refund' },
+        ] },
         // Extras
         { id: 'faq', name: 'faq', label: 'FAQ (JSON)', type: 'textarea', helpText: 'JSON: [{"question":"...","answer":"..."}]' },
         { id: 'fine_print', name: 'fine_print', label: 'Fine Print', type: 'richtext' },
@@ -618,7 +651,10 @@ const coupons: AddonDefinition = {
       fields: [
         { id: 'code', name: 'code', label: 'Code', type: 'text', required: true, helpText: 'Alphanumeric code customers type at checkout. Case-insensitive. Avoid 0/O/1/I.', placeholder: 'SUMMER25' },
         { id: 'description', name: 'description', label: 'Description', type: 'text', helpText: 'Internal label (e.g. "Summer 2026 campaign")' },
-        { id: 'type', name: 'type', label: 'Discount Type', type: 'select', required: true, helpText: 'percentage or fixed' },
+        { id: 'type', name: 'type', label: 'Discount Type', type: 'select', required: true, options: [
+          { label: 'Percentage (e.g. 25% off)', value: 'percentage' },
+          { label: 'Fixed amount (e.g. 10 EUR off)', value: 'fixed' },
+        ] },
         { id: 'value', name: 'value', label: 'Value', type: 'number', required: true, helpText: 'Percentage (1-100) or fixed amount in currency units', placeholder: '25' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur', helpText: 'Only used for fixed-amount coupons. ISO 4217.' },
         { id: 'min_amount', name: 'min_amount', label: 'Min Order Amount', type: 'number', helpText: 'Minimum subtotal required to apply (in currency units). Empty = no minimum.' },
@@ -628,7 +664,10 @@ const coupons: AddonDefinition = {
         { id: 'max_uses_total', name: 'max_uses_total', label: 'Max Uses (Total)', type: 'number', helpText: 'Global limit across all customers. Empty = unlimited.' },
         { id: 'max_uses_per_customer', name: 'max_uses_per_customer', label: 'Max Uses Per Customer', type: 'number', helpText: 'Empty or 0 = unlimited', placeholder: '1' },
         { id: 'usage_count', name: 'usage_count', label: 'Usage Count', type: 'number', helpText: 'Auto-updated on confirmed redemptions. Do not edit manually.' },
-        { id: 'applies_to', name: 'applies_to', label: 'Applies To', type: 'select', required: true, helpText: 'all_resources or specific_resources' },
+        { id: 'applies_to', name: 'applies_to', label: 'Applies To', type: 'select', required: true, options: [
+          { label: 'All resources', value: 'all_resources' },
+          { label: 'Specific resources only', value: 'specific_resources' },
+        ] },
         { id: 'resource_slugs', name: 'resource_slugs', label: 'Resource Slugs', type: 'textarea', helpText: 'Used when applies_to=specific_resources. One slug per line.' },
         { id: 'new_customers_only', name: 'new_customers_only', label: 'New Customers Only', type: 'boolean', helpText: 'Reject if the email has any prior confirmed booking' },
         { id: 'stackable', name: 'stackable', label: 'Stackable', type: 'boolean', helpText: 'Allow combining with other coupons (default: false)' },
@@ -649,7 +688,12 @@ const coupons: AddonDefinition = {
         { id: 'discount_cents', name: 'discount_cents', label: 'Discount (cents)', type: 'number', required: true },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true },
         { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Stripe Session', type: 'text' },
-        { id: 'status', name: 'status', label: 'Status', type: 'select', required: true, helpText: 'pending, confirmed, expired, cancelled' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select', required: true, options: [
+          { label: 'Pending', value: 'pending' },
+          { label: 'Confirmed', value: 'confirmed' },
+          { label: 'Expired', value: 'expired' },
+          { label: 'Cancelled', value: 'cancelled' },
+        ] },
         { id: 'redeemed_at', name: 'redeemed_at', label: 'Redeemed At', type: 'date' },
         { id: 'confirmed_at', name: 'confirmed_at', label: 'Confirmed At', type: 'date' },
       ],
