@@ -128,19 +128,26 @@ router.get('/tours', async (req: AuthRequest, res: Response) => {
 
     const tours = (entries || []).map((entry: any) => {
       const c = entry.content || {};
+      // Tours addon v1.0.0 used `time_slots` + `max_capacity`; v1.1.0 renamed to
+      // `fixed_slots` + `capacity`. Read both so existing frontends keep working
+      // regardless of which schema version the tour was edited under.
+      const slots = (Array.isArray(c.fixed_slots) && c.fixed_slots.length > 0)
+        ? c.fixed_slots
+        : (Array.isArray(c.time_slots) && c.time_slots.length > 0 ? c.time_slots : ['10:00', '14:00', '17:00']);
+      const cap = Number(c.capacity) || Number(c.max_capacity) || MAX_CAPACITY;
       return {
         slug: entry.slug,
         title: c.title || entry.title,
-        description: c.description || '',
-        duration: c.duration || '',
-        image: c.image || entry.featured_image || '',
+        description: c.short_description || c.description || '',
+        duration: c.duration || (c.duration_minutes ? `${Math.round(c.duration_minutes / 60 * 10) / 10}h` : ''),
+        image: c.cover_image || c.image || entry.featured_image || '',
         price_adult: Number(c.price_adult) || 0,
         price_child: Number(c.price_child) || 0,
         child_age_range: c.child_age_range || '4-12 anos',
         price_total: c.price || '',
         capacity: c.capacity || '',
-        max_capacity: Number(c.max_capacity) || MAX_CAPACITY,
-        time_slots: c.time_slots || ['10:00', '14:00', '17:00'],
+        max_capacity: cap,
+        time_slots: slots,
         rating: c.rating || 5,
       };
     });
@@ -185,10 +192,14 @@ router.get('/availability', async (req: AuthRequest, res: Response) => {
 
       if (tourEntry?.content) {
         const c = tourEntry.content as Record<string, any>;
-        if (Array.isArray(c.time_slots) && c.time_slots.length > 0) {
+        // Accept both v1.0.0 (time_slots/max_capacity) and v1.1.0 (fixed_slots/capacity).
+        if (Array.isArray(c.fixed_slots) && c.fixed_slots.length > 0) {
+          timeSlots = c.fixed_slots;
+        } else if (Array.isArray(c.time_slots) && c.time_slots.length > 0) {
           timeSlots = c.time_slots;
         }
-        if (c.max_capacity) maxCapacity = Number(c.max_capacity);
+        if (c.capacity) maxCapacity = Number(c.capacity);
+        else if (c.max_capacity) maxCapacity = Number(c.max_capacity);
       }
     }
 
@@ -272,7 +283,7 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
 
       if (tourEntry) {
         const c = tourEntry.content as Record<string, any>;
-        maxCapacity = Number(c.max_capacity) || MAX_CAPACITY;
+        maxCapacity = Number(c.capacity) || Number(c.max_capacity) || MAX_CAPACITY;
         priceAdult = Number(c.price_adult) || 0;
         priceChild = Number(c.price_child) || 0;
         tourTitle = c.title || tourEntry.title || tour_slug;
