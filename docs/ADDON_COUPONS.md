@@ -87,12 +87,17 @@ Four classes of bugs that normally wreck coupons, and how we prevent each one.
 
 Two customers grab the last seat of `SUMMER25` in the same second.
 
-**Defence:** `usage_count` is only bumped inside the Stripe webhook handler
-(`checkout.session.completed`), serialized via PostgreSQL row-level locking.
-The UPDATE is guarded by a WHERE clause on the previously observed
-`usage_count` value — if another handler wrote first, our UPDATE affects 0
-rows and we abort that redemption as `cancelled` with reason
-`coupon_exhausted`. No overselling. See
+**Defence:** `usage_count` is bumped inside the Stripe webhook handler via
+the SQL-native `bump_coupon_usage` RPC (see [migration 003](../database/migrations/003_coupon_usage_rpc.sql)).
+The RPC runs a single guarded `UPDATE entries SET content = jsonb_set(..., new_count) WHERE id = ... AND (content->>'usage_count')::int = expected` and returns the affected row count via
+`GET DIAGNOSTICS ROW_COUNT`. If another handler already bumped the counter,
+our UPDATE matches zero rows and returns `false`; we mark the redemption as
+`cancelled` with reason `race_lost`. Using `jsonb_set` (not a full content
+spread) also means concurrent admin edits to sibling fields on the coupon row
+are not stomped. This is a change from the v1.0.0 implementation which used
+`.filter().update()` on the supabase-js client — that path silently lost
+races because supabase-js does not expose the affected-rows count without
+`.select()`. Fixed in audit v1.6. See
 [lib/coupons.ts → confirmRedemption](../apps/api/src/lib/coupons.ts).
 
 ### 2. Double-apply (apply → back → apply again)

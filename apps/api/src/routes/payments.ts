@@ -6,6 +6,8 @@ import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation } from '../lib/email.js';
 import { confirmRedemption, cancelPendingRedemption } from '../lib/coupons.js';
+import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
+import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -27,14 +29,17 @@ interface StripeConfig {
   publishableKey?: string;
 }
 
-// Cache to avoid DB lookup on every request (TTL 60s)
-let configCache: { config: StripeConfig; fetchedAt: number } | null = null;
+// Per-tenant config cache — keyed by tenant.id. A single global cache would
+// leak keys across tenants in multi-tenant mode (the fused entry in audit v1.6).
+const configCache = new Map<string, { config: StripeConfig; fetchedAt: number }>();
 const CONFIG_TTL = 60_000;
 
 async function getStripeConfig(): Promise<StripeConfig | null> {
-  // Return cached if fresh
-  if (configCache && Date.now() - configCache.fetchedAt < CONFIG_TTL) {
-    return configCache.config;
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+
+  const cached = configCache.get(tenantId);
+  if (cached && Date.now() - cached.fetchedAt < CONFIG_TTL) {
+    return cached.config;
   }
 
   // Try loading from CMS (stripe-config collection, "default" entry)
@@ -62,7 +67,7 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
           defaultCurrency: (c.default_currency || 'eur').toLowerCase(),
           publishableKey: c.stripe_publishable_key || '',
         };
-        configCache = { config, fetchedAt: Date.now() };
+        configCache.set(tenantId, { config, fetchedAt: Date.now() });
         return config;
       }
     }
@@ -76,7 +81,7 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
       webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
       defaultCurrency: (process.env.STRIPE_DEFAULT_CURRENCY || 'eur').toLowerCase(),
     };
-    configCache = { config, fetchedAt: Date.now() };
+    configCache.set(tenantId, { config, fetchedAt: Date.now() });
     return config;
   }
 
@@ -247,6 +252,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       ...(customer_email && { customer_email }),
       metadata: {
         source: 'kibanCMS',
+        tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         ...(product_slug && { product_slug }),
         ...(metadata && typeof metadata === 'object' ? metadata : {}),
       },
@@ -276,35 +282,80 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 // ============================================
 // POST /api/v1/payments/webhook
 //
-// Receives Stripe webhook events.
-// Public — no API key, verified via Stripe signature.
+// Receives Stripe webhook events. Public — no API key, verified via Stripe
+// signature. Mounted DIRECTLY on the app in server.ts (not on this router),
+// so it bypasses validateApiKey. See audit v1.6 C1 for the reason.
+//
+// Tenant resolution:
+//   Stripe does not send X-Tenant. We embed `tenant_id` in Session metadata
+//   when creating checkout, then at webhook time we peek at the raw body to
+//   resolve tenant BEFORE verifying signature (so getStripeConfig reads the
+//   right tenant's webhook_secret). Peeking is safe because any forged
+//   tenant_id would still fail signature verification with that tenant's key.
 // ============================================
 
-router.post('/webhook', async (req: Request, res: Response) => {
+export async function webhookHandler(req: Request, res: Response): Promise<void> {
+  const sig = req.headers['stripe-signature'] as string;
+  if (!sig) {
+    res.status(400).json({ error: { message: 'Missing Stripe signature', status: 400 } });
+    return;
+  }
+
+  // Peek at the raw body to extract tenant_id (signature re-verified below).
+  let peekedTenantId: string | undefined;
+  try {
+    const peeked = JSON.parse((req.body as Buffer).toString('utf8'));
+    peekedTenantId = peeked?.data?.object?.metadata?.tenant_id;
+  } catch {
+    /* malformed — signature verification below will reject */
+  }
+
+  const tenant = peekedTenantId ? resolveTenantById(peekedTenantId) : getDefaultTenant();
+  if (!tenant) {
+    // In single-tenant deployments with env-only Stripe config, there may be no
+    // loaded tenants. Fall through without tenant context; supabase proxy will
+    // use the env-var default client.
+    await processWebhook(req, res, sig);
+    return;
+  }
+
+  // Run the rest in tenant context so getStripeConfig reads the right keys
+  // and all downstream supabase queries hit the right DB.
+  const clients = getOrCreateClients(tenant);
+  await tenantStore.run({ tenant, ...clients }, () => processWebhook(req, res, sig));
+}
+
+async function processWebhook(req: Request, res: Response, sig: string): Promise<void> {
   try {
     const config = await getStripeConfig();
     if (!config) {
-      return res.status(503).json({ error: { message: 'Stripe not configured', status: 503 } });
+      res.status(503).json({ error: { message: 'Stripe not configured', status: 503 } });
+      return;
+    }
+
+    if (!config.webhookSecret) {
+      res.status(400).json({
+        error: { message: 'Webhook secret not configured', status: 400 },
+      });
+      return;
     }
 
     const stripe = getStripeClient(config.secretKey);
-    const sig = req.headers['stripe-signature'] as string;
-
-    if (!sig || !config.webhookSecret) {
-      return res.status(400).json({
-        error: { message: 'Missing Stripe signature or webhook secret not configured', status: 400 },
-      });
-    }
 
     let event: any;
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, config.webhookSecret);
     } catch (err: any) {
       logger.warn('Stripe webhook signature failed', { error: err.message });
-      return res.status(400).json({ error: { message: 'Invalid signature', status: 400 } });
+      res.status(400).json({ error: { message: 'Invalid signature', status: 400 } });
+      return;
     }
 
-    logger.info('Stripe webhook received', { type: event.type, id: event.id });
+    logger.info('Stripe webhook received', {
+      type: event.type,
+      id: event.id,
+      tenant: tenantStore.getStore()?.tenant?.id || 'default',
+    });
 
     // Handle checkout.session.completed
     if (event.type === 'checkout.session.completed') {
@@ -313,7 +364,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
       const colId = await getCollectionId('stripe-transactions');
       if (!colId) {
         logger.warn('stripe-transactions collection not found, skipping');
-        return res.json({ received: true });
+        res.json({ received: true });
+        return;
       }
 
       const { data: adminProfile } = await supabase
@@ -325,7 +377,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
       if (!adminProfile) {
         logger.warn('No admin profile found for transaction entry');
-        return res.json({ received: true });
+        res.json({ received: true });
+        return;
       }
 
       const timestamp = new Date().toISOString();
@@ -445,7 +498,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     logger.error('Stripe webhook error', { error: error.message });
     res.status(500).json({ error: { message: 'Webhook processing failed', status: 500 } });
   }
-});
+}
 
 // ============================================
 // GET /api/v1/payments/transactions

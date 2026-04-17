@@ -17,7 +17,7 @@ import activityRouter from './routes/activity.js';
 import mediaIntelRouter from './routes/media-intelligence.js';
 import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
-import paymentsRouter from './routes/payments.js';
+import paymentsRouter, { webhookHandler as paymentsWebhookHandler } from './routes/payments.js';
 import bookingsRouter from './routes/bookings.js';
 import bookingsV2Router from './routes/bookings-v2.js';
 import toursRouter from './routes/tours.js';
@@ -204,7 +204,11 @@ app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
 app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key + stricter rate limit
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
-app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
+// Stripe webhook — mounted as a direct POST handler (not via router) so the
+// request body reaches the handler without falling through to the generic
+// `/payments` mount (which requires API key and would 401 Stripe's unsigned
+// requests). Audit v1.6 C1. The raw-body parser is already configured at line 84.
+app.post('/api/v1/payments/webhook', paymentsWebhookHandler);
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
 app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router); // Bookings v2 — generic resources (decoupled from tours). Mount BEFORE legacy router so /v2 paths match first.
 app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend). LEGACY tours-coupled routes.

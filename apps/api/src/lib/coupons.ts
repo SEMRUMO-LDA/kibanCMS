@@ -328,10 +328,14 @@ export async function recordPendingRedemption(opts: {
 
 // ── Confirm a redemption (webhook path) ──
 //
-// Uses a SELECT-then-UPDATE-with-WHERE-guard pattern to atomically bump
-// `usage_count` only if under `max_uses_total`. PostgreSQL guarantees row-level
-// locking on UPDATE, so concurrent bumps serialize. If `max_uses_total` is null,
-// the guard reduces to "any row" and always succeeds.
+// Bumps `usage_count` atomically via a PL/pgSQL RPC (migration
+// 003_coupon_usage_rpc.sql). The RPC uses `GET DIAGNOSTICS ROW_COUNT` to tell
+// us whether the guarded UPDATE actually matched — something supabase-js
+// cannot do with `.filter().update()` alone (no rowcount without .select()).
+// The RPC also uses `jsonb_set` so sibling fields on the coupon entry
+// (admin-edited description, is_active toggle, etc.) survive concurrent writes.
+//
+// Audit v1.6 C2 — prior implementation silently lost races.
 
 export async function confirmRedemption(bookingId: string, stripeSessionId: string): Promise<boolean> {
   const colId = await getCollectionId('coupon-redemptions');
@@ -352,42 +356,42 @@ export async function confirmRedemption(bookingId: string, stripeSessionId: stri
   const redemptionContent = redemptionRow.content as Record<string, any>;
   const code = redemptionContent.coupon_code;
 
-  // Load the coupon
+  // Load the coupon (re-read fresh for up-to-date usage_count)
   const loaded = await loadCoupon(code);
   if (!loaded) {
     logger.warn('Coupon disappeared before redemption confirmation', { code, bookingId });
     return false;
   }
 
-  // Atomic bump: update only if usage_count < max_uses_total (or max is null).
-  // We do this via a single UPDATE guarded by content->>usage_count.
-  const newUsage = (loaded.coupon.usage_count || 0) + 1;
+  const currentUsage = loaded.coupon.usage_count || 0;
+  const newUsage = currentUsage + 1;
   const max = loaded.coupon.max_uses_total;
 
+  // Pre-check against max (fast path — still enforced by RPC but avoids the call)
   if (max != null && newUsage > max) {
-    // Raced with another confirmation; refuse.
-    await supabase
-      .from('entries')
-      .update({
-        content: { ...redemptionContent, status: 'cancelled', cancel_reason: 'coupon_exhausted' },
-        tags: ['coupon', 'redemption', 'cancelled'],
-      })
-      .eq('id', redemptionRow.id);
-    logger.warn('Redemption cancelled — coupon exhausted after race', { code, bookingId });
+    await markRedemptionCancelled(redemptionRow.id, redemptionContent, 'coupon_exhausted');
+    logger.warn('Redemption cancelled — coupon at limit', { code, bookingId, currentUsage, max });
     return false;
   }
 
-  // Guarded UPDATE — row-level lock in Postgres serializes concurrent writes.
-  const { error: bumpErr } = await supabase
-    .from('entries')
-    .update({
-      content: { ...(loaded.row.content as any), usage_count: newUsage },
-    })
-    .eq('id', loaded.row.id)
-    .filter('content->>usage_count', 'eq', String(loaded.coupon.usage_count));
+  // Atomic guarded bump via RPC. Returns true only if the UPDATE affected 1 row.
+  const { data: bumped, error: rpcErr } = await supabase.rpc('bump_coupon_usage', {
+    entry_id: loaded.row.id,
+    expected_count: currentUsage,
+    new_count: newUsage,
+  });
 
-  if (bumpErr) {
-    logger.error('Failed to bump coupon usage_count', { error: bumpErr.message, code });
+  if (rpcErr) {
+    logger.error('bump_coupon_usage RPC failed', { error: rpcErr.message, code, bookingId });
+    return false;
+  }
+
+  if (!bumped) {
+    // Lost the race — another webhook bumped the counter between our SELECT and UPDATE.
+    // The redemption is cancelled to keep the audit trail honest (both handlers
+    // cannot confirm the same coupon use).
+    await markRedemptionCancelled(redemptionRow.id, redemptionContent, 'race_lost');
+    logger.warn('Redemption cancelled — race lost on usage_count bump', { code, bookingId, currentUsage });
     return false;
   }
 
@@ -407,6 +411,20 @@ export async function confirmRedemption(bookingId: string, stripeSessionId: stri
 
   logger.info('Coupon redemption confirmed', { code, bookingId, newUsage });
   return true;
+}
+
+async function markRedemptionCancelled(
+  redemptionId: string,
+  currentContent: Record<string, any>,
+  reason: string,
+): Promise<void> {
+  await supabase
+    .from('entries')
+    .update({
+      content: { ...currentContent, status: 'cancelled', cancel_reason: reason },
+      tags: ['coupon', 'redemption', 'cancelled'],
+    })
+    .eq('id', redemptionId);
 }
 
 // ── Expire / cancel pending redemption (on Stripe session expired) ──

@@ -18,6 +18,7 @@ import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation } from '../lib/email.js';
 import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon } from '../lib/coupons.js';
+import { tenantStore } from '../middleware/tenant.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -555,6 +556,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       ...(stripeCouponId && { discounts: [{ coupon: stripeCouponId }] }),
       metadata: {
         source: 'kibanCMS-bookings-v2',
+        tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         booking_id: booking.id,
         resource_slug,
         date,
