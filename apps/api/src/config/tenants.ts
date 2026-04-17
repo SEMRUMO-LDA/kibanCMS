@@ -65,6 +65,26 @@ export function loadTenants(): void {
 
     for (const [id, config] of Object.entries(parsed)) {
       const tenant: TenantConfig = { ...config, id, origins: config.origins || [] };
+
+      // Validate required keys — missing service role key silently falls back to
+      // anon key at client creation time, which then fails on anything that
+      // bypasses RLS (media uploads, admin writes, webhook inserts). Catch it
+      // here so the operator sees the real cause at boot instead of debugging
+      // cryptic "new row violates row-level security policy" errors later.
+      if (!tenant.supabaseUrl) {
+        throw new Error(`[Tenants] Tenant "${id}" missing supabaseUrl`);
+      }
+      if (!tenant.supabaseServiceKey) {
+        throw new Error(
+          `[Tenants] Tenant "${id}" missing supabaseServiceKey. ` +
+          `Get it from Supabase dashboard → Settings → API → service_role (secret). ` +
+          `Without it, media uploads and admin writes will fail with RLS errors.`
+        );
+      }
+      if (!tenant.supabaseAnonKey) {
+        console.warn(`[Tenants] Tenant "${id}" has no supabaseAnonKey — frontends using publishable-key auth will break.`);
+      }
+
       tenants.push(tenant);
       tenantIdMap.set(id.toLowerCase(), tenant);
 
