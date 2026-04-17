@@ -13,6 +13,8 @@ export interface AddonFieldDef {
   helpText?: string;
   placeholder?: string;
   maxLength?: number;
+  /** Predefined options for select / multiselect fields. */
+  options?: Array<{ label: string; value: string }>;
 }
 
 export interface AddonCollection {
@@ -300,11 +302,19 @@ const tours: AddonDefinition = {
         { id: 'difficulty_level', name: 'difficulty_level', label: 'Difficulty', type: 'select', helpText: 'easy, moderate, challenging, extreme' },
         // Capacity & duration
         { id: 'duration_minutes', name: 'duration_minutes', label: 'Duration (minutes)', type: 'number', required: true, placeholder: '300' },
-        { id: 'min_participants', name: 'min_participants', label: 'Minimum Participants', type: 'number', placeholder: '2' },
-        { id: 'max_participants', name: 'max_participants', label: 'Maximum Participants', type: 'number', required: true, placeholder: '15' },
+        { id: 'capacity', name: 'capacity', label: 'Capacity', type: 'number', required: true, placeholder: '15', helpText: 'Maximum number of participants per tour departure' },
         { id: 'min_age', name: 'min_age', label: 'Minimum Age', type: 'number', placeholder: '6' },
         { id: 'max_age', name: 'max_age', label: 'Maximum Age', type: 'number', placeholder: '70' },
-        { id: 'languages', name: 'languages', label: 'Languages Offered', type: 'textarea', helpText: 'One per line: pt, en, es, fr', placeholder: 'pt\nen' },
+        { id: 'languages', name: 'languages', label: 'Languages Offered', type: 'multiselect', helpText: 'Languages the tour guide can speak', options: [
+          { label: 'Português', value: 'pt' },
+          { label: 'English', value: 'en' },
+          { label: 'Español', value: 'es' },
+          { label: 'Français', value: 'fr' },
+          { label: 'Deutsch', value: 'de' },
+          { label: 'Italiano', value: 'it' },
+          { label: 'Nederlands', value: 'nl' },
+          { label: '中文', value: 'zh' },
+        ] },
         // Pricing
         { id: 'price_adult', name: 'price_adult', label: 'Price Adult', type: 'number', required: true, helpText: 'Per adult in currency units (e.g. 45)' },
         { id: 'price_child', name: 'price_child', label: 'Price Child', type: 'number', helpText: 'Optional child price' },
@@ -319,12 +329,13 @@ const tours: AddonDefinition = {
         { id: 'cover_image', name: 'cover_image', label: 'Cover Image', type: 'image' },
         { id: 'gallery', name: 'gallery', label: 'Photo Gallery (JSON)', type: 'textarea', helpText: 'JSON array of image URLs' },
         { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'textarea', helpText: '3–5 bullet points, one per line' },
-        { id: 'itinerary', name: 'itinerary', label: 'Itinerary (JSON)', type: 'textarea', helpText: 'JSON: [{"name":"Benagil","description":"...","duration_minutes":60,"lat":37.08,"lng":-8.42}]' },
-        { id: 'meeting_points', name: 'meeting_points', label: 'Meeting Points (JSON)', type: 'textarea', helpText: 'JSON: [{"type":"meeting_point","address":"...","lat":0,"lng":0,"instructions":"..."}]' },
-        { id: 'pickup_zones', name: 'pickup_zones', label: 'Pickup Zones', type: 'textarea', helpText: 'One per line (e.g. Albufeira, Armação de Pêra)' },
-        { id: 'inclusions', name: 'inclusions', label: 'What\'s Included', type: 'textarea', helpText: 'One per line' },
-        { id: 'exclusions', name: 'exclusions', label: 'What\'s Not Included', type: 'textarea', helpText: 'One per line' },
-        { id: 'what_to_bring', name: 'what_to_bring', label: 'What to Bring', type: 'textarea', helpText: 'One per line' },
+        { id: 'itinerary', name: 'itinerary', label: 'Itinerary', type: 'textarea', helpText: 'Describe the tour route, stops, and approximate timing in your own words' },
+        { id: 'meeting_point', name: 'meeting_point', label: 'Meeting Point', type: 'textarea', helpText: 'Where customers should meet. You can include address, landmark hints, arrival instructions, or parking notes.', placeholder: 'McDonalds, Lugar da Corrieira, Albufeira. Please arrive 10 min early. Parking available nearby.' },
+        { id: 'pickup_zones', name: 'pickup_zones', label: 'Pickup Zones', type: 'textarea', helpText: 'Zones where hotel pickup is offered. One per line (e.g. Albufeira, Armação de Pêra)' },
+        { id: 'inclusions', name: 'inclusions', label: 'What\'s Included', type: 'textarea', required: true, helpText: 'One item per line (e.g. Professional guide, All taxes, Hotel pickup)', placeholder: 'Professional guide\nAll taxes and fees\nBottled water' },
+        { id: 'exclusions', name: 'exclusions', label: 'What\'s Not Included', type: 'textarea', required: true, helpText: 'One item per line (e.g. Snacks, Gratuities, Insurance)', placeholder: 'Snacks and meals\nGratuities\nPersonal insurance' },
+        { id: 'what_to_bring', name: 'what_to_bring', label: 'What to Bring', type: 'textarea', helpText: 'Recommendations for customers. One per line.', placeholder: 'Sunscreen\nComfortable walking shoes\nWater bottle' },
+        { id: 'additional_info', name: 'additional_info', label: 'Additional Information', type: 'textarea', helpText: 'Any extra notes customers should know (tips, what to expect, preparation advice)' },
         // Accessibility & health
         { id: 'accessibility_info', name: 'accessibility_info', label: 'Accessibility (JSON)', type: 'textarea', helpText: 'JSON: {"wheelchair":false,"stroller":false,"service_animals":true,"public_transport":true}' },
         { id: 'health_restrictions', name: 'health_restrictions', label: 'Health Restrictions', type: 'textarea', helpText: 'One per line' },

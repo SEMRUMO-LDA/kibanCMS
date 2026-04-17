@@ -16,11 +16,12 @@ import { ImageField } from './ImageField';
 import { ReferenceField } from './ReferenceField';
 import { WeeklyScheduleField } from './WeeklyScheduleField';
 import { FixedSlotsField } from './FixedSlotsField';
+import { MultiSelectField } from './MultiSelectField';
 
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -181,6 +182,16 @@ export function FieldRenderer({
           {...commonProps}
           value={value}
           onChange={onChange}
+        />
+      );
+
+    case 'multiselect':
+      return (
+        <MultiSelectField
+          {...commonProps}
+          value={value}
+          onChange={onChange}
+          options={field.options || []}
         />
       );
 
