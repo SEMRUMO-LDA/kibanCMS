@@ -14,11 +14,13 @@ import { SelectField } from './SelectField';
 import { RichTextField } from './RichTextField';
 import { ImageField } from './ImageField';
 import { ReferenceField } from './ReferenceField';
+import { WeeklyScheduleField } from './WeeklyScheduleField';
+import { FixedSlotsField } from './FixedSlotsField';
 
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -161,6 +163,24 @@ export function FieldRenderer({
           value={value || ''}
           onChange={onChange}
           placeholder={field.placeholder || (field.type === 'url' ? 'https://example.com' : field.type === 'email' ? 'email@example.com' : 'slug-like-this')}
+        />
+      );
+
+    case 'weekly_schedule':
+      return (
+        <WeeklyScheduleField
+          {...commonProps}
+          value={value}
+          onChange={onChange}
+        />
+      );
+
+    case 'fixed_slots':
+      return (
+        <FixedSlotsField
+          {...commonProps}
+          value={value}
+          onChange={onChange}
         />
       );
 

@@ -198,40 +198,43 @@ const forms: AddonDefinition = {
 };
 
 // ============================================
-// BOOKINGS ADD-ON (Tours & Bookings with Stripe)
+// BOOKINGS ADD-ON (generic — any scheduled resource)
 // ============================================
 
 const bookings: AddonDefinition = {
   id: 'bookings',
-  name: 'Tours & Bookings',
-  description: 'Tour management with online booking and Stripe payments',
-  longDescription: 'Complete tour and booking system with Stripe integration. Create tours with pricing (adult/child), time slots, and capacity limits. Customers book online, pay via Stripe Checkout, and bookings are auto-confirmed on payment. Requires the Stripe Payments add-on for payment processing.',
+  name: 'Bookings',
+  description: 'Generic booking system for any scheduled resource — appointments, classes, rentals, services',
+  longDescription: 'Schedule any resource: hairdresser slots, dentist appointments, equipment rentals, consulting sessions, meeting rooms. Supports both weekly recurring schedules (with buffer time) and fixed daily time slots. Online payment via Stripe Checkout. For tours with rich content (itinerary, meeting points, inclusions), install the Tours add-on alongside.',
   icon: 'calendar-check',
   color: '#ea580c',
   category: 'commerce',
-  version: '2.0.0',
+  version: '3.0.0',
   author: 'kibanCMS',
   collections: [
     {
-      name: 'Tours',
-      slug: 'tours',
-      description: 'Available tours and experiences with pricing and schedules',
+      name: 'Bookable Resources',
+      slug: 'bookable-resources',
+      description: 'Services, appointments, classes, or equipment that customers can book',
       type: 'custom',
       fields: [
-        { id: 'title', name: 'title', label: 'Tour Name', type: 'text', required: true, placeholder: 'Sunset Kayak Tour' },
-        { id: 'description', name: 'description', label: 'Description', type: 'richtext', required: true },
-        { id: 'duration', name: 'duration', label: 'Duration', type: 'text', required: true, placeholder: '2h30', helpText: 'Display duration (e.g. 2h, 3h30)' },
+        { id: 'title', name: 'title', label: 'Resource Name', type: 'text', required: true, placeholder: 'Hair cut, Kayak rental, Consultation' },
+        { id: 'description', name: 'description', label: 'Description', type: 'richtext' },
         { id: 'image', name: 'image', label: 'Cover Image', type: 'image' },
-        { id: 'price_adult', name: 'price_adult', label: 'Price Adult (EUR)', type: 'number', required: true, helpText: 'Price per adult in euros (e.g. 35)' },
-        { id: 'price_child', name: 'price_child', label: 'Price Child (EUR)', type: 'number', helpText: 'Price per child in euros (e.g. 20). Leave empty if no child pricing.' },
-        { id: 'child_age_range', name: 'child_age_range', label: 'Child Age Range', type: 'text', placeholder: '4-12 anos', helpText: 'Age range for child pricing' },
+        { id: 'duration_minutes', name: 'duration_minutes', label: 'Duration (minutes)', type: 'number', required: true, placeholder: '60' },
+        { id: 'capacity', name: 'capacity', label: 'Capacity per Slot', type: 'number', required: true, helpText: '1 for 1-on-1 appointments, higher for group activities', placeholder: '1' },
+        { id: 'price', name: 'price', label: 'Price', type: 'number', required: true, placeholder: '35', helpText: 'Price per booking in currency units' },
+        { id: 'price_secondary', name: 'price_secondary', label: 'Secondary Price', type: 'number', helpText: 'Optional — e.g. child price for group activities' },
+        { id: 'price_secondary_label', name: 'price_secondary_label', label: 'Secondary Price Label', type: 'text', placeholder: 'Child (4–12 years)' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
-        { id: 'max_capacity', name: 'max_capacity', label: 'Max Capacity per Slot', type: 'number', required: true, helpText: 'Maximum participants per time slot' },
-        { id: 'time_slots', name: 'time_slots', label: 'Time Slots (JSON)', type: 'textarea', required: true, placeholder: '["10:00", "14:00", "17:00"]', helpText: 'JSON array of available departure times' },
-        { id: 'rating', name: 'rating', label: 'Rating', type: 'number', helpText: 'Average rating (1-5)' },
-        { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'textarea', helpText: 'Key highlights, one per line' },
-        { id: 'meeting_point', name: 'meeting_point', label: 'Meeting Point', type: 'text', placeholder: 'Marina de Lagos' },
-        { id: 'includes', name: 'includes', label: 'What\'s Included', type: 'textarea', helpText: 'Items included, one per line' },
+        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'recurring = weekly hours (e.g. Mon-Fri 9-18). fixed_slots = fixed daily times (e.g. 10:00, 14:00, 17:00)' },
+        { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used when schedule_type=recurring. Set open windows per day of week.' },
+        { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval (minutes)', type: 'number', helpText: 'Used with recurring. Gap between generated slots (e.g. 30 = slots every 30 min)', placeholder: '30' },
+        { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used when schedule_type=fixed_slots. Add each daily start time.' },
+        { id: 'buffer_minutes', name: 'buffer_minutes', label: 'Buffer Between Bookings (minutes)', type: 'number', helpText: 'Cleanup/reset gap after each booking', placeholder: '0' },
+        { id: 'booking_window_days', name: 'booking_window_days', label: 'Booking Window (days)', type: 'number', helpText: 'How far ahead customers can book', placeholder: '60' },
+        { id: 'min_notice_hours', name: 'min_notice_hours', label: 'Minimum Notice (hours)', type: 'number', helpText: 'Minimum advance notice required', placeholder: '2' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Inactive resources cannot be booked' },
       ],
     },
     {
@@ -243,20 +246,105 @@ const bookings: AddonDefinition = {
         { id: 'customer_name', name: 'customer_name', label: 'Customer Name', type: 'text', required: true },
         { id: 'customer_email', name: 'customer_email', label: 'Customer Email', type: 'email', required: true },
         { id: 'customer_phone', name: 'customer_phone', label: 'Customer Phone', type: 'text' },
-        { id: 'tour_slug', name: 'tour_slug', label: 'Tour', type: 'text', required: true, helpText: 'Slug of the booked tour' },
-        { id: 'tour_title', name: 'tour_title', label: 'Tour Name', type: 'text' },
+        { id: 'resource_slug', name: 'resource_slug', label: 'Resource', type: 'text', required: true, helpText: 'Slug of the booked resource' },
+        { id: 'resource_title', name: 'resource_title', label: 'Resource Name', type: 'text', helpText: 'Denormalized for display' },
         { id: 'date', name: 'date', label: 'Date', type: 'date', required: true },
-        { id: 'time_slot', name: 'time_slot', label: 'Time Slot', type: 'text', required: true, placeholder: '14:00' },
-        { id: 'adults', name: 'adults', label: 'Adults', type: 'number', required: true },
-        { id: 'children', name: 'children', label: 'Children', type: 'number' },
-        { id: 'total_guests', name: 'total_guests', label: 'Total Guests', type: 'number' },
-        { id: 'amount', name: 'amount', label: 'Amount (cents)', type: 'number', helpText: 'Total amount in cents' },
+        { id: 'time_slot', name: 'time_slot', label: 'Time', type: 'text', required: true, placeholder: '14:00' },
+        { id: 'party_size', name: 'party_size', label: 'Party Size', type: 'number', required: true, helpText: 'Primary participants (e.g. adults)' },
+        { id: 'party_size_secondary', name: 'party_size_secondary', label: 'Secondary Party', type: 'number', helpText: 'E.g. children' },
+        { id: 'total_participants', name: 'total_participants', label: 'Total Participants', type: 'number' },
+        { id: 'amount', name: 'amount', label: 'Amount (cents)', type: 'number' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur' },
         { id: 'booking_status', name: 'booking_status', label: 'Status', type: 'select', required: true, helpText: 'pending, confirmed, cancelled, refunded' },
         { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Stripe Session', type: 'text' },
-        { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea', helpText: 'Special requests or instructions' },
+        { id: 'source', name: 'source', label: 'Source', type: 'text', helpText: 'Origin: direct, tours-addon, import' },
+        { id: 'metadata', name: 'metadata', label: 'Metadata (JSON)', type: 'textarea', helpText: 'Extra data from integrating addons (e.g. tour_id). JSON object.' },
+        { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea' },
         { id: 'confirmed_at', name: 'confirmed_at', label: 'Confirmed At', type: 'date' },
         { id: 'cancelled_at', name: 'cancelled_at', label: 'Cancelled At', type: 'date' },
+      ],
+    },
+  ],
+};
+
+// ============================================
+// TOURS ADD-ON (rich tour schema — extends Bookings)
+// ============================================
+
+const tours: AddonDefinition = {
+  id: 'tours',
+  name: 'Tours',
+  description: 'Rich tour management for tour operators — itinerary, meeting points, pricing, policies',
+  longDescription: 'Built on top of the Bookings add-on. Provides a complete TripAdvisor-style tour schema: itinerary stops, meeting points, inclusions/exclusions, accessibility info, cancellation tiers, languages, age limits, media gallery, highlights, and FAQ. Each published tour is automatically mirrored to a bookable resource so customers can book via Stripe Checkout. Requires the Bookings and Stripe Payments add-ons.',
+  icon: 'map',
+  color: '#0891b2',
+  category: 'commerce',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Tours',
+      slug: 'tours',
+      description: 'Tour experiences with rich content. Auto-syncs to a bookable resource on publish.',
+      type: 'custom',
+      fields: [
+        // Basic info
+        { id: 'title', name: 'title', label: 'Tour Name', type: 'text', required: true, placeholder: 'Benagil Cave & Coast Tour' },
+        { id: 'subtitle', name: 'subtitle', label: 'Subtitle', type: 'text', placeholder: '5-hour guided walking tour' },
+        { id: 'short_description', name: 'short_description', label: 'Short Description', type: 'textarea', maxLength: 250, helpText: 'Used in listings and cards' },
+        { id: 'full_description', name: 'full_description', label: 'Full Description', type: 'richtext', required: true },
+        { id: 'product_code', name: 'product_code', label: 'Product Code', type: 'text', helpText: 'Internal reference (e.g. 404454P3)' },
+        // Categorization
+        { id: 'tour_type', name: 'tour_type', label: 'Tour Type', type: 'select', required: true, helpText: 'walking, boat, kayak, bus, private, coasteering, tuktuk, safari, tasting' },
+        { id: 'categories', name: 'categories', label: 'Categories', type: 'textarea', helpText: 'One per line: nature, adventure, coastal, cultural, family, romantic' },
+        { id: 'difficulty_level', name: 'difficulty_level', label: 'Difficulty', type: 'select', helpText: 'easy, moderate, challenging, extreme' },
+        // Capacity & duration
+        { id: 'duration_minutes', name: 'duration_minutes', label: 'Duration (minutes)', type: 'number', required: true, placeholder: '300' },
+        { id: 'min_participants', name: 'min_participants', label: 'Minimum Participants', type: 'number', placeholder: '2' },
+        { id: 'max_participants', name: 'max_participants', label: 'Maximum Participants', type: 'number', required: true, placeholder: '15' },
+        { id: 'min_age', name: 'min_age', label: 'Minimum Age', type: 'number', placeholder: '6' },
+        { id: 'max_age', name: 'max_age', label: 'Maximum Age', type: 'number', placeholder: '70' },
+        { id: 'languages', name: 'languages', label: 'Languages Offered', type: 'textarea', helpText: 'One per line: pt, en, es, fr', placeholder: 'pt\nen' },
+        // Pricing
+        { id: 'price_adult', name: 'price_adult', label: 'Price Adult', type: 'number', required: true, helpText: 'Per adult in currency units (e.g. 45)' },
+        { id: 'price_child', name: 'price_child', label: 'Price Child', type: 'number', helpText: 'Optional child price' },
+        { id: 'child_age_range', name: 'child_age_range', label: 'Child Age Range', type: 'text', placeholder: '4–12 years' },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur' },
+        // Schedule
+        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'recurring or fixed_slots' },
+        { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used if schedule_type=fixed_slots. Each daily start time.' },
+        { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used if schedule_type=recurring. Open windows per day of week.' },
+        { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval', type: 'number', placeholder: '30' },
+        // Rich content
+        { id: 'cover_image', name: 'cover_image', label: 'Cover Image', type: 'image' },
+        { id: 'gallery', name: 'gallery', label: 'Photo Gallery (JSON)', type: 'textarea', helpText: 'JSON array of image URLs' },
+        { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'textarea', helpText: '3–5 bullet points, one per line' },
+        { id: 'itinerary', name: 'itinerary', label: 'Itinerary (JSON)', type: 'textarea', helpText: 'JSON: [{"name":"Benagil","description":"...","duration_minutes":60,"lat":37.08,"lng":-8.42}]' },
+        { id: 'meeting_points', name: 'meeting_points', label: 'Meeting Points (JSON)', type: 'textarea', helpText: 'JSON: [{"type":"meeting_point","address":"...","lat":0,"lng":0,"instructions":"..."}]' },
+        { id: 'pickup_zones', name: 'pickup_zones', label: 'Pickup Zones', type: 'textarea', helpText: 'One per line (e.g. Albufeira, Armação de Pêra)' },
+        { id: 'inclusions', name: 'inclusions', label: 'What\'s Included', type: 'textarea', helpText: 'One per line' },
+        { id: 'exclusions', name: 'exclusions', label: 'What\'s Not Included', type: 'textarea', helpText: 'One per line' },
+        { id: 'what_to_bring', name: 'what_to_bring', label: 'What to Bring', type: 'textarea', helpText: 'One per line' },
+        // Accessibility & health
+        { id: 'accessibility_info', name: 'accessibility_info', label: 'Accessibility (JSON)', type: 'textarea', helpText: 'JSON: {"wheelchair":false,"stroller":false,"service_animals":true,"public_transport":true}' },
+        { id: 'health_restrictions', name: 'health_restrictions', label: 'Health Restrictions', type: 'textarea', helpText: 'One per line' },
+        { id: 'physical_requirements', name: 'physical_requirements', label: 'Physical Requirements', type: 'textarea' },
+        // Policies
+        { id: 'cancellation_policy', name: 'cancellation_policy', label: 'Cancellation Policy (JSON)', type: 'textarea', helpText: 'JSON tiers: [{"hours_before":24,"refund_percent":100}]' },
+        { id: 'weather_policy', name: 'weather_policy', label: 'Weather Policy', type: 'select', helpText: 'full_refund, reschedule, partial, no_refund' },
+        // Extras
+        { id: 'faq', name: 'faq', label: 'FAQ (JSON)', type: 'textarea', helpText: 'JSON: [{"question":"...","answer":"..."}]' },
+        { id: 'fine_print', name: 'fine_print', label: 'Fine Print', type: 'richtext' },
+        // Flags
+        { id: 'is_digital_ticket', name: 'is_digital_ticket', label: 'Digital Ticket', type: 'boolean' },
+        { id: 'instant_confirmation', name: 'instant_confirmation', label: 'Instant Confirmation', type: 'boolean' },
+        { id: 'travellers_choice', name: 'travellers_choice', label: 'Travellers Choice', type: 'boolean' },
+        { id: 'likely_to_sell_out', name: 'likely_to_sell_out', label: 'Likely to Sell Out', type: 'boolean' },
+        // Ratings
+        { id: 'rating', name: 'rating', label: 'Average Rating', type: 'number', helpText: '1-5' },
+        { id: 'rating_count', name: 'rating_count', label: 'Rating Count', type: 'number' },
+        // Link to bookings
+        { id: 'resource_slug', name: 'resource_slug', label: 'Bookable Resource Slug', type: 'text', helpText: 'Auto-linked to the Bookings add-on. Leave empty to auto-generate on publish.' },
       ],
     },
   ],
@@ -507,6 +595,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   seo,
   forms,
   bookings,
+  tours,
   redirects,
   webhooksVisual,
   aiContent,

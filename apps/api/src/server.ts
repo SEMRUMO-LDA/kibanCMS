@@ -19,6 +19,8 @@ import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
 import paymentsRouter from './routes/payments.js';
 import bookingsRouter from './routes/bookings.js';
+import bookingsV2Router from './routes/bookings-v2.js';
+import toursRouter from './routes/tours.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import authRouter from './routes/auth.js';
@@ -203,7 +205,9 @@ app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key 
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
 app.use('/api/v1/payments/webhook', paymentsRouter); // Stripe webhook — public, verified via signature
 app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
-app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend)
+app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router); // Bookings v2 — generic resources (decoupled from tours). Mount BEFORE legacy router so /v2 paths match first.
+app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend). LEGACY tours-coupled routes.
+app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
 app.get('/api/v1/i18n/widget.js', (req, res) => {
