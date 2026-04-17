@@ -167,8 +167,8 @@ interface SiteSettings {
   entry_url_pattern: string; collection_url_pattern: string;
   // Privacy
   privacy_policy_url: string; data_retention_days: string; cookie_consent: string; gdpr_contact: string;
-  // Email
-  smtp_host: string; smtp_port: string; smtp_user: string; smtp_from: string; smtp_from_name: string;
+  // Email (Resend — multi-tenant)
+  resend_api_key: string; default_from_email: string; default_from_name: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -182,7 +182,7 @@ const DEFAULTS: SiteSettings = {
   max_upload_mb: '50', allowed_types: 'image/*,video/*,audio/*,.pdf', thumbnail_width: '300', thumbnail_height: '300',
   entry_url_pattern: '/{collection}/{slug}', collection_url_pattern: '/{slug}',
   privacy_policy_url: '', data_retention_days: '365', cookie_consent: 'false', gdpr_contact: '',
-  smtp_host: '', smtp_port: '587', smtp_user: '', smtp_from: '', smtp_from_name: '',
+  resend_api_key: '', default_from_email: '', default_from_name: '',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -204,6 +204,7 @@ export const Settings = () => {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [showResendKey, setShowResendKey] = useState(false);
 
   const switchTab = (id: string) => { setActiveTab(id); setSearchParams({ tab: id }); };
 
@@ -503,19 +504,71 @@ export const Settings = () => {
         </Section>
       )}
 
-      {/* ── EMAIL ── */}
+      {/* ── EMAIL (Resend) ── */}
       {activeTab === 'email' && (
         <Section>
-          <h2>Email / SMTP Configuration</h2>
-          <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#92400e' }}>
-            Configure SMTP to send emails from the Newsletter add-on and form notifications.
+          <h2>Email Configuration (Resend)</h2>
+          <div style={{ padding: `${spacing[3]} ${spacing[4]}`, background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: borders.radius.lg, marginBottom: spacing[4], fontSize: typography.fontSize.sm, color: '#155e75', lineHeight: 1.6 }}>
+            kibanCMS uses <strong>Resend</strong> for transactional emails (form notifications, booking confirmations, newsletter). Each client sets their own API key below so emails are sent from your own verified domain.
+            <br /><br />
+            Get an API key at <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: '#0891b2', textDecoration: 'underline' }}>resend.com/api-keys</a>. The "From Email" domain must be verified in Resend first.
           </div>
           <Grid>
-            <Field><label>SMTP Host</label><input value={settings.smtp_host} onChange={e => update('smtp_host', e.target.value)} placeholder="smtp.gmail.com" /></Field>
-            <Field><label>SMTP Port</label><input value={settings.smtp_port} onChange={e => update('smtp_port', e.target.value)} placeholder="587" /></Field>
-            <Field><label>SMTP Username</label><input value={settings.smtp_user} onChange={e => update('smtp_user', e.target.value)} placeholder="user@gmail.com" /></Field>
-            <Field><label>From Email</label><input value={settings.smtp_from} onChange={e => update('smtp_from', e.target.value)} placeholder="noreply@example.com" /></Field>
-            <Field><label>From Name</label><input value={settings.smtp_from_name} onChange={e => update('smtp_from_name', e.target.value)} placeholder="kibanCMS" /></Field>
+            <Field $full>
+              <label>Resend API Key</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showResendKey ? 'text' : 'password'}
+                  value={settings.resend_api_key}
+                  onChange={e => update('resend_api_key', e.target.value)}
+                  placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  autoComplete="off"
+                  style={{ paddingRight: '80px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowResendKey(v => !v)}
+                  style={{
+                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                    padding: '4px 10px', background: 'transparent', border: '1px solid #d4d4d4',
+                    borderRadius: '6px', fontSize: '11px', color: '#525252', cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  {showResendKey ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <p className="help">Secret — starts with <code>re_</code>. Stored per-tenant; never exposed to the frontend.</p>
+            </Field>
+            <Field>
+              <label>From Email</label>
+              <input
+                type="email"
+                value={settings.default_from_email}
+                onChange={e => update('default_from_email', e.target.value)}
+                placeholder="noreply@yourdomain.com"
+                autoComplete="off"
+              />
+              <p className="help">Must match a domain verified in Resend</p>
+            </Field>
+            <Field>
+              <label>From Name</label>
+              <input
+                value={settings.default_from_name}
+                onChange={e => update('default_from_name', e.target.value)}
+                placeholder="Your Company"
+              />
+              <p className="help">Defaults to site name if empty</p>
+            </Field>
+            <Field $full>
+              <label>Notification Email(s)</label>
+              <input
+                value={settings.contact_email}
+                onChange={e => update('contact_email', e.target.value)}
+                placeholder="admin@yourdomain.com, sales@yourdomain.com"
+              />
+              <p className="help">Comma-separated. Receives form submissions and booking alerts. Uses the General tab's "Contact Email" field.</p>
+            </Field>
           </Grid>
         </Section>
       )}
