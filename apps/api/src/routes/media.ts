@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import multer from 'multer';
 import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { tenantStore } from '../middleware/tenant.js';
 import { logger } from '../lib/logger.js';
 
 const router: Router = Router();
@@ -217,10 +218,16 @@ async function processUpload(
  * Multipart: field name "file", optional fields: alt_text, caption, folder_path, is_public
  * Base64:    JSON body with { file, filename, mime_type, alt_text?, caption?, folder_path?, is_public? }
  */
-router.post('/upload', (req: AuthRequest, res: Response, next) => {
+router.post('/upload', (req: AuthRequest, res: Response, _next) => {
   // Detect content type to route to multipart or base64 handler
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
+    // Multer's stream-based processing loses the AsyncLocalStorage context
+    // between request entry and the callback, so tenantStore.getStore() returns
+    // undefined in handleMultipartUpload → `No Supabase client available` error.
+    // Capture the store here (still inside tenantMiddleware's run()) and re-run
+    // the handler inside it after multer completes.
+    const store = tenantStore.getStore();
     upload.single('file')(req, res, (err) => {
       if (err) {
         const status = err.message.includes('Unsupported file type') ? 400 :
@@ -233,7 +240,11 @@ router.post('/upload', (req: AuthRequest, res: Response, next) => {
           },
         });
       }
-      handleMultipartUpload(req, res);
+      if (store) {
+        tenantStore.run(store, () => handleMultipartUpload(req, res));
+      } else {
+        handleMultipartUpload(req, res);
+      }
     });
   } else {
     handleBase64Upload(req, res);
