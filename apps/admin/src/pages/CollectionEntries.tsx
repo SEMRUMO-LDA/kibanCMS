@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Camera } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { SnapshotManager } from '../components/SnapshotManager';
+import { ImportCSVModal } from '../components/ImportCSVModal';
 
 // ============================================
 // ANIMATIONS
@@ -782,6 +783,7 @@ export const CollectionEntries = () => {
   const [collectionName, setCollectionName] = useState('');
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showSnapshots, setShowSnapshots] = useState(false);
+  const [showImportCSV, setShowImportCSV] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string>('');
@@ -999,6 +1001,10 @@ export const CollectionEntries = () => {
           <CodeButton onClick={() => setShowSnapshots(true)}>
             <Camera size={18} />
             Snapshots
+          </CodeButton>
+          <CodeButton onClick={() => setShowImportCSV(true)}>
+            <Upload size={18} />
+            Import CSV
           </CodeButton>
           {entries.length > 0 && (
             <CodeButton onClick={handleExportCSV}>
@@ -1309,6 +1315,22 @@ export const CollectionEntries = () => {
           collectionName={collectionName || collectionSlug}
           onClose={() => setShowSnapshots(false)}
           onRollback={() => window.location.reload()}
+        />
+      )}
+      {showImportCSV && collectionSlug && (
+        <ImportCSVModal
+          collectionSlug={collectionSlug}
+          collectionName={collectionName || collectionSlug}
+          onClose={() => setShowImportCSV(false)}
+          onImported={(ok, failed) => {
+            toast.success(
+              failed > 0
+                ? `${ok} imported, ${failed} failed`
+                : `${ok} entries imported`
+            );
+            // Refresh entries list
+            window.location.reload();
+          }}
         />
       )}
     </Container>
