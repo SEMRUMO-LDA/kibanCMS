@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation } from '../lib/email.js';
+import { confirmRedemption, cancelPendingRedemption } from '../lib/coupons.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -388,7 +389,25 @@ router.post('/webhook', async (req: Request, res: Response) => {
           sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
             logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
           );
+
+          // Confirm coupon redemption + atomic usage_count bump (non-blocking).
+          if (session.metadata?.coupon_code) {
+            confirmRedemption(bookingId, session.id).catch(err =>
+              logger.warn('Coupon redemption confirm failed', { bookingId, error: err.message })
+            );
+          }
         }
+      }
+    }
+
+    // Release coupon hold if Stripe session expired before payment
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as any;
+      const bookingId = session.metadata?.booking_id;
+      if (bookingId && session.metadata?.coupon_code) {
+        cancelPendingRedemption(bookingId, 'expired').catch(err =>
+          logger.warn('Failed to expire pending redemption', { bookingId, error: err.message })
+        );
       }
     }
 

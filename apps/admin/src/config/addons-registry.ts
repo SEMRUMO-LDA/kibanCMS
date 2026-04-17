@@ -585,6 +585,68 @@ const accessibility: AddonDefinition = {
 };
 
 // ============================================
+// COUPONS ADD-ON (discount codes — depends on Bookings)
+// ============================================
+
+const coupons: AddonDefinition = {
+  id: 'coupons',
+  name: 'Coupons',
+  description: 'Discount codes for bookings — percentage or fixed, with usage limits and scope rules',
+  longDescription: 'Create and manage discount coupons applied at checkout. Supports percentage or fixed-amount discounts, expiry dates, total/per-customer usage limits, resource whitelists, first-time customer rules, and optional stackability. When Stripe Payments is installed, coupons are mirrored as native Stripe coupons and applied to the Checkout Session — so Stripe is the single source of truth for the final amount, preventing double-discount bugs. Every redemption is audited in a separate collection for reconciliation. Requires the Bookings add-on.',
+  icon: 'ticket-percent',
+  color: '#dc2626',
+  category: 'commerce',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Coupons',
+      slug: 'coupons',
+      description: 'Discount codes with rules and limits',
+      type: 'custom',
+      fields: [
+        { id: 'code', name: 'code', label: 'Code', type: 'text', required: true, helpText: 'Alphanumeric code customers type at checkout. Case-insensitive. Avoid 0/O/1/I.', placeholder: 'SUMMER25' },
+        { id: 'description', name: 'description', label: 'Description', type: 'text', helpText: 'Internal label (e.g. "Summer 2026 campaign")' },
+        { id: 'type', name: 'type', label: 'Discount Type', type: 'select', required: true, helpText: 'percentage or fixed' },
+        { id: 'value', name: 'value', label: 'Value', type: 'number', required: true, helpText: 'Percentage (1-100) or fixed amount in currency units', placeholder: '25' },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur', helpText: 'Only used for fixed-amount coupons. ISO 4217.' },
+        { id: 'min_amount', name: 'min_amount', label: 'Min Order Amount', type: 'number', helpText: 'Minimum subtotal required to apply (in currency units). Empty = no minimum.' },
+        { id: 'max_discount', name: 'max_discount', label: 'Max Discount Cap', type: 'number', helpText: 'Cap on discount for percentage coupons (e.g. "20% off, max 50 EUR")' },
+        { id: 'starts_at', name: 'starts_at', label: 'Starts At', type: 'date', helpText: 'Coupon not valid before this date' },
+        { id: 'expires_at', name: 'expires_at', label: 'Expires At', type: 'date', helpText: 'Coupon not valid after this date' },
+        { id: 'max_uses_total', name: 'max_uses_total', label: 'Max Uses (Total)', type: 'number', helpText: 'Global limit across all customers. Empty = unlimited.' },
+        { id: 'max_uses_per_customer', name: 'max_uses_per_customer', label: 'Max Uses Per Customer', type: 'number', helpText: 'Empty or 0 = unlimited', placeholder: '1' },
+        { id: 'usage_count', name: 'usage_count', label: 'Usage Count', type: 'number', helpText: 'Auto-updated on confirmed redemptions. Do not edit manually.' },
+        { id: 'applies_to', name: 'applies_to', label: 'Applies To', type: 'select', required: true, helpText: 'all_resources or specific_resources' },
+        { id: 'resource_slugs', name: 'resource_slugs', label: 'Resource Slugs', type: 'textarea', helpText: 'Used when applies_to=specific_resources. One slug per line.' },
+        { id: 'new_customers_only', name: 'new_customers_only', label: 'New Customers Only', type: 'boolean', helpText: 'Reject if the email has any prior confirmed booking' },
+        { id: 'stackable', name: 'stackable', label: 'Stackable', type: 'boolean', helpText: 'Allow combining with other coupons (default: false)' },
+        { id: 'stripe_coupon_id', name: 'stripe_coupon_id', label: 'Stripe Coupon ID', type: 'text', helpText: 'Auto-linked to Stripe coupon. Read-only.' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Inactive coupons are always rejected' },
+      ],
+    },
+    {
+      name: 'Coupon Redemptions',
+      slug: 'coupon-redemptions',
+      description: 'Audit log of coupon uses — one row per checkout where a coupon was applied',
+      type: 'custom',
+      fields: [
+        { id: 'coupon_code', name: 'coupon_code', label: 'Coupon Code', type: 'text', required: true },
+        { id: 'booking_id', name: 'booking_id', label: 'Booking ID', type: 'text', required: true },
+        { id: 'customer_email', name: 'customer_email', label: 'Customer Email', type: 'email', required: true },
+        { id: 'subtotal_cents', name: 'subtotal_cents', label: 'Subtotal (cents)', type: 'number', required: true },
+        { id: 'discount_cents', name: 'discount_cents', label: 'Discount (cents)', type: 'number', required: true },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true },
+        { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Stripe Session', type: 'text' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select', required: true, helpText: 'pending, confirmed, expired, cancelled' },
+        { id: 'redeemed_at', name: 'redeemed_at', label: 'Redeemed At', type: 'date' },
+        { id: 'confirmed_at', name: 'confirmed_at', label: 'Confirmed At', type: 'date' },
+      ],
+    },
+  ],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -596,6 +658,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   forms,
   bookings,
   tours,
+  coupons,
   redirects,
   webhooksVisual,
   aiContent,

@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation } from '../lib/email.js';
+import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon } from '../lib/coupons.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -388,6 +389,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       customer_phone,
       notes,
       metadata,
+      coupon_code,
       success_url,
       cancel_url,
     } = req.body || {};
@@ -452,6 +454,28 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Optional: validate coupon BEFORE creating the booking, so we can reject fast.
+    let couponValidation: Awaited<ReturnType<typeof validateCoupon>> | null = null;
+    if (coupon_code && typeof coupon_code === 'string' && coupon_code.trim()) {
+      couponValidation = await validateCoupon({
+        code: coupon_code.trim(),
+        resource_slug,
+        customer_email: String(customer_email).toLowerCase(),
+        subtotal_cents: totalCents,
+        currency: resource.currency,
+      });
+      if (!couponValidation.valid) {
+        return res.status(400).json({
+          error: {
+            message: couponValidation.message || 'Coupon is not valid',
+            code: couponValidation.reason,
+            status: 400,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+    }
+
     const adminId = await getAdminProfileId();
     if (!adminId) {
       return res.status(500).json({
@@ -502,6 +526,17 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     }
 
     const stripe = getStripeClient(stripeConfig.secretKey);
+
+    // Resolve Stripe coupon ID if a coupon was validated. We look up the DB row
+    // fresh to get the current `stripe_coupon_id` cache field.
+    let stripeCouponId: string | null = null;
+    if (couponValidation?.valid && couponValidation.coupon) {
+      const loaded = await loadCoupon(couponValidation.coupon.code);
+      if (loaded) {
+        stripeCouponId = await ensureStripeCoupon(stripe, loaded.row, loaded.coupon);
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -517,16 +552,35 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
         },
         quantity: 1,
       }],
+      ...(stripeCouponId && { discounts: [{ coupon: stripeCouponId }] }),
       metadata: {
         source: 'kibanCMS-bookings-v2',
         booking_id: booking.id,
         resource_slug,
         date,
         time_slot,
+        ...(couponValidation?.valid && couponValidation.coupon && {
+          coupon_code: couponValidation.coupon.code,
+          discount_cents: String(couponValidation.discount_cents || 0),
+        }),
       },
       success_url,
       cancel_url,
     });
+
+    // Audit: record pending redemption (reconciled by webhook on success/expiry).
+    if (couponValidation?.valid && couponValidation.coupon && couponValidation.discount_cents != null) {
+      await recordPendingRedemption({
+        coupon: couponValidation.coupon,
+        booking_id: booking.id,
+        customer_email: String(customer_email),
+        subtotal_cents: totalCents,
+        discount_cents: couponValidation.discount_cents,
+        currency: resource.currency,
+        stripe_session_id: session.id,
+        author_id: adminId,
+      });
+    }
 
     // Persist stripe_session_id on the booking
     const { data: cur } = await supabase
@@ -545,7 +599,14 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     logger.info('Booking v2 created', { bookingId: booking.id, sessionId: session.id, resource_slug });
 
     res.status(201).json({
-      data: { booking_id: booking.id, checkout_url: session.url },
+      data: {
+        booking_id: booking.id,
+        checkout_url: session.url,
+        subtotal_cents: totalCents,
+        discount_cents: couponValidation?.discount_cents || 0,
+        total_cents: totalCents - (couponValidation?.discount_cents || 0),
+        coupon_applied: couponValidation?.valid ? couponValidation.coupon?.code : null,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
