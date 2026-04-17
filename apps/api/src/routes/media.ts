@@ -273,9 +273,14 @@ async function handleMultipartUpload(req: AuthRequest, res: Response) {
 
     res.status(201).json({ data: result, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    logger.error('Error uploading media (multipart)', { error: error.message });
+    logger.error('Error uploading media (multipart)', { error: error.message, stack: error.stack });
     res.status(500).json({
-      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+      error: {
+        message: error.message || 'Upload failed',
+        details: error.details || error.hint || undefined,
+        status: 500,
+        timestamp: new Date().toISOString(),
+      },
     });
   }
 }
@@ -333,9 +338,14 @@ async function handleBase64Upload(req: AuthRequest, res: Response) {
 
     res.status(201).json({ data: result, timestamp: new Date().toISOString() });
   } catch (error: any) {
-    logger.error('Error uploading media (base64)', { error: error.message });
+    logger.error('Error uploading media (base64)', { error: error.message, stack: error.stack });
     res.status(500).json({
-      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+      error: {
+        message: error.message || 'Upload failed',
+        details: error.details || error.hint || undefined,
+        status: 500,
+        timestamp: new Date().toISOString(),
+      },
     });
   }
 }
