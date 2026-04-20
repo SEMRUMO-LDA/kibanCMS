@@ -135,7 +135,7 @@
     var btn = document.createElement('button');
     btn.id = 'kiban-a11y-btn';
     btn.setAttribute('aria-label', buttonLabel);
-    btn.style.cssText = 'position:fixed;z-index:99998;' + (posMap[position] || posMap['bottom-left']) +
+    btn.style.cssText = 'position:fixed;z-index:2147483600;' + (posMap[position] || posMap['bottom-left']) +
       'width:44px;height:44px;border-radius:50%;border:none;background:#2c2c2c;color:#fff;' +
       'cursor:pointer;display:flex;align-items:center;justify-content:center;' +
       'box-shadow:0 2px 12px rgba(0,0,0,0.15);transition:transform 0.2s ease;';
@@ -148,7 +148,7 @@
     panel.id = 'kiban-a11y-panel';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Accessibility preferences');
-    panel.style.cssText = 'position:fixed;z-index:99999;' + (panelPosMap[position] || panelPosMap['bottom-left']) +
+    panel.style.cssText = 'position:fixed;z-index:2147483601;' + (panelPosMap[position] || panelPosMap['bottom-left']) +
       'width:320px;max-height:80vh;overflow-y:auto;background:' + panelBg + ';color:' + panelText + ';' +
       'border-radius:16px;border:1px solid ' + panelBorder + ';' +
       'box-shadow:0 12px 40px rgba(0,0,0,0.2);padding:20px;display:none;' +
