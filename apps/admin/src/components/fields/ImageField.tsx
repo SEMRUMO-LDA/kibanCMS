@@ -11,9 +11,30 @@ import { useState, useRef, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../../shared/styles/design-tokens';
 import { FieldWrapper } from './FieldWrapper';
-import { Upload, X, Image as ImageIcon, FolderOpen, Link, Loader, Check } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, FolderOpen, Link, Loader, Check, Crosshair } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+
+// ── Focal point helpers ──
+// Stored as `#fp=x,y` in the URL hash (0-100 = percentage).
+// Frontend reads this and applies as CSS object-position.
+type FocalPoint = { x: number; y: number };
+
+function parseFocalPoint(url: string): FocalPoint {
+  if (!url) return { x: 50, y: 50 };
+  const match = url.match(/#fp=(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/);
+  if (!match) return { x: 50, y: 50 };
+  return {
+    x: Math.max(0, Math.min(100, parseFloat(match[1]))),
+    y: Math.max(0, Math.min(100, parseFloat(match[2]))),
+  };
+}
+
+function setFocalPointOnUrl(url: string, fp: FocalPoint): string {
+  if (!url) return url;
+  const clean = url.replace(/#fp=\d+(?:\.\d+)?,\d+(?:\.\d+)?$/, '');
+  return `${clean}#fp=${fp.x.toFixed(1)},${fp.y.toFixed(1)}`;
+}
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -54,10 +75,48 @@ const PreviewArea = styled.div`
   }
 `;
 
-const PreviewImage = styled.img`
+const PreviewImage = styled.img<{ $focalX?: number; $focalY?: number }>`
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: ${p => `${p.$focalX ?? 50}% ${p.$focalY ?? 50}%`};
+`;
+
+const FocalDot = styled.div<{ $x: number; $y: number }>`
+  position: absolute;
+  top: ${p => p.$y}%;
+  left: ${p => p.$x}%;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  margin-left: -14px;
+  border-radius: 50%;
+  background: rgba(218, 105, 39, 0.9);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.1);
+  cursor: grab;
+  z-index: 5;
+  transition: transform 0.1s;
+
+  &:hover { transform: scale(1.15); }
+  &:active { cursor: grabbing; transform: scale(0.95); }
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: #fff;
+  }
+`;
+
+const FocalInstructions = styled.div`
+  font-size: ${typography.fontSize.xs};
+  color: ${colors.gray[500]};
+  padding: ${spacing[2]} 0;
+  display: flex;
+  align-items: center;
+  gap: ${spacing[1]};
 `;
 
 const PlaceholderContent = styled.div`
@@ -239,12 +298,25 @@ export function ImageField({
 }: ImageFieldProps) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [pickerLoading, setPickerLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const focal = parseFocalPoint(value);
+
+  const updateFocalPoint = useCallback((clientX: number, clientY: number) => {
+    const el = previewRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+    onChange(setFocalPointOnUrl(value, { x, y }));
+  }, [value, onChange]);
 
   const openPicker = useCallback(async () => {
     setShowPicker(true);
@@ -326,12 +398,44 @@ export function ImageField({
     >
       <ImageContainer>
         <PreviewArea
+          ref={previewRef}
           data-has-image={!!value}
-          onClick={() => !value && openPicker()}
+          onClick={(e) => {
+            if (!value) { openPicker(); return; }
+            // Click on image area sets focal point (unless the click is on a dot/button)
+            const target = e.target as HTMLElement;
+            if (target.closest('button')) return;
+            updateFocalPoint(e.clientX, e.clientY);
+          }}
+          style={value ? { cursor: 'crosshair' } : undefined}
         >
           {value ? (
             <>
-              <PreviewImage src={value} alt="Preview" />
+              <PreviewImage
+                src={value}
+                alt="Preview"
+                $focalX={focal.x}
+                $focalY={focal.y}
+                draggable={false}
+              />
+              <FocalDot
+                $x={focal.x}
+                $y={focal.y}
+                title="Drag to set focal point"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(true);
+                  const onMove = (ev: MouseEvent) => updateFocalPoint(ev.clientX, ev.clientY);
+                  const onUp = () => {
+                    setIsDragging(false);
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
               <RemoveButton type="button" onClick={handleRemove}>
                 <X size={14} />
               </RemoveButton>
@@ -344,6 +448,15 @@ export function ImageField({
             </PlaceholderContent>
           )}
         </PreviewArea>
+
+        {value && (
+          <FocalInstructions>
+            <Crosshair size={12} />
+            {isDragging
+              ? `Focal point: ${focal.x.toFixed(0)}%, ${focal.y.toFixed(0)}%`
+              : 'Click or drag the dot to set the focal point for cropping'}
+          </FocalInstructions>
+        )}
 
         {showUrlInput ? (
           <div style={{ display: 'flex', gap: spacing[2] }}>
