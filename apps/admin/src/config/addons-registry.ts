@@ -357,17 +357,17 @@ const tours: AddonDefinition = {
         { id: 'cover_image', name: 'cover_image', label: 'Cover Image', type: 'image' },
         { id: 'gallery', name: 'gallery', label: 'Photo Gallery (JSON)', type: 'textarea', helpText: 'JSON array of image URLs' },
         { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'textarea', helpText: '3–5 bullet points, one per line' },
-        { id: 'itinerary', name: 'itinerary', label: 'Itinerary', type: 'textarea', helpText: 'Describe the tour route, stops, and approximate timing in your own words' },
-        { id: 'meeting_point', name: 'meeting_point', label: 'Meeting Point', type: 'textarea', helpText: 'Where customers should meet. You can include address, landmark hints, arrival instructions, or parking notes.', placeholder: 'McDonalds, Lugar da Corrieira, Albufeira. Please arrive 10 min early. Parking available nearby.' },
+        { id: 'itinerary', name: 'itinerary', label: 'Itinerary', type: 'richtext', helpText: 'Describe the tour route, stops, and approximate timing. Rich text editor — use headings, lists, bold/italic, links, etc.' },
+        { id: 'meeting_point', name: 'meeting_point', label: 'Meeting Point', type: 'richtext', helpText: 'Where customers should meet. You can include address, landmark hints, arrival instructions, or parking notes.' },
         { id: 'pickup_zones', name: 'pickup_zones', label: 'Pickup Zones', type: 'textarea', helpText: 'Zones where hotel pickup is offered. One per line (e.g. Albufeira, Armação de Pêra)' },
         { id: 'inclusions', name: 'inclusions', label: 'What\'s Included', type: 'textarea', required: true, helpText: 'One item per line (e.g. Professional guide, All taxes, Hotel pickup)', placeholder: 'Professional guide\nAll taxes and fees\nBottled water' },
         { id: 'exclusions', name: 'exclusions', label: 'What\'s Not Included', type: 'textarea', required: true, helpText: 'One item per line (e.g. Snacks, Gratuities, Insurance)', placeholder: 'Snacks and meals\nGratuities\nPersonal insurance' },
         { id: 'what_to_bring', name: 'what_to_bring', label: 'What to Bring', type: 'textarea', helpText: 'Recommendations for customers. One per line.', placeholder: 'Sunscreen\nComfortable walking shoes\nWater bottle' },
-        { id: 'additional_info', name: 'additional_info', label: 'Additional Information', type: 'textarea', helpText: 'Any extra notes customers should know (tips, what to expect, preparation advice)' },
+        { id: 'additional_info', name: 'additional_info', label: 'Additional Information', type: 'richtext', helpText: 'Any extra notes customers should know (tips, what to expect, preparation advice)' },
         // Accessibility & health
         { id: 'accessibility_info', name: 'accessibility_info', label: 'Accessibility (JSON)', type: 'textarea', helpText: 'JSON: {"wheelchair":false,"stroller":false,"service_animals":true,"public_transport":true}' },
         { id: 'health_restrictions', name: 'health_restrictions', label: 'Health Restrictions', type: 'textarea', helpText: 'One per line' },
-        { id: 'physical_requirements', name: 'physical_requirements', label: 'Physical Requirements', type: 'textarea' },
+        { id: 'physical_requirements', name: 'physical_requirements', label: 'Physical Requirements', type: 'richtext' },
         // Policies
         { id: 'cancellation_policy', name: 'cancellation_policy', label: 'Cancellation Policy (JSON)', type: 'textarea', helpText: 'JSON tiers: [{"hours_before":24,"refund_percent":100}]' },
         { id: 'weather_policy', name: 'weather_policy', label: 'Weather Policy', type: 'select', options: [
