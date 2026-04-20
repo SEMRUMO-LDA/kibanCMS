@@ -167,9 +167,13 @@ class ApiClient {
       if (options?.folder_path) formData.append('folder_path', options.folder_path);
       if (options?.is_public !== undefined) formData.append('is_public', String(options.is_public));
 
+      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` };
+      const tenantId = getTenantId();
+      if (tenantId) headers['X-Tenant'] = tenantId;
+
       const res = await fetch(`${API_BASE}/media/upload`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers,
         body: formData,
         signal: controller.signal,
       });

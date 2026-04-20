@@ -3,7 +3,7 @@
  * All API requests should go through this client
  */
 
-import { supabase } from './supabase';
+import { supabase, getTenantId } from './supabase';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:5001');
 
@@ -31,15 +31,22 @@ async function apiRequest<T = any>(
     }
 
     const url = `${API_URL}${endpoint}`;
+    const tenantId = getTenantId();
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...options.headers,
-      },
-    });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    // Multi-tenant: send X-Tenant so the API routes the request to the
+    // correct Supabase. Without this, non-default tenants get "Invalid token"
+    // because the JWT is validated against the wrong Supabase project.
+    if (tenantId) {
+      headers['X-Tenant'] = tenantId;
+    }
+
+    const response = await fetch(url, { ...options, headers });
 
     if (!response.ok) {
       const errorText = await response.text();
