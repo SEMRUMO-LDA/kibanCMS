@@ -18,6 +18,7 @@ interface A11yConfig {
   };
   theme: 'auto' | 'light' | 'dark';
   buttonLabel: string;
+  buttonColor: string;
   customCSS: string;
 }
 
@@ -39,6 +40,7 @@ const DEFAULT_CONFIG: A11yConfig = {
   },
   theme: 'auto',
   buttonLabel: 'Accessibility settings',
+  buttonColor: '#2c2c2c',
   customCSS: '',
 };
 
@@ -295,6 +297,52 @@ export function AccessibilitySettingsPage({ supabase, addonId = 'accessibility' 
             value={config.buttonLabel}
             onChange={e => setConfig(c => ({ ...c, buttonLabel: e.target.value }))}
           />
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label}>Button Color</label>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <input
+              type="color"
+              value={config.buttonColor}
+              onChange={e => setConfig(c => ({ ...c, buttonColor: e.target.value }))}
+              style={{
+                width: '44px',
+                height: '40px',
+                padding: '2px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: '#fff',
+              }}
+              aria-label="Pick button color"
+            />
+            <input
+              style={{ ...styles.input, flex: 1, fontFamily: 'monospace' }}
+              value={config.buttonColor}
+              onChange={e => setConfig(c => ({ ...c, buttonColor: e.target.value }))}
+              placeholder="#2c2c2c"
+              pattern="^#[0-9A-Fa-f]{6}$"
+            />
+            <button
+              type="button"
+              onClick={() => setConfig(c => ({ ...c, buttonColor: DEFAULT_CONFIG.buttonColor }))}
+              style={{
+                padding: '8px 14px',
+                background: '#fff',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '13px',
+                color: '#6b7280',
+                cursor: 'pointer',
+              }}
+            >
+              Reset
+            </button>
+          </div>
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: '4px 0 0' }}>
+            Applied as the background of the floating button. Use your brand color for visual consistency.
+          </p>
         </div>
       </div>
 
