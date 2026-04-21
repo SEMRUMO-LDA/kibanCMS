@@ -10,7 +10,7 @@ import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
-  Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility, Power, PowerOff,
+  Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility, Power, PowerOff, RefreshCw,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -280,6 +280,31 @@ export const Addons = () => {
     }
   };
 
+  /**
+   * Re-pushes the add-on's collection field definitions to the API for an
+   * already-installed add-on. Needed whenever the add-on's registry definition
+   * changes (new fields, renamed labels, changed types) — the collection
+   * schema in the DB is otherwise frozen at install time.
+   */
+  const handleSyncSchema = async (addon: AddonDefinition) => {
+    setInstalling(addon.id);
+    let updated = 0;
+    try {
+      for (const col of addon.collections) {
+        const { error } = await api.updateCollection(col.slug, {
+          name: col.name, description: col.description, fields: col.fields,
+        });
+        if (error) throw new Error(error);
+        updated++;
+      }
+      toast.success(`Schema updated — ${updated} collection${updated === 1 ? '' : 's'} in sync`);
+    } catch (err: any) {
+      toast.error('Sync failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setInstalling(null);
+    }
+  };
+
   const handleUninstall = async (addon: AddonDefinition) => {
     if (!confirm(`Uninstall "${addon.name}"? This will DELETE all its collections and data.`)) return;
     setInstalling(addon.id);
@@ -415,7 +440,7 @@ export const Addons = () => {
                   {isInstalled ? (
                     <>
                       <InstalledBadge><CheckCircle /> Installed</InstalledBadge>
-                      <div style={{ display: 'flex', gap: spacing[2] }}>
+                      <div style={{ display: 'flex', gap: spacing[2], flexWrap: 'wrap' }}>
                         <Btn $variant="ghost" onClick={() => navigate(
                           addon.settingsRoute ? addon.settingsRoute :
                           addon.id === 'bookings' ? '/bookings' :
@@ -423,6 +448,20 @@ export const Addons = () => {
                         )}>
                           {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
                         </Btn>
+                        {addon.collections.length > 0 && (
+                          <Btn
+                            $variant="ghost"
+                            onClick={() => handleSyncSchema(addon)}
+                            disabled={isInstalling}
+                            title="Push latest field definitions to the collection schema"
+                          >
+                            {isInstalling ? (
+                              <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Syncing…</>
+                            ) : (
+                              <><RefreshCw /> Update schema</>
+                            )}
+                          </Btn>
+                        )}
                         {addon.settingsRoute ? (
                           <Btn $variant="danger" onClick={() => handleDisableWidget(addon)} disabled={isInstalling}>
                             <PowerOff /> Disable
