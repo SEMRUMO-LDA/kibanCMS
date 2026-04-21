@@ -20,6 +20,13 @@
   var srcUrl = new URL(scriptTag.src, window.location.href);
   var BASE_URL = srcUrl.origin;
   var PREFS_KEY = 'kiban_a11y_prefs';
+  // Multi-tenant: shared API host needs X-Tenant to resolve the right Supabase.
+  var TENANT_ID = scriptTag.getAttribute('data-tenant');
+
+  function setAuthHeaders(xhr) {
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+  }
 
   // ── Preferences ──
   var defaults = { fontSize: 0, contrast: false, reducedMotion: false, lineSpacing: 0, largeCursor: false, textAlign: false };
@@ -41,7 +48,7 @@
   function fetchConfig(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/accessibility/config');
-    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    setAuthHeaders(xhr);
     xhr.onload = function () {
       if (xhr.status === 200) {
         try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }

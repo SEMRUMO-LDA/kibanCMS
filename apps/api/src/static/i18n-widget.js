@@ -26,6 +26,14 @@
   var BASE_URL = srcUrl.origin;
   var POSITION_OVERRIDE = scriptTag.getAttribute('data-position');
   var STYLE_OVERRIDE = scriptTag.getAttribute('data-style');
+  // Multi-tenant: embed on a shared host (e.g. kiban.pt) needs X-Tenant
+  // so the API hits the right Supabase for translation + key validation.
+  var TENANT_ID = scriptTag.getAttribute('data-tenant');
+
+  function setAuthHeaders(xhr) {
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+  }
 
   // ── State ──
   var languages = [];
@@ -176,7 +184,7 @@
     batches.forEach(function (batch) {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', BASE_URL + '/api/v1/i18n/translate-text');
-      xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+      setAuthHeaders(xhr);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.onload = function () {
         if (xhr.status === 200) {
@@ -262,7 +270,7 @@
   function fetchJSON(url, callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url);
-    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    setAuthHeaders(xhr);
     xhr.onload = function () {
       if (xhr.status === 200) {
         try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }
