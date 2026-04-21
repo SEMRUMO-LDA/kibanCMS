@@ -15,6 +15,9 @@ export interface AddonFieldDef {
   maxLength?: number;
   /** Predefined options for select / multiselect fields. */
   options?: Array<{ label: string; value: string }>;
+  /** Min/max items for list-based field types (e.g. media_caption_list). */
+  minItems?: number;
+  maxItems?: number;
 }
 
 export interface AddonCollection {
@@ -356,7 +359,7 @@ const tours: AddonDefinition = {
         // Rich content
         { id: 'cover_image', name: 'cover_image', label: 'Cover Image', type: 'image' },
         { id: 'gallery', name: 'gallery', label: 'Photo Gallery (JSON)', type: 'textarea', helpText: 'JSON array of image URLs' },
-        { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'textarea', helpText: '3–5 bullet points, one per line' },
+        { id: 'highlights', name: 'highlights', label: 'Highlights', type: 'media_caption_list', minItems: 3, maxItems: 5, helpText: 'Between 3 and 5 photos with a short caption each — these are the visual hooks customers see first.' },
         { id: 'itinerary', name: 'itinerary', label: 'Itinerary', type: 'richtext', helpText: 'Describe the tour route, stops, and approximate timing. Rich text editor — use headings, lists, bold/italic, links, etc.' },
         { id: 'meeting_point', name: 'meeting_point', label: 'Meeting Point', type: 'richtext', helpText: 'Where customers should meet. You can include address, landmark hints, arrival instructions, or parking notes.' },
         { id: 'pickup_zones', name: 'pickup_zones', label: 'Pickup Zones', type: 'textarea', helpText: 'Zones where hotel pickup is offered. One per line (e.g. Albufeira, Armação de Pêra)' },

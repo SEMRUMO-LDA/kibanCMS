@@ -17,11 +17,12 @@ import { ReferenceField } from './ReferenceField';
 import { WeeklyScheduleField } from './WeeklyScheduleField';
 import { FixedSlotsField } from './FixedSlotsField';
 import { MultiSelectField } from './MultiSelectField';
+import { MediaCaptionListField } from './MediaCaptionListField';
 
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect' | 'media_caption_list';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -30,6 +31,9 @@ export interface FieldDefinition {
   max?: number; // For number fields
   step?: number; // For number fields
   referenceCollection?: string; // For reference fields — slug of target collection
+  /** For list-based field types (e.g. media_caption_list) */
+  minItems?: number;
+  maxItems?: number;
   agencyNote?: string; // Inline help note from the agency
   agencyVideoUrl?: string; // Tutorial video URL (Loom, YouTube)
   agencyVideoTitle?: string; // Video link label
@@ -192,6 +196,17 @@ export function FieldRenderer({
           value={value}
           onChange={onChange}
           options={field.options || []}
+        />
+      );
+
+    case 'media_caption_list':
+      return (
+        <MediaCaptionListField
+          {...commonProps}
+          value={value}
+          onChange={onChange}
+          minItems={field.minItems}
+          maxItems={field.maxItems}
         />
       );
 

@@ -52,6 +52,35 @@ function parseJsonSafe<T>(value: unknown, fallback: T): T {
   }
 }
 
+/**
+ * Highlights can be:
+ *   - New shape: Array<{ image: string, caption: string }> (media_caption_list field)
+ *   - Legacy:    newline-separated string from the old textarea field
+ *   - Legacy:    string[]
+ * Returns always the new shape so frontends have one consistent API.
+ */
+function parseHighlights(value: unknown): Array<{ image: string; caption: string }> {
+  if (Array.isArray(value)) {
+    return value.map(v => {
+      if (v && typeof v === 'object') {
+        return {
+          image: String((v as any).image || ''),
+          caption: String((v as any).caption || ''),
+        };
+      }
+      return { image: '', caption: String(v || '') };
+    });
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return value
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(caption => ({ image: '', caption }));
+  }
+  return [];
+}
+
 function expandTourContent(entry: any): Record<string, any> {
   const c = (entry.content as Record<string, any>) || {};
   return {
@@ -79,7 +108,7 @@ function expandTourContent(entry: any): Record<string, any> {
     slot_interval_minutes: Number(c.slot_interval_minutes) || 30,
     cover_image: c.cover_image || entry.featured_image || '',
     gallery: parseJsonSafe<string[]>(c.gallery, []),
-    highlights: splitLines(c.highlights),
+    highlights: parseHighlights(c.highlights),
     itinerary: typeof c.itinerary === 'string' ? c.itinerary : '',
     meeting_point: typeof c.meeting_point === 'string' ? c.meeting_point : '',
     pickup_zones: splitLines(c.pickup_zones),
