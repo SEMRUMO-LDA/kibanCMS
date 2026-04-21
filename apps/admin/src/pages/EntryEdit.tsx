@@ -194,18 +194,33 @@ export function EntryEdit() {
     // 1. Explicit title/name field
     // 2. First non-empty string value from any field
     // 3. Fallback to "Untitled"
-    const title =
-      (data.title as string) ||
-      (data.name as string) ||
-      Object.values(data).find(v => typeof v === 'string' && v.trim().length > 0) as string ||
+    // Fields whose KEY matches SECRET_FIELD_RE are skipped during
+    // auto-derivation. Otherwise an operator pasting e.g. a 200-char Stripe
+    // publishable key into the only field ends up with a 200-char title (and
+    // slug), silently breaking the edit route and locking themselves out of
+    // their own data. Length caps are a final safety net.
+    const SECRET_FIELD_RE = /(secret|password|token|webhook|_key\b|api_key)/i;
+    const MAX_TITLE_LEN = 120;
+    const MAX_SLUG_LEN = 80;
+
+    const autoFromField = Object.entries(data).find(
+      ([k, v]) => !SECRET_FIELD_RE.test(k) && typeof v === 'string' && v.trim().length > 0
+    )?.[1] as string | undefined;
+
+    const rawTitle =
+      (typeof data.title === 'string' && data.title.trim()) ||
+      (typeof data.name === 'string' && data.name.trim()) ||
+      autoFromField ||
       'Untitled';
 
-    const slug = title
+    const title = String(rawTitle).trim().slice(0, MAX_TITLE_LEN);
+
+    const slug = (title
       .toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-      || 'entry';
+      || 'entry').slice(0, MAX_SLUG_LEN);
 
     try {
       if (isEditMode && entry && collectionSlug) {
