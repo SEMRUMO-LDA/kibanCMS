@@ -520,9 +520,70 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     if (insertError) throw insertError;
 
     const stripeConfig = await getStripeConfig();
+
+    // Demo mode — the tenant has the Bookings add-on live but hasn't yet
+    // plugged in Stripe keys. Rather than refusing the checkout (breaking the
+    // onboarding demo for sales calls), confirm the booking immediately with
+    // a `demo: true` flag and redirect to success_url. Operators can tell demo
+    // bookings apart by the flag + zero stripe_session_id. Coupon redemption
+    // and email confirmation still run so the end-to-end flow is exercised.
     if (!stripeConfig) {
-      return res.status(500).json({
-        error: { message: 'Stripe not configured', status: 500, timestamp: new Date().toISOString() },
+      logger.info('Booking v2 created in demo mode (Stripe not configured)', {
+        bookingId: booking.id,
+        resource_slug,
+      });
+
+      await supabase
+        .from('entries')
+        .update({
+          content: {
+            ...((await supabase.from('entries').select('content').eq('id', booking.id).single()).data?.content as any || {}),
+            booking_status: 'confirmed',
+            confirmed_at: new Date().toISOString(),
+            demo: true,
+          },
+          tags: ['booking', 'confirmed', 'demo'],
+        } as any)
+        .eq('id', booking.id);
+
+      // Send confirmation email (non-blocking, matches the Stripe webhook path)
+      sendBookingConfirmation({
+        customer_name,
+        customer_email,
+        resource_title: resource.title,
+        date,
+        time_slot,
+        total_participants: total,
+        amount: totalCents,
+        currency: resource.currency,
+        booking_status: 'confirmed',
+        demo: true,
+      }).catch(err =>
+        logger.warn('Demo booking confirmation email failed', { bookingId: booking.id, error: err.message })
+      );
+
+      // Best-effort success URL — append demo+booking markers so the frontend
+      // can show a demo banner if it wants.
+      const successRedirect = (() => {
+        try {
+          const url = new URL(success_url);
+          url.searchParams.set('demo', '1');
+          url.searchParams.set('booking_id', booking.id);
+          return url.toString();
+        } catch { return success_url; }
+      })();
+
+      return res.status(201).json({
+        data: {
+          booking_id: booking.id,
+          checkout_url: successRedirect,
+          subtotal_cents: totalCents,
+          discount_cents: couponValidation?.discount_cents || 0,
+          total_cents: totalCents - (couponValidation?.discount_cents || 0),
+          coupon_applied: couponValidation?.valid ? couponValidation.coupon?.code : null,
+          demo: true,
+        },
+        timestamp: new Date().toISOString(),
       });
     }
 
