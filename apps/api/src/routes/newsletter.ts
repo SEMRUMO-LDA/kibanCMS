@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { sendNewsletterWelcome, sendNewsletterAdminNotification } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -101,6 +102,14 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     }
 
     logger.info('Newsletter subscription', { email: cleanEmail, source: cleanSource });
+
+    // Fire emails (non-blocking): welcome to subscriber + notification to admin
+    sendNewsletterWelcome(cleanEmail).catch(err =>
+      logger.warn('Newsletter welcome email failed', { email: cleanEmail, error: err.message })
+    );
+    sendNewsletterAdminNotification(cleanEmail, cleanSource || '').catch(err =>
+      logger.warn('Newsletter admin notification failed', { email: cleanEmail, error: err.message })
+    );
 
     res.status(201).json({
       success: true,

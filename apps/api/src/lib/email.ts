@@ -17,6 +17,11 @@ import {
   formNotificationTemplate,
   formAutoReplyTemplate,
   bookingConfirmationTemplate,
+  bookingAdminNotificationTemplate,
+  newsletterWelcomeTemplate,
+  newsletterAdminNotificationTemplate,
+  paymentReceiptTemplate,
+  paymentAdminNotificationTemplate,
 } from './email-templates.js';
 
 // ── Types ──
@@ -242,4 +247,105 @@ export async function sendBookingConfirmation(
   const { subject, html } = bookingConfirmationTemplate(bookingContent, config.defaultFromName);
 
   await sendEmail({ to: email, subject, html });
+}
+
+/**
+ * Send booking notification to admin (on create or confirm).
+ */
+export async function sendBookingAdminNotification(
+  bookingContent: Record<string, any>,
+  status: 'pending' | 'confirmed' = 'pending',
+): Promise<void> {
+  const config = await getEmailConfig();
+  if (!config || config.notificationEmails.length === 0) return;
+
+  const { subject, html } = bookingAdminNotificationTemplate(
+    bookingContent,
+    config.defaultFromName,
+    status,
+  );
+
+  await sendEmail({
+    to: config.notificationEmails,
+    subject,
+    html,
+    replyTo: bookingContent.customer_email,
+  });
+}
+
+/**
+ * Send welcome email to a new newsletter subscriber.
+ */
+export async function sendNewsletterWelcome(
+  email: string,
+): Promise<void> {
+  if (!email) return;
+
+  const config = await getEmailConfig();
+  if (!config) return;
+
+  const { subject, html } = newsletterWelcomeTemplate(email, config.defaultFromName);
+
+  await sendEmail({ to: email, subject, html });
+}
+
+/**
+ * Send admin notification when a new newsletter subscription happens.
+ */
+export async function sendNewsletterAdminNotification(
+  email: string,
+  source: string = '',
+): Promise<void> {
+  const config = await getEmailConfig();
+  if (!config || config.notificationEmails.length === 0) return;
+
+  const { subject, html } = newsletterAdminNotificationTemplate(email, source, config.defaultFromName);
+
+  await sendEmail({ to: config.notificationEmails, subject, html });
+}
+
+/**
+ * Send payment receipt to customer (standalone Stripe payments).
+ */
+export async function sendPaymentReceipt(payment: {
+  amount: number;
+  currency: string;
+  customer_name?: string;
+  customer_email: string;
+  product_name?: string;
+  stripe_session_id?: string;
+  paid_at?: string;
+}): Promise<void> {
+  if (!payment.customer_email) return;
+
+  const config = await getEmailConfig();
+  if (!config) return;
+
+  const { subject, html } = paymentReceiptTemplate(payment, config.defaultFromName);
+
+  await sendEmail({ to: payment.customer_email, subject, html });
+}
+
+/**
+ * Send admin notification on new Stripe payment.
+ */
+export async function sendPaymentAdminNotification(payment: {
+  amount: number;
+  currency: string;
+  customer_name?: string;
+  customer_email?: string;
+  product_name?: string;
+  stripe_session_id?: string;
+}): Promise<void> {
+  const config = await getEmailConfig();
+  if (!config || config.notificationEmails.length === 0) return;
+
+  const { subject, html } = paymentAdminNotificationTemplate(payment, config.defaultFromName);
+
+  await sendEmail({
+    to: config.notificationEmails,
+    subject,
+    html,
+    replyTo: payment.customer_email,
+  });
 }

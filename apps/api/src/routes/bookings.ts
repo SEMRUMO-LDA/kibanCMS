@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
-import { sendBookingConfirmation } from '../lib/email.js';
+import { sendBookingConfirmation, sendBookingAdminNotification } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -426,6 +426,19 @@ router.post('/create', async (req: AuthRequest, res: Response) => {
 
     logger.info('Booking created', { bookingId: booking.id, sessionId: session.id });
 
+    // Fire admin notification (non-blocking). Customer confirmation is sent
+    // only after successful payment via the Stripe webhook.
+    sendBookingAdminNotification({
+      customer_name, customer_email, customer_phone,
+      tour_slug, tour_title: tourTitle,
+      date, time_slot,
+      adults: Number(adults), children: Number(children || 0),
+      amount: totalCents, currency,
+      notes: notes || '',
+    }, 'pending').catch(err =>
+      logger.error('Booking admin notification failed', { error: err.message })
+    );
+
     res.status(201).json({
       data: {
         booking_id: booking.id,
@@ -624,9 +637,12 @@ router.post('/:bookingId/confirm', async (req: AuthRequest, res: Response) => {
 
     logger.info('Booking manually confirmed', { bookingId });
 
-    // Send confirmation email (non-blocking)
+    // Send confirmation email to customer + admin notification (non-blocking)
     sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
       logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
+    );
+    sendBookingAdminNotification({ ...content, booking_status: 'confirmed' }, 'confirmed').catch(err =>
+      logger.warn('Booking admin notification failed', { bookingId, error: err.message })
     );
 
     res.json({ data: { message: 'Booking confirmed' }, timestamp: new Date().toISOString() });

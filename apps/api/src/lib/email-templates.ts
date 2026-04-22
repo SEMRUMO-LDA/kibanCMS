@@ -141,3 +141,192 @@ export function bookingConfirmationTemplate(
     html: layout(body, siteName),
   };
 }
+
+// ── Booking Notification (to admin) ──
+
+export function bookingAdminNotificationTemplate(
+  booking: Record<string, any>,
+  siteName: string,
+  status: 'pending' | 'confirmed',
+): { subject: string; html: string } {
+  const details = [
+    { label: 'Cliente', value: booking.customer_name },
+    { label: 'Email', value: booking.customer_email },
+    { label: 'Telefone', value: booking.customer_phone },
+    { label: 'Experiência', value: booking.tour_title || booking.tour_slug },
+    { label: 'Data', value: booking.date },
+    { label: 'Horário', value: booking.time_slot },
+    { label: 'Adultos', value: booking.adults?.toString() },
+    { label: 'Crianças', value: booking.children ? booking.children.toString() : '' },
+    { label: 'Total', value: booking.amount ? `${(booking.amount / 100).toFixed(2)} ${(booking.currency || 'EUR').toUpperCase()}` : '' },
+    { label: 'Notas', value: booking.notes },
+  ].filter(f => f.value);
+
+  let rows = '';
+  for (const d of details) {
+    rows += `<tr>
+      <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;width:110px;border-bottom:1px solid #f5f5f5;">${escapeHtml(d.label)}</td>
+      <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;border-bottom:1px solid #f5f5f5;">${escapeHtml(d.value)}</td>
+    </tr>`;
+  }
+
+  const statusLabel = status === 'confirmed' ? 'Confirmada' : 'Pendente';
+  const statusColor = status === 'confirmed' ? '#16a34a' : '#ea580c';
+
+  const body = `
+    <p style="margin:0 0 8px;font-size:15px;color:#2c2c2c;"><strong>Nova reserva</strong></p>
+    <p style="margin:0 0 20px;font-size:13px;"><span style="display:inline-block;padding:3px 10px;background:${statusColor}15;color:${statusColor};border-radius:999px;font-weight:600;">${statusLabel}</span></p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      ${rows}
+    </table>
+  `;
+
+  return {
+    subject: `Nova reserva ${statusLabel.toLowerCase()} — ${booking.customer_name || ''} (${booking.date || ''})`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Newsletter Welcome (to subscriber) ──
+
+export function newsletterWelcomeTemplate(
+  email: string,
+  siteName: string,
+): { subject: string; html: string } {
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Olá,</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Obrigado por subscrever a newsletter da <strong>${escapeHtml(siteName)}</strong>.</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#2c2c2c;">A partir de agora vai receber as últimas novidades, promoções e conteúdos exclusivos no email <strong>${escapeHtml(email)}</strong>.</p>
+    <p style="margin:0;font-size:14px;color:#888;">Se esta subscrição não foi feita por si, pode ignorar este email.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `;
+
+  return {
+    subject: `Bem-vindo à newsletter — ${siteName}`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Newsletter Admin Notification ──
+
+export function newsletterAdminNotificationTemplate(
+  email: string,
+  source: string,
+  siteName: string,
+): { subject: string; html: string } {
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;"><strong>Novo subscritor</strong></p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      <tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;width:110px;border-bottom:1px solid #f5f5f5;">Email</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;border-bottom:1px solid #f5f5f5;">${escapeHtml(email)}</td>
+      </tr>
+      ${source ? `<tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;border-bottom:1px solid #f5f5f5;">Origem</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;border-bottom:1px solid #f5f5f5;">${escapeHtml(source)}</td>
+      </tr>` : ''}
+      <tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;">Data</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;">${new Date().toLocaleString('pt-PT')}</td>
+      </tr>
+    </table>
+  `;
+
+  return {
+    subject: `Nova subscrição de newsletter — ${email}`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Payment Receipt (to customer) ──
+
+export function paymentReceiptTemplate(
+  payment: {
+    amount: number;
+    currency: string;
+    customer_name?: string;
+    product_name?: string;
+    stripe_session_id?: string;
+    paid_at?: string;
+  },
+  siteName: string,
+): { subject: string; html: string } {
+  const name = payment.customer_name || '';
+  const greeting = name ? `Olá ${escapeHtml(name)},` : 'Olá,';
+  const amount = `${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()}`;
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">${greeting}</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#2c2c2c;">Recebemos o seu pagamento com sucesso. Obrigado!</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      ${payment.product_name ? `<tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;width:110px;border-bottom:1px solid #f5f5f5;">Descrição</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;border-bottom:1px solid #f5f5f5;">${escapeHtml(payment.product_name)}</td>
+      </tr>` : ''}
+      <tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;border-bottom:1px solid #f5f5f5;">Valor</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;font-weight:600;border-bottom:1px solid #f5f5f5;">${amount}</td>
+      </tr>
+      ${payment.stripe_session_id ? `<tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;border-bottom:1px solid #f5f5f5;">ID Transação</td>
+        <td style="padding:8px 12px;font-size:12px;color:#888;font-family:monospace;border-bottom:1px solid #f5f5f5;">${escapeHtml(payment.stripe_session_id)}</td>
+      </tr>` : ''}
+      <tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;">Data</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;">${new Date(payment.paid_at || Date.now()).toLocaleString('pt-PT')}</td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:14px;color:#888;">Guarde este email como comprovativo de pagamento.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `;
+
+  return {
+    subject: `Recibo de pagamento — ${amount}`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Payment Admin Notification ──
+
+export function paymentAdminNotificationTemplate(
+  payment: {
+    amount: number;
+    currency: string;
+    customer_name?: string;
+    customer_email?: string;
+    product_name?: string;
+    stripe_session_id?: string;
+  },
+  siteName: string,
+): { subject: string; html: string } {
+  const amount = `${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()}`;
+
+  const details = [
+    { label: 'Cliente', value: payment.customer_name },
+    { label: 'Email', value: payment.customer_email },
+    { label: 'Valor', value: amount },
+    { label: 'Descrição', value: payment.product_name },
+    { label: 'Session ID', value: payment.stripe_session_id },
+  ].filter(f => f.value);
+
+  let rows = '';
+  for (const d of details) {
+    rows += `<tr>
+      <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;width:110px;border-bottom:1px solid #f5f5f5;">${escapeHtml(d.label)}</td>
+      <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;border-bottom:1px solid #f5f5f5;">${escapeHtml(d.value!)}</td>
+    </tr>`;
+  }
+
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;"><strong>Novo pagamento recebido</strong></p>
+    <p style="margin:0 0 20px;font-size:20px;color:#16a34a;font-weight:700;">${amount}</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      ${rows}
+    </table>
+  `;
+
+  return {
+    subject: `Novo pagamento — ${amount}`,
+    html: layout(body, siteName),
+  };
+}

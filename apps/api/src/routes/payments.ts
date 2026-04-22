@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
-import { sendBookingConfirmation } from '../lib/email.js';
+import { sendBookingConfirmation, sendBookingAdminNotification, sendPaymentReceipt, sendPaymentAdminNotification } from '../lib/email.js';
 import { confirmRedemption, cancelPendingRedemption } from '../lib/coupons.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
@@ -438,9 +438,12 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
 
           logger.info('Booking confirmed via payment', { bookingId, sessionId: session.id });
 
-          // Send confirmation email (non-blocking)
+          // Send customer confirmation + admin notification (non-blocking)
           sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
             logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
+          );
+          sendBookingAdminNotification({ ...content, booking_status: 'confirmed' }, 'confirmed').catch(err =>
+            logger.warn('Booking admin notification failed', { bookingId, error: err.message })
           );
 
           // Confirm coupon redemption + atomic usage_count bump (non-blocking).
@@ -450,6 +453,26 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             );
           }
         }
+      } else {
+        // Standalone payment (non-booking) — send receipt + admin notification
+        const paymentData = {
+          amount: session.amount_total || 0,
+          currency: session.currency || 'eur',
+          customer_name: session.customer_details?.name || '',
+          customer_email: session.customer_details?.email || '',
+          product_name: session.metadata?.product_slug || 'Pagamento',
+          stripe_session_id: session.id,
+          paid_at: new Date().toISOString(),
+        };
+
+        if (paymentData.customer_email) {
+          sendPaymentReceipt(paymentData).catch(err =>
+            logger.warn('Payment receipt email failed', { sessionId: session.id, error: err.message })
+          );
+        }
+        sendPaymentAdminNotification(paymentData).catch(err =>
+          logger.warn('Payment admin notification failed', { sessionId: session.id, error: err.message })
+        );
       }
     }
 
