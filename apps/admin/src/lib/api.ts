@@ -271,10 +271,6 @@ class ApiClient {
     return this.request<any>('POST', `/bookings/${bookingId}/cancel`);
   }
 
-  async getBookingTours() {
-    return this.request<any[]>('GET', '/bookings/tours');
-  }
-
   // ── i18n ──
   async getI18nLanguages() {
     return this.request<any>('GET', '/i18n/languages');

@@ -18,7 +18,6 @@ import mediaIntelRouter from './routes/media-intelligence.js';
 import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
 import paymentsRouter, { webhookHandler as paymentsWebhookHandler } from './routes/payments.js';
-import bookingsRouter from './routes/bookings.js';
 import bookingsV2Router from './routes/bookings-v2.js';
 import toursRouter from './routes/tours.js';
 import couponsRouter from './routes/coupons.js';
@@ -211,8 +210,10 @@ app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); /
 // requests). Audit v1.6 C1. The raw-body parser is already configured at line 84.
 app.post('/api/v1/payments/webhook', paymentsWebhookHandler);
 app.use('/api/v1/payments', validateAny, paymentsRouter); // Payments — JWT (admin) + API Key (frontend)
-app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router); // Bookings v2 — generic resources (decoupled from tours). Mount BEFORE legacy router so /v2 paths match first.
-app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend). LEGACY tours-coupled routes.
+// Bookings: v2 is mounted at both /v2 (public API contract for frontends) and
+// the bare /bookings path (admin UI convenience). Same router, same behaviour.
+app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router);
+app.use('/api/v1/bookings', validateAny, bookingsV2Router);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
