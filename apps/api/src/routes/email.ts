@@ -24,6 +24,7 @@ interface ResolvedConfig {
   resendApiKey?: string;
   defaultFromEmail?: string;
   defaultFromName?: string;
+  defaultReplyTo?: string;
   siteSettingsEntrySlug?: string | null;
   siteSettingsEntryFound?: boolean;
 }
@@ -67,7 +68,13 @@ async function resolveConfig(): Promise<ResolvedConfig> {
     }
   }
 
-  const apiKey = globalContent?.resend_api_key || process.env.RESEND_API_KEY;
+  // Agency-shared mode: tenant leaves resend_api_key empty → fall back to the
+  // platform RESEND_API_KEY env var. Agency verifies one domain (kiban.pt),
+  // tenant controls only from_name + reply_to. Mirrors lib/email.ts.
+  const tenantApiKey = typeof globalContent?.resend_api_key === 'string' && globalContent.resend_api_key.trim()
+    ? globalContent.resend_api_key.trim()
+    : null;
+  const apiKey = tenantApiKey || process.env.RESEND_API_KEY;
 
   if (!apiKey) {
     return {
@@ -77,20 +84,21 @@ async function resolveConfig(): Promise<ResolvedConfig> {
     };
   }
 
-  logger.info('Email test: config resolved', { tenantId, source: globalContent ? 'tenant-settings' : 'env-var' });
+  const source: 'tenant-settings' | 'env-var' = tenantApiKey ? 'tenant-settings' : 'env-var';
+  logger.info('Email test: config resolved', { tenantId, source });
 
   return {
-    source: globalContent ? 'tenant-settings' : 'env-var',
+    source,
     resendApiKey: apiKey,
-    defaultFromEmail:
-      globalContent?.default_from_email ||
-      process.env.DEFAULT_FROM_EMAIL ||
-      'noreply@kiban.pt',
+    defaultFromEmail: tenantApiKey
+      ? (globalContent?.default_from_email || process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt')
+      : (process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt'),
     defaultFromName:
       globalContent?.default_from_name ||
       globalContent?.site_name ||
       process.env.DEFAULT_FROM_NAME ||
       'KibanCMS',
+    defaultReplyTo: globalContent?.default_reply_to || globalContent?.contact_email || '',
     siteSettingsEntrySlug: foundSlug,
     siteSettingsEntryFound,
   };
@@ -156,8 +164,9 @@ router.post('/test', async (req: AuthRequest, res: Response) => {
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
         <table style="font-size:12px;color:#6b7280;width:100%;">
           <tr><td style="padding:4px 0;width:140px;">Tenant</td><td><code>${tenantId}</code></td></tr>
-          <tr><td style="padding:4px 0;">Config source</td><td><code>${config.source}</code></td></tr>
+          <tr><td style="padding:4px 0;">Config source</td><td><code>${config.source === 'env-var' ? 'agency-shared (kibanCMS)' : 'tenant-owned (self-hosted)'}</code></td></tr>
           <tr><td style="padding:4px 0;">From address</td><td><code>${config.defaultFromEmail}</code></td></tr>
+          ${config.defaultReplyTo ? `<tr><td style="padding:4px 0;">Reply-To</td><td><code>${config.defaultReplyTo}</code></td></tr>` : ''}
           <tr><td style="padding:4px 0;">Timestamp</td><td><code>${new Date().toISOString()}</code></td></tr>
         </table>
       </div>
@@ -168,6 +177,7 @@ router.post('/test', async (req: AuthRequest, res: Response) => {
       to: [to],
       subject: finalSubject,
       html,
+      replyTo: config.defaultReplyTo || undefined,
     });
 
     if (error) {

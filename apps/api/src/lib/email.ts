@@ -25,7 +25,15 @@ interface EmailConfig {
   resendApiKey: string;
   defaultFromEmail: string;
   defaultFromName: string;
+  defaultReplyTo: string;
   notificationEmails: string[];
+  /**
+   * How the API key was resolved:
+   *   tenant-settings — the tenant filled their own resend_api_key (self-hosted, own domain)
+   *   env-var         — fallback to agency-wide RESEND_API_KEY (agency-shared domain)
+   * Used by the email test endpoint to explain the setup to operators.
+   */
+  source: 'tenant-settings' | 'env-var';
 }
 
 // ── Caches ──
@@ -61,15 +69,30 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
 
       if (globalEntry?.content) {
         const c = globalEntry.content as Record<string, any>;
-        const apiKey = c.resend_api_key || process.env.RESEND_API_KEY;
+        // Agency-shared mode: when the tenant leaves resend_api_key empty, fall
+        // back to the platform-wide RESEND_API_KEY env var. The agency verifies
+        // one domain (kiban.pt) on Resend and all tenants send from it with
+        // their own `default_from_name` + `default_reply_to`. Zero DNS work on
+        // the tenant side.
+        const tenantApiKey = typeof c.resend_api_key === 'string' && c.resend_api_key.trim() ? c.resend_api_key.trim() : null;
+        const apiKey = tenantApiKey || process.env.RESEND_API_KEY;
+        const source: 'tenant-settings' | 'env-var' = tenantApiKey ? 'tenant-settings' : 'env-var';
 
         if (apiKey) {
           const config: EmailConfig = {
             resendApiKey: apiKey,
-            defaultFromEmail: c.default_from_email || process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt',
-            defaultFromName: c.site_name || c.default_from_name || process.env.DEFAULT_FROM_NAME || 'KibanCMS',
+            // Tenant self-hosted: use their own from_email.
+            // Agency-shared: use the platform default (kiban.pt) to respect DNS verification.
+            defaultFromEmail: tenantApiKey
+              ? (c.default_from_email || process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt')
+              : (process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt'),
+            defaultFromName: c.default_from_name || c.site_name || process.env.DEFAULT_FROM_NAME || 'KibanCMS',
+            // reply_to ensures responses land with the tenant, not the agency mailbox.
+            // Falls back to the general contact_email so the existing Settings form works out of the box.
+            defaultReplyTo: c.default_reply_to || c.contact_email || '',
             notificationEmails: (c.contact_email || process.env.NOTIFICATION_EMAIL || '')
               .split(',').map((e: string) => e.trim()).filter(Boolean),
+            source,
           };
           configCache.set(tenantId, { config, expiresAt: Date.now() + CONFIG_TTL });
           return config;
@@ -80,7 +103,7 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
     logger.warn('Failed to load email config from DB', { error: err.message });
   }
 
-  // Env-only fallback
+  // Env-only fallback — no site-settings entry yet (new tenant, first install).
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return null;
 
@@ -88,7 +111,9 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
     resendApiKey: apiKey,
     defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt',
     defaultFromName: process.env.DEFAULT_FROM_NAME || 'KibanCMS',
+    defaultReplyTo: '',
     notificationEmails: (process.env.NOTIFICATION_EMAIL || '').split(',').map(e => e.trim()).filter(Boolean),
+    source: 'env-var',
   };
   configCache.set(tenantId, { config, expiresAt: Date.now() + CONFIG_TTL });
   return config;
@@ -120,6 +145,9 @@ export async function sendEmail(opts: {
 
   const resend = getResendClient(config.resendApiKey);
   const from = opts.from || `${config.defaultFromName} <${config.defaultFromEmail}>`;
+  // Always fall back to the tenant's default reply_to so customer replies
+  // land with the operator, not the agency mailbox (agency-shared mode).
+  const replyTo = opts.replyTo || config.defaultReplyTo || undefined;
 
   try {
     const { data, error } = await resend.emails.send({
@@ -127,7 +155,7 @@ export async function sendEmail(opts: {
       to: Array.isArray(opts.to) ? opts.to : [opts.to],
       subject: opts.subject,
       html: opts.html,
-      replyTo: opts.replyTo,
+      replyTo,
     });
 
     if (error) {
