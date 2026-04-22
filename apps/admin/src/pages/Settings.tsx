@@ -205,6 +205,13 @@ export const Settings = () => {
   const [generating, setGenerating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [showResendKey, setShowResendKey] = useState(false);
+  const [testEmailTo, setTestEmailTo] = useState('');
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<
+    | { type: 'success'; id?: string; from: string }
+    | { type: 'error'; message: string; code?: string; diagnostic?: any }
+    | null
+  >(null);
 
   const switchTab = (id: string) => { setActiveTab(id); setSearchParams({ tab: id }); };
 
@@ -262,6 +269,35 @@ export const Settings = () => {
     const t = setTimeout(() => setLoading(false), 10000);
     return () => clearTimeout(t);
   }, [user?.id]);
+
+  useEffect(() => {
+    // Seed the test-email recipient with the logged-in admin's address so the
+    // operator can hit "Send" immediately without typing.
+    if (user?.email && !testEmailTo) setTestEmailTo(user.email);
+  }, [user?.email, testEmailTo]);
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailTo) return;
+    setTestSending(true);
+    setTestResult(null);
+    try {
+      const { data, error } = await api.sendTestEmail(testEmailTo);
+      if (data?.ok) {
+        setTestResult({ type: 'success', id: data.id, from: data.from });
+      } else {
+        // Error from api helper is the server's error.message string; reparse
+        // nothing — just surface the message so the operator sees the real cause.
+        setTestResult({
+          type: 'error',
+          message: error || 'Unknown failure',
+        });
+      }
+    } catch (err: any) {
+      setTestResult({ type: 'error', message: err.message || 'Network error' });
+    } finally {
+      setTestSending(false);
+    }
+  };
 
   const loadAll = async () => {
     try {
@@ -570,6 +606,97 @@ export const Settings = () => {
               <p className="help">Comma-separated. Receives form submissions and booking alerts. Uses the General tab's "Contact Email" field.</p>
             </Field>
           </Grid>
+
+          <div style={{
+            marginTop: spacing[5],
+            padding: `${spacing[4]} ${spacing[5]}`,
+            background: colors.gray[50],
+            border: `1px solid ${colors.gray[200]}`,
+            borderRadius: borders.radius.lg,
+          }}>
+            <div style={{ fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, color: colors.gray[900], marginBottom: spacing[1] }}>
+              Test your configuration
+            </div>
+            <div style={{ fontSize: typography.fontSize.xs, color: colors.gray[600], marginBottom: spacing[3] }}>
+              Sends a test email using the fields above. The response shows the exact cause if the send fails (missing key, unverified domain, bad slug, etc.) — <strong>save the form first</strong> if you just edited the API key so the server reads the latest value.
+            </div>
+            <div style={{ display: 'flex', gap: spacing[2], alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="email"
+                value={testEmailTo}
+                onChange={e => setTestEmailTo(e.target.value)}
+                placeholder="recipient@example.com"
+                style={{
+                  flex: 1,
+                  minWidth: '220px',
+                  padding: `${spacing[2]} ${spacing[3]}`,
+                  border: `1px solid ${colors.gray[300]}`,
+                  borderRadius: borders.radius.md,
+                  fontSize: typography.fontSize.sm,
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSendTestEmail}
+                disabled={testSending || !testEmailTo}
+                style={{
+                  padding: `${spacing[2]} ${spacing[4]}`,
+                  background: colors.gray[900],
+                  color: colors.white,
+                  border: 'none',
+                  borderRadius: borders.radius.md,
+                  fontSize: typography.fontSize.sm,
+                  fontWeight: typography.fontWeight.medium,
+                  cursor: testSending || !testEmailTo ? 'not-allowed' : 'pointer',
+                  opacity: testSending || !testEmailTo ? 0.5 : 1,
+                }}
+              >
+                {testSending ? 'Sending…' : 'Send test email'}
+              </button>
+            </div>
+
+            {testResult && testResult.type === 'success' && (
+              <div style={{
+                marginTop: spacing[3],
+                padding: `${spacing[3]} ${spacing[4]}`,
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                borderRadius: borders.radius.md,
+                fontSize: typography.fontSize.sm,
+                color: '#065f46',
+              }}>
+                <div style={{ fontWeight: typography.fontWeight.semibold, marginBottom: spacing[1] }}>
+                  ✓ Email sent successfully
+                </div>
+                <div style={{ fontSize: typography.fontSize.xs, fontFamily: typography.fontFamily.mono }}>
+                  From: {testResult.from}<br />
+                  {testResult.id && <>Resend ID: {testResult.id}</>}
+                </div>
+                <div style={{ fontSize: typography.fontSize.xs, marginTop: spacing[2], color: '#047857' }}>
+                  If you don't see it in the inbox within a minute, check spam. If it's in spam, your domain's SPF/DKIM records need review in Resend.
+                </div>
+              </div>
+            )}
+
+            {testResult && testResult.type === 'error' && (
+              <div style={{
+                marginTop: spacing[3],
+                padding: `${spacing[3]} ${spacing[4]}`,
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: borders.radius.md,
+                fontSize: typography.fontSize.sm,
+                color: '#991b1b',
+              }}>
+                <div style={{ fontWeight: typography.fontWeight.semibold, marginBottom: spacing[1] }}>
+                  ✕ Send failed
+                </div>
+                <div style={{ fontSize: typography.fontSize.xs, lineHeight: 1.6 }}>
+                  {testResult.message}
+                </div>
+              </div>
+            )}
+          </div>
         </Section>
       )}
 

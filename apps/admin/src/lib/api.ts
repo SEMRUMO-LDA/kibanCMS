@@ -194,6 +194,11 @@ class ApiClient {
     return this.request<any[]>('GET', '/webhooks');
   }
 
+  // ── Email ──
+  async sendTestEmail(to: string) {
+    return this.request<any>('POST', '/email/test', { to });
+  }
+
   // ── AI ──
   async generateCollection(image: string, context?: string) {
     return this.request<any>('POST', '/ai/generate-collection', { image, context }, 30000);
