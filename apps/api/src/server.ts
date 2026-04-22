@@ -210,7 +210,7 @@ app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); /
 // `/payments` mount (which requires API key and would 401 Stripe's unsigned
 // requests). Audit v1.6 C1. The raw-body parser is already configured at line 84.
 app.post('/api/v1/payments/webhook', paymentsWebhookHandler);
-app.use('/api/v1/payments', validateApiKey, paymentsRouter); // Payment sessions — API Key auth
+app.use('/api/v1/payments', validateAny, paymentsRouter); // Payments — JWT (admin) + API Key (frontend)
 app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router); // Bookings v2 — generic resources (decoupled from tours). Mount BEFORE legacy router so /v2 paths match first.
 app.use('/api/v1/bookings', validateAny, bookingsRouter); // Bookings — JWT (admin) + API Key (frontend). LEGACY tours-coupled routes.
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.

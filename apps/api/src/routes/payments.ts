@@ -232,7 +232,8 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
-      payment_method_types: ['card'],
+      // Omit payment_method_types to auto-detect all enabled methods
+      // (card, Apple Pay, Google Pay, SEPA, etc. per the Stripe dashboard).
       line_items: [
         {
           price_data: {
@@ -607,6 +608,129 @@ router.get('/config', async (req: AuthRequest, res: Response) => {
     logger.error('Error fetching Stripe config', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+// ============================================
+// POST /api/v1/payments/test
+//
+// Diagnostic endpoint — verifies Stripe config and creates a real
+// test checkout session for 1.00 EUR. Returns the checkout_url so
+// the admin can click through to confirm the full flow works.
+//
+// Mirrors the /api/v1/email/test pattern: real API call, real session,
+// but a clear "test" label and minimal amount to avoid accidental charges.
+// ============================================
+
+router.post('/test', async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.profileId) {
+      return res.status(401).json({
+        error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const config = await getStripeConfig();
+    if (!config) {
+      return res.status(400).json({
+        error: {
+          message: 'Stripe not configured. Add your Stripe keys in the stripe-config collection (slug: default) or set STRIPE_SECRET_KEY env var.',
+          code: 'NO_CONFIG',
+          diagnostic: {
+            tenant_config_found: false,
+            env_var_present: !!process.env.STRIPE_SECRET_KEY,
+          },
+          status: 400,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+
+    // Validate the secret key by making a real Stripe API call.
+    // Using checkout.sessions.create is the exact same path as production.
+    const stripe = getStripeClient(config.secretKey);
+
+    const host = req.headers.host || 'localhost';
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [{
+          price_data: {
+            currency: config.defaultCurrency,
+            product_data: {
+              name: 'kibanCMS Stripe Test',
+              description: 'Diagnostic session — use card 4242 4242 4242 4242 (any future date, any CVC)',
+            },
+            unit_amount: 100, // 1.00
+          },
+          quantity: 1,
+        }],
+        success_url: `${baseUrl}/settings?tab=general&stripe_test=ok`,
+        cancel_url: `${baseUrl}/settings?tab=general&stripe_test=cancel`,
+        metadata: {
+          source: 'kibanCMS-test',
+          test: 'true',
+        },
+      });
+
+      logger.info('Stripe test session created', { sessionId: session.id });
+
+      const hasWebhookSecret = !!config.webhookSecret;
+
+      res.json({
+        data: {
+          ok: true,
+          session_id: session.id,
+          checkout_url: session.url,
+          amount: 100,
+          currency: config.defaultCurrency,
+          diagnostics: {
+            secret_key_prefix: config.secretKey.slice(0, 7) + '…',
+            publishable_key_set: !!config.publishableKey,
+            webhook_secret_set: hasWebhookSecret,
+            default_currency: config.defaultCurrency,
+            mode: config.secretKey.startsWith('sk_live_') ? 'live' : 'test',
+          },
+          next_steps: [
+            'Click the checkout_url below to open Stripe Checkout',
+            'Use test card 4242 4242 4242 4242 (any future date, any CVC, any ZIP)',
+            hasWebhookSecret
+              ? 'After payment, check /api/v1/payments/transactions to verify webhook fired'
+              : 'Webhook secret not set — payments will process but won\'t be recorded. Add stripe_webhook_secret in stripe-config.',
+          ],
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (stripeErr: any) {
+      logger.warn('Stripe test failed', { error: stripeErr.message });
+      res.status(400).json({
+        error: {
+          message: stripeErr.message || 'Stripe rejected the test',
+          code: stripeErr.code || 'STRIPE_ERROR',
+          diagnostic: {
+            type: stripeErr.type,
+            statusCode: stripeErr.statusCode,
+            secret_key_prefix: config.secretKey.slice(0, 7) + '…',
+            mode: config.secretKey.startsWith('sk_live_') ? 'live' : 'test',
+          },
+          status: 400,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
+  } catch (err: any) {
+    logger.error('Stripe test crashed', { error: err.message });
+    res.status(500).json({
+      error: {
+        message: err.message || 'Unexpected failure',
+        code: 'EXCEPTION',
+        status: 500,
+        timestamp: new Date().toISOString(),
+      },
     });
   }
 });

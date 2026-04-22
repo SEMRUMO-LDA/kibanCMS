@@ -307,6 +307,20 @@ class ApiClient {
   async getI18nWidget() {
     return this.request<any>('GET', '/i18n/widget');
   }
+
+  // ── Stripe ──
+  async testStripe() {
+    return this.request<any>('POST', '/payments/test', undefined, 15000);
+  }
+
+  async getStripeConfig() {
+    return this.request<any>('GET', '/payments/config');
+  }
+
+  async getTransactions(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/payments/transactions${qs}`);
+  }
 }
 
 export const api = new ApiClient();

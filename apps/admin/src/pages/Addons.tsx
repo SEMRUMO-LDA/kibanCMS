@@ -204,6 +204,7 @@ export const Addons = () => {
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [testingStripe, setTestingStripe] = useState(false);
 
   useEffect(() => {
     checkInstalled();
@@ -365,6 +366,28 @@ export const Addons = () => {
     }
   };
 
+  const handleTestStripe = async () => {
+    setTestingStripe(true);
+    try {
+      const { data, error } = await api.testStripe();
+      if (error) {
+        toast.error('Stripe test failed: ' + error);
+        return;
+      }
+      if (data?.checkout_url) {
+        const mode = data.diagnostics?.mode || 'unknown';
+        toast.success(`Test session created (${mode} mode). Opening checkout…`);
+        window.open(data.checkout_url, '_blank');
+      } else {
+        toast.error('No checkout URL returned');
+      }
+    } catch (err: any) {
+      toast.error('Stripe test failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setTestingStripe(false);
+    }
+  };
+
   const displayAddons = tab === 'installed'
     ? ADDONS_REGISTRY.filter(a => installedIds.has(a.id) || disabledIds.has(a.id))
     : ADDONS_REGISTRY;
@@ -448,6 +471,20 @@ export const Addons = () => {
                         )}>
                           {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
                         </Btn>
+                        {addon.id === 'stripe-payments' && (
+                          <Btn
+                            $variant="ghost"
+                            onClick={() => handleTestStripe()}
+                            disabled={testingStripe}
+                            title="Create a test Stripe Checkout session (1.00 EUR, opens in new tab)"
+                          >
+                            {testingStripe ? (
+                              <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Testing…</>
+                            ) : (
+                              <><ExternalLink /> Test checkout</>
+                            )}
+                          </Btn>
+                        )}
                         {addon.collections.length > 0 && (
                           <Btn
                             $variant="ghost"

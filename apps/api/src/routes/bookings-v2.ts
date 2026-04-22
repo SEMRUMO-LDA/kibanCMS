@@ -600,7 +600,8 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     }
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      // Omit payment_method_types — Stripe auto-detects all methods enabled
+      // in the dashboard (card, Apple Pay, Google Pay, SEPA, Multibanco, etc.)
       mode: 'payment',
       customer_email,
       line_items: [{
