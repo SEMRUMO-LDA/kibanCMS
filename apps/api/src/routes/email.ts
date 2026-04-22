@@ -172,12 +172,19 @@ router.post('/test', async (req: AuthRequest, res: Response) => {
       </div>
     `;
 
+    // Resend's reply_to requires a bare email — strip the "Name <email>" wrap
+    // if the operator pasted the compound format (we already mirror this in
+    // lib/email.ts for the real send paths).
+    const rawReplyTo = config.defaultReplyTo || '';
+    const replyToMatch = rawReplyTo.match(/<([^>]+)>/);
+    const replyTo = (replyToMatch ? replyToMatch[1].trim() : rawReplyTo.trim()) || undefined;
+
     const { data, error } = await resend.emails.send({
       from,
       to: [to],
       subject: finalSubject,
       html,
-      replyTo: config.defaultReplyTo || undefined,
+      replyTo,
     });
 
     if (error) {

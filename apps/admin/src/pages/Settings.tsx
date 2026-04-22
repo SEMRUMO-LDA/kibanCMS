@@ -570,7 +570,7 @@ export const Settings = () => {
                 placeholder="info@yourbusiness.com"
                 autoComplete="off"
               />
-              <p className="help">Where customer replies land. Falls back to Notification Email below.</p>
+              <p className="help">Plain email only (e.g. <code>info@yourbusiness.com</code>). Where customer replies land; falls back to Notification Email below.</p>
             </Field>
             <Field $full>
               <label>Notification Email(s)</label>

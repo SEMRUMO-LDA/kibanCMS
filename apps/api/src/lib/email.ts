@@ -147,7 +147,12 @@ export async function sendEmail(opts: {
   const from = opts.from || `${config.defaultFromName} <${config.defaultFromEmail}>`;
   // Always fall back to the tenant's default reply_to so customer replies
   // land with the operator, not the agency mailbox (agency-shared mode).
-  const replyTo = opts.replyTo || config.defaultReplyTo || undefined;
+  // Resend's reply_to only accepts a bare email (unlike `from` which takes
+  // "Name <email>"), so we extract the address if the operator typed the
+  // compound format.
+  const rawReplyTo = opts.replyTo || config.defaultReplyTo || '';
+  const replyToMatch = rawReplyTo.match(/<([^>]+)>/);
+  const replyTo = (replyToMatch ? replyToMatch[1].trim() : rawReplyTo.trim()) || undefined;
 
   try {
     const { data, error } = await resend.emails.send({
