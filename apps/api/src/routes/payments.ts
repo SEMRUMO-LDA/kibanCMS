@@ -50,13 +50,30 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
     .single();
 
   if (col) {
-    const { data: entry } = await supabase
+    // Prefer the canonical "default" slug if it exists, else fall back to
+    // the first published entry with a non-empty secret key. This lets
+    // operators create entries with any slug (e.g. "eur", "production")
+    // without having to learn the convention.
+    const { data: preferred } = await supabase
       .from('entries')
       .select('content')
       .eq('collection_id', col.id)
       .eq('slug', 'default')
       .eq('status', 'published')
-      .single();
+      .maybeSingle();
+
+    let entry = preferred;
+    if (!entry?.content || !(entry.content as any).stripe_secret_key) {
+      const { data: fallback } = await supabase
+        .from('entries')
+        .select('content')
+        .eq('collection_id', col.id)
+        .eq('status', 'published')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      entry = fallback;
+    }
 
     if (entry?.content) {
       const c = entry.content as Record<string, any>;
