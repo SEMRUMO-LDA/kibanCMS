@@ -204,8 +204,6 @@ export const Settings = () => {
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
-  const [showResendKey, setShowResendKey] = useState(false);
-  const [showAdvancedEmail, setShowAdvancedEmail] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState('');
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<
@@ -583,75 +581,6 @@ export const Settings = () => {
             </Field>
           </Grid>
 
-          {/* Advanced — use your own Resend account */}
-          <div style={{ marginTop: spacing[5], borderTop: `1px solid ${colors.gray[200]}`, paddingTop: spacing[4] }}>
-            <button
-              type="button"
-              onClick={() => setShowAdvancedEmail(v => !v)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: spacing[2],
-                background: 'transparent', border: 'none', padding: 0,
-                fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium,
-                color: colors.gray[700], cursor: 'pointer',
-              }}
-            >
-              <span style={{ display: 'inline-block', transform: showAdvancedEmail ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▸</span>
-              Advanced: use your own Resend account
-              {settings.resend_api_key && (
-                <span style={{
-                  fontSize: typography.fontSize.xs, background: '#ecfdf5', color: '#065f46',
-                  padding: '2px 8px', borderRadius: '999px', fontWeight: typography.fontWeight.semibold,
-                }}>Active</span>
-              )}
-            </button>
-            <p style={{ fontSize: typography.fontSize.xs, color: colors.gray[500], margin: `${spacing[1]} 0 0` }}>
-              Only needed if you want emails to come from <em>your</em> domain. Requires DNS verification at <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer" style={{ color: colors.accent[600] }}>resend.com/domains</a>.
-            </p>
-
-            {showAdvancedEmail && (
-              <div style={{ marginTop: spacing[4] }}>
-                <Grid>
-                  <Field $full>
-                    <label>Resend API Key</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type={showResendKey ? 'text' : 'password'}
-                        value={settings.resend_api_key}
-                        onChange={e => update('resend_api_key', e.target.value)}
-                        placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        autoComplete="off"
-                        style={{ paddingRight: '80px' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowResendKey(v => !v)}
-                        style={{
-                          position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
-                          padding: '4px 10px', background: 'transparent', border: '1px solid #d4d4d4',
-                          borderRadius: '6px', fontSize: '11px', color: '#525252', cursor: 'pointer',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {showResendKey ? 'Hide' : 'Show'}
-                      </button>
-                    </div>
-                    <p className="help">Secret — starts with <code>re_</code>. Leave empty to use the shared mail service. <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ color: colors.accent[600] }}>Get a key</a>.</p>
-                  </Field>
-                  <Field $full>
-                    <label>From Email</label>
-                    <input
-                      type="email"
-                      value={settings.default_from_email}
-                      onChange={e => update('default_from_email', e.target.value)}
-                      placeholder="noreply@yourdomain.com"
-                      autoComplete="off"
-                    />
-                    <p className="help">Must match a domain verified in your Resend account. Ignored when the API key above is empty.</p>
-                  </Field>
-                </Grid>
-              </div>
-            )}
-          </div>
 
           <div style={{
             marginTop: spacing[5],
