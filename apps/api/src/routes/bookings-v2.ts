@@ -181,7 +181,16 @@ function dayKeyFromDateStr(dateStr: string): DayKey {
 }
 
 async function loadResource(slug: string): Promise<Record<string, any> | null> {
-  const colId = await getCollectionId('bookable-resources');
+  // Prefer the generic bookable-resources collection, but fall back to the
+  // legacy tours collection so existing tenants (built around Tours & Bookings
+  // add-on v2.0) keep working without migrating their data.
+  let colId = await getCollectionId('bookable-resources');
+  let isTours = false;
+
+  if (!colId) {
+    colId = await getCollectionId('tours');
+    isTours = true;
+  }
   if (!colId) return null;
 
   const { data: entry } = await supabase
@@ -193,6 +202,34 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
 
   if (!entry) return null;
   const c = (entry.content as Record<string, any>) || {};
+
+  // Tours collection maps slightly different field names. Normalize to the
+  // resource shape the v2 routes expect.
+  if (isTours) {
+    const fixedSlots = parseJsonSafe<string[]>(c.time_slots, []);
+    return {
+      slug: entry.slug,
+      title: c.title || entry.title,
+      description: c.description || '',
+      image: c.image || entry.featured_image || '',
+      duration_minutes: Number(c.duration_minutes) || 60,
+      capacity: Number(c.max_capacity) || 1,
+      price: Number(c.price_adult) || 0,
+      price_secondary: Number(c.price_child) || 0,
+      price_secondary_label: c.child_age_range || 'Criança',
+      currency: (c.currency || 'eur').toLowerCase(),
+      schedule_type: 'fixed_slots',
+      fixed_slots: fixedSlots,
+      weekly_schedule: {},
+      slot_interval_minutes: 30,
+      buffer_minutes: 0,
+      booking_window_days: 60,
+      min_notice_hours: 0,
+      is_active: entry.status === 'published',
+      status: entry.status,
+    };
+  }
+
   return {
     slug: entry.slug,
     title: c.title || entry.title,
@@ -221,12 +258,70 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
 // List active bookable resources
 // ============================================
 
-router.get('/resources', async (_req: AuthRequest, res: Response) => {
+// Legacy /tours endpoint — preserves the v1 response shape so existing
+// frontends (lunes, solfil) keep working without changes. Pulls from the
+// tours collection directly.
+router.get('/tours', async (_req: AuthRequest, res: Response) => {
   try {
-    const colId = await getCollectionId('bookable-resources');
+    const colId = await getCollectionId('tours');
     if (!colId) {
       return res.status(404).json({
-        error: { message: 'Bookable resources collection not found', status: 404, timestamp: new Date().toISOString() },
+        error: { message: 'Tours collection not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const { data: entries, error } = await supabase
+      .from('entries')
+      .select('id, title, slug, content, featured_image, status')
+      .eq('collection_id', colId)
+      .eq('status', 'published')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+
+    const tours = (entries || []).map((entry: any) => {
+      const c = entry.content || {};
+      return {
+        slug: entry.slug,
+        title: c.title || entry.title,
+        description: c.description || '',
+        duration: c.duration || '',
+        image: c.image || entry.featured_image || '',
+        price_adult: Number(c.price_adult) || 0,
+        price_child: Number(c.price_child) || 0,
+        child_age_range: c.child_age_range || '4-12 anos',
+        max_capacity: Number(c.max_capacity) || 16,
+        time_slots: parseJsonSafe<string[]>(c.time_slots, ['10:00', '14:00', '17:00']),
+        currency: (c.currency || 'eur').toLowerCase(),
+        rating: c.rating || 5,
+        highlights: c.highlights || '',
+        meeting_point: c.meeting_point || '',
+        includes: c.includes || '',
+      };
+    });
+
+    res.json({ data: tours, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    logger.error('Error fetching tours', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Failed to fetch tours', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+router.get('/resources', async (_req: AuthRequest, res: Response) => {
+  try {
+    // Prefer bookable-resources, fall back to tours collection so sites
+    // built around the Tours & Bookings add-on still get a resource list.
+    let colId = await getCollectionId('bookable-resources');
+    let isTours = false;
+    if (!colId) {
+      colId = await getCollectionId('tours');
+      isTours = true;
+    }
+    if (!colId) {
+      return res.status(404).json({
+        error: { message: 'No bookable resources or tours collection found', status: 404, timestamp: new Date().toISOString() },
       });
     }
 
@@ -242,6 +337,22 @@ router.get('/resources', async (_req: AuthRequest, res: Response) => {
     const resources = (entries || [])
       .map((entry: any) => {
         const c = entry.content || {};
+        if (isTours) {
+          return {
+            slug: entry.slug,
+            title: c.title || entry.title,
+            description: c.description || '',
+            image: c.image || entry.featured_image || '',
+            duration_minutes: Number(c.duration_minutes) || 60,
+            capacity: Number(c.max_capacity) || 1,
+            price: Number(c.price_adult) || 0,
+            price_secondary: Number(c.price_child) || 0,
+            price_secondary_label: c.child_age_range || 'Criança',
+            currency: (c.currency || 'eur').toLowerCase(),
+            schedule_type: 'fixed_slots',
+            is_active: entry.status === 'published',
+          };
+        }
         return {
           slug: entry.slug,
           title: c.title || entry.title,
