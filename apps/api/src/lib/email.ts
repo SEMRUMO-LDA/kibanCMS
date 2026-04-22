@@ -69,30 +69,23 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
 
       if (globalEntry?.content) {
         const c = globalEntry.content as Record<string, any>;
-        // Agency-shared mode: when the tenant leaves resend_api_key empty, fall
-        // back to the platform-wide RESEND_API_KEY env var. The agency verifies
-        // one domain (kiban.pt) on Resend and all tenants send from it with
-        // their own `default_from_name` + `default_reply_to`. Zero DNS work on
-        // the tenant side.
-        const tenantApiKey = typeof c.resend_api_key === 'string' && c.resend_api_key.trim() ? c.resend_api_key.trim() : null;
-        const apiKey = tenantApiKey || process.env.RESEND_API_KEY;
-        const source: 'tenant-settings' | 'env-var' = tenantApiKey ? 'tenant-settings' : 'env-var';
+        // Agency-shared mode only: the Advanced Resend UI was removed, so tenants
+        // no longer set their own resend_api_key / default_from_email. Any stored
+        // values from before are ignored — we always use the platform-wide
+        // RESEND_API_KEY + DEFAULT_FROM_EMAIL env vars. Tenants still control
+        // default_from_name and default_reply_to (safe — they don't affect Resend
+        // domain verification).
+        const apiKey = process.env.RESEND_API_KEY;
 
         if (apiKey) {
           const config: EmailConfig = {
             resendApiKey: apiKey,
-            // Tenant self-hosted: use their own from_email.
-            // Agency-shared: use the platform default (kiban.pt) to respect DNS verification.
-            defaultFromEmail: tenantApiKey
-              ? (c.default_from_email || process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt')
-              : (process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt'),
+            defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt',
             defaultFromName: c.default_from_name || c.site_name || process.env.DEFAULT_FROM_NAME || 'KibanCMS',
-            // reply_to ensures responses land with the tenant, not the agency mailbox.
-            // Falls back to the general contact_email so the existing Settings form works out of the box.
             defaultReplyTo: c.default_reply_to || c.contact_email || '',
             notificationEmails: (c.contact_email || process.env.NOTIFICATION_EMAIL || '')
               .split(',').map((e: string) => e.trim()).filter(Boolean),
-            source,
+            source: 'env-var',
           };
           configCache.set(tenantId, { config, expiresAt: Date.now() + CONFIG_TTL });
           return config;

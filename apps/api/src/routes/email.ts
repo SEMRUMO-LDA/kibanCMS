@@ -68,13 +68,10 @@ async function resolveConfig(): Promise<ResolvedConfig> {
     }
   }
 
-  // Agency-shared mode: tenant leaves resend_api_key empty → fall back to the
-  // platform RESEND_API_KEY env var. Agency verifies one domain (kiban.pt),
-  // tenant controls only from_name + reply_to. Mirrors lib/email.ts.
-  const tenantApiKey = typeof globalContent?.resend_api_key === 'string' && globalContent.resend_api_key.trim()
-    ? globalContent.resend_api_key.trim()
-    : null;
-  const apiKey = tenantApiKey || process.env.RESEND_API_KEY;
+  // Agency-shared mode only: the Advanced Resend UI was removed, so stored
+  // tenant resend_api_key / default_from_email values are ignored. Always use
+  // the platform RESEND_API_KEY + DEFAULT_FROM_EMAIL env vars. Mirrors lib/email.ts.
+  const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
     return {
@@ -84,15 +81,12 @@ async function resolveConfig(): Promise<ResolvedConfig> {
     };
   }
 
-  const source: 'tenant-settings' | 'env-var' = tenantApiKey ? 'tenant-settings' : 'env-var';
-  logger.info('Email test: config resolved', { tenantId, source });
+  logger.info('Email test: config resolved', { tenantId, source: 'env-var' });
 
   return {
-    source,
+    source: 'env-var',
     resendApiKey: apiKey,
-    defaultFromEmail: tenantApiKey
-      ? (globalContent?.default_from_email || process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt')
-      : (process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt'),
+    defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt',
     defaultFromName:
       globalContent?.default_from_name ||
       globalContent?.site_name ||
