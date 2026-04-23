@@ -128,26 +128,40 @@ const CardCollections = styled.div`
 `;
 
 const CardFooter = styled.div`
+  padding-top: ${spacing[4]};
+  border-top: 1px solid ${colors.gray[100]};
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing[3]};
+`;
+
+const FooterRow = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: ${spacing[4]};
-  border-top: 1px solid ${colors.gray[100]};
+  gap: ${spacing[2]};
 `;
 
-const Btn = styled.button<{ $variant?: 'primary' | 'danger' | 'ghost' }>`
-  padding: ${spacing[2.5]} ${spacing[4]};
+const SecondaryActions = styled.div`
+  display: flex;
+  gap: ${spacing[2]};
+  flex-wrap: wrap;
+`;
+
+const Btn = styled.button<{ $variant?: 'primary' | 'danger' | 'ghost'; $size?: 'sm' | 'md' }>`
+  padding: ${p => p.$size === 'sm' ? `${spacing[1.5]} ${spacing[3]}` : `${spacing[2.5]} ${spacing[4]}`};
   border-radius: ${borders.radius.md};
-  font-size: ${typography.fontSize.sm};
+  font-size: ${p => p.$size === 'sm' ? '12px' : typography.fontSize.sm};
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: ${spacing[2]};
+  gap: ${spacing[1.5]};
   font-family: ${typography.fontFamily.sans};
   transition: all 0.15s;
   border: none;
-  svg { width: 16px; height: 16px; }
+  white-space: nowrap;
+  svg { width: ${p => p.$size === 'sm' ? '13px' : '16px'}; height: ${p => p.$size === 'sm' ? '13px' : '16px'}; }
 
   ${p => p.$variant === 'primary' ? `
     background: ${colors.accent[500]};
@@ -160,20 +174,25 @@ const Btn = styled.button<{ $variant?: 'primary' | 'danger' | 'ghost' }>`
     border: 1px solid ${colors.red[200]};
     &:hover { background: ${colors.red[50]}; }
   ` : `
-    background: ${colors.gray[100]};
+    background: ${colors.gray[50]};
     color: ${colors.gray[700]};
-    &:hover { background: ${colors.gray[200]}; }
+    border: 1px solid ${colors.gray[200]};
+    &:hover { background: ${colors.gray[100]}; border-color: ${colors.gray[300]}; }
+    &:disabled { opacity: 0.5; cursor: not-allowed; }
   `}
 `;
 
 const InstalledBadge = styled.div`
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: ${spacing[2]};
-  font-size: ${typography.fontSize.sm};
+  gap: ${spacing[1.5]};
+  padding: 3px 10px;
+  background: #dcfce7;
+  color: #15803d;
+  border-radius: 99px;
+  font-size: 12px;
   font-weight: 600;
-  color: #16a34a;
-  svg { width: 18px; height: 18px; }
+  svg { width: 13px; height: 13px; }
 `;
 
 const ICON_MAP: Record<string, any> = {
@@ -462,24 +481,27 @@ export const Addons = () => {
                 <CardFooter>
                   {isInstalled ? (
                     <>
-                      <InstalledBadge><CheckCircle /> Installed</InstalledBadge>
-                      <div style={{ display: 'flex', gap: spacing[2], flexWrap: 'wrap' }}>
-                        <Btn $variant="ghost" onClick={() => navigate(
+                      <FooterRow>
+                        <InstalledBadge><CheckCircle /> Installed</InstalledBadge>
+                        <Btn $variant="primary" onClick={() => navigate(
                           addon.settingsRoute ? addon.settingsRoute :
                           addon.id === 'bookings' ? '/bookings' :
                           `/content/${addon.collections[0].slug}`
                         )}>
                           {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
                         </Btn>
+                      </FooterRow>
+                      <SecondaryActions>
                         {addon.id === 'stripe-payments' && (
                           <Btn
                             $variant="ghost"
+                            $size="sm"
                             onClick={() => handleTestStripe()}
                             disabled={testingStripe}
                             title="Create a test Stripe Checkout session (1.00 EUR, opens in new tab)"
                           >
                             {testingStripe ? (
-                              <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Testing…</>
+                              <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Testing…</>
                             ) : (
                               <><ExternalLink /> Test checkout</>
                             )}
@@ -488,51 +510,54 @@ export const Addons = () => {
                         {addon.collections.length > 0 && (
                           <Btn
                             $variant="ghost"
+                            $size="sm"
                             onClick={() => handleSyncSchema(addon)}
                             disabled={isInstalling}
                             title="Push latest field definitions to the collection schema"
                           >
                             {isInstalling ? (
-                              <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Syncing…</>
+                              <><Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> Syncing…</>
                             ) : (
                               <><RefreshCw /> Update schema</>
                             )}
                           </Btn>
                         )}
                         {addon.settingsRoute ? (
-                          <Btn $variant="danger" onClick={() => handleDisableWidget(addon)} disabled={isInstalling}>
+                          <Btn $variant="danger" $size="sm" onClick={() => handleDisableWidget(addon)} disabled={isInstalling}>
                             <PowerOff /> Disable
                           </Btn>
                         ) : (
-                          <Btn $variant="danger" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
+                          <Btn $variant="danger" $size="sm" onClick={() => handleUninstall(addon)} disabled={isInstalling}>
                             <Trash2 /> Uninstall
                           </Btn>
                         )}
-                      </div>
+                      </SecondaryActions>
                     </>
                   ) : disabledIds.has(addon.id) ? (
                     <>
-                      <span style={{ fontSize: 13, color: colors.gray[400], fontWeight: 500 }}>
-                        Disabled
-                      </span>
-                      <div style={{ display: 'flex', gap: spacing[2] }}>
-                        <Btn $variant="ghost" onClick={() => navigate(addon.settingsRoute!)}>
-                          Settings <ArrowRight />
-                        </Btn>
-                        <Btn $variant="primary" onClick={() => handleEnableWidget(addon)} disabled={isInstalling}>
-                          {isInstalling ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enabling...</> : <><Power /> Enable</>}
-                        </Btn>
-                      </div>
+                      <FooterRow>
+                        <span style={{ fontSize: 12, color: colors.gray[400], fontWeight: 500, padding: '3px 10px', background: colors.gray[100], borderRadius: 99 }}>
+                          Disabled
+                        </span>
+                        <div style={{ display: 'flex', gap: spacing[2] }}>
+                          <Btn $variant="ghost" onClick={() => navigate(addon.settingsRoute!)}>
+                            Settings <ArrowRight />
+                          </Btn>
+                          <Btn $variant="primary" onClick={() => handleEnableWidget(addon)} disabled={isInstalling}>
+                            {isInstalling ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Enabling...</> : <><Power /> Enable</>}
+                          </Btn>
+                        </div>
+                      </FooterRow>
                     </>
                   ) : (
-                    <>
+                    <FooterRow>
                       <span style={{ fontSize: 13, color: colors.gray[400] }}>
                         {addon.collections.length > 0 ? `${addon.collections.reduce((sum, c) => sum + c.fields.length, 0)} fields` : 'Widget'}
                       </span>
                       <Btn $variant="primary" onClick={() => addon.settingsRoute ? handleEnableWidget(addon) : handleInstall(addon)} disabled={isInstalling}>
                         {isInstalling ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Installing...</> : <><Download /> Install</>}
                       </Btn>
-                    </>
+                    </FooterRow>
                   )}
                 </CardFooter>
               </CardBody>
