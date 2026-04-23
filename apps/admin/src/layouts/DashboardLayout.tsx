@@ -17,6 +17,7 @@ import {
   Puzzle,
   Activity,
   CalendarCheck,
+  ShoppingBag,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
@@ -465,14 +466,16 @@ export const DashboardLayout = () => {
     try { return localStorage.getItem('kiban-sidebar-collapsed') === 'true'; } catch { return false; }
   });
   const [hasBookings, setHasBookings] = useState(false);
+  const [hasOrders, setHasOrders] = useState(false);
   const { user, profile, signOut } = useAuth();
 
-  // Check if bookings addon is installed
+  // Detect which add-ons are installed to conditionally render nav items
   useEffect(() => {
     api.getCollections().then(({ data }) => {
       if (data) {
         const slugs = new Set(data.map((c: any) => c.slug));
         setHasBookings(slugs.has('tours') || slugs.has('bookings'));
+        setHasOrders(slugs.has('orders'));
       }
     }).catch(() => {});
   }, []);
@@ -565,6 +568,12 @@ export const DashboardLayout = () => {
               <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
                 <CalendarCheck size={20} />
                 <span>Bookings</span>
+              </NavItem>
+            )}
+            {hasOrders && (
+              <NavItem $active={location.pathname === '/orders'} $collapsed={collapsed} onClick={() => handleNavigation('/orders')} role="button" tabIndex={0} title={collapsed ? 'Orders' : undefined}>
+                <ShoppingBag size={20} />
+                <span>Orders</span>
               </NavItem>
             )}
           </NavSection>

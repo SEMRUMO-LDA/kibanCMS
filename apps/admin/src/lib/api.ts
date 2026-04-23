@@ -317,6 +317,31 @@ class ApiClient {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
     return this.request<any[]>('GET', `/payments/transactions${qs}`);
   }
+
+  // ── Unified Checkout / Orders ──
+  async getOrders(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/checkout/orders${qs}`);
+  }
+
+  async getOrder(id: string) {
+    return this.request<any>('GET', `/checkout/orders/${id}`);
+  }
+
+  async getCheckoutStats() {
+    return this.request<any>('GET', '/checkout/stats');
+  }
+
+  async createCheckoutSession(payload: {
+    line_items: any[];
+    customer: { name: string; email: string; phone?: string };
+    coupon_code?: string;
+    success_url: string;
+    cancel_url: string;
+    metadata?: Record<string, any>;
+  }) {
+    return this.request<any>('POST', '/checkout/create-session', payload, 30000);
+  }
 }
 
 export const api = new ApiClient();

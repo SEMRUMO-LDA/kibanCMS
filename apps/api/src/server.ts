@@ -19,6 +19,7 @@ import redirectsRouter from './routes/redirects.js';
 import formsRouter from './routes/forms.js';
 import paymentsRouter, { webhookHandler as paymentsWebhookHandler } from './routes/payments.js';
 import bookingsV2Router from './routes/bookings-v2.js';
+import checkoutRouter from './routes/checkout.js';
 import toursRouter from './routes/tours.js';
 import couponsRouter from './routes/coupons.js';
 import emailRouter from './routes/email.js';
@@ -214,6 +215,8 @@ app.use('/api/v1/payments', validateAny, paymentsRouter); // Payments — JWT (a
 // the bare /bookings path (admin UI convenience). Same router, same behaviour.
 app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router);
 app.use('/api/v1/bookings', validateAny, bookingsV2Router);
+// Unified checkout — single endpoint for bookings + products + custom amounts
+app.use('/api/v1/checkout', validateAny, checkoutRouter);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).

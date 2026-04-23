@@ -430,6 +430,118 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
         status: session.payment_status,
       });
 
+      // ── UNIFIED ORDER FLOW ──
+      // If session.metadata.order_id is present, this came from the unified
+      // /checkout/create-session endpoint. Finalize the order + all its bookings
+      // in one pass, then skip the legacy single-booking / standalone paths.
+      const orderId = session.metadata?.order_id;
+      if (orderId) {
+        const { data: orderEntry } = await supabase
+          .from('entries')
+          .select('id, content')
+          .eq('id', orderId)
+          .single();
+
+        if (orderEntry) {
+          const orderContent = orderEntry.content as Record<string, any>;
+          const paidAt = new Date().toISOString();
+
+          // Mark order confirmed
+          await supabase
+            .from('entries')
+            .update({
+              content: {
+                ...orderContent,
+                status: 'confirmed',
+                stripe_session_id: session.id,
+                stripe_payment_intent: session.payment_intent || '',
+                paid_at: paidAt,
+              },
+              tags: ['order', 'confirmed'],
+            })
+            .eq('id', orderId);
+
+          logger.info('Order confirmed via payment', { orderId, sessionId: session.id });
+
+          // Confirm related bookings + fire booking emails
+          const bookingIds: string[] = (() => {
+            try { return JSON.parse(orderContent.related_booking_ids || '[]'); } catch { return []; }
+          })();
+
+          for (const bkId of bookingIds) {
+            const { data: bookingEntry } = await supabase
+              .from('entries').select('id, content').eq('id', bkId).single();
+            if (!bookingEntry) continue;
+
+            const bkContent = bookingEntry.content as Record<string, any>;
+            await supabase
+              .from('entries')
+              .update({
+                content: { ...bkContent, booking_status: 'confirmed', confirmed_at: paidAt, stripe_session_id: session.id },
+                tags: ['booking', 'confirmed'],
+              })
+              .eq('id', bkId);
+
+            sendBookingConfirmation({ ...bkContent, booking_status: 'confirmed' }).catch(err =>
+              logger.warn('Booking confirmation email failed', { bkId, error: err.message })
+            );
+
+            // Coupon redemption per booking (matches existing contract)
+            if (orderContent.coupon_code) {
+              confirmRedemption(bkId, session.id).catch(err =>
+                logger.warn('Coupon redemption confirm failed', { bkId, error: err.message })
+              );
+            }
+          }
+
+          // Decrement product stock for product line items
+          const lineItems = (() => {
+            try { return JSON.parse(orderContent.line_items || '[]'); } catch { return []; }
+          })();
+          const productsColId = await getCollectionId('stripe-products');
+          if (productsColId) {
+            for (const li of lineItems) {
+              if (li.type !== 'product' || !li.meta?.product_id) continue;
+              const { data: prod } = await supabase
+                .from('entries').select('content').eq('id', li.meta.product_id).single();
+              if (!prod?.content) continue;
+              const pc = prod.content as any;
+              if (pc.stock_quantity == null || pc.stock_quantity === '') continue;
+              const newStock = Math.max(0, Number(pc.stock_quantity) - Number(li.quantity));
+              await supabase
+                .from('entries')
+                .update({ content: { ...pc, stock_quantity: newStock } })
+                .eq('id', li.meta.product_id);
+            }
+          }
+
+          // Admin notification (one per order)
+          const adminNotifPayload = {
+            amount: orderContent.total || session.amount_total || 0,
+            currency: orderContent.currency || session.currency || 'eur',
+            customer_name: orderContent.customer_name,
+            customer_email: orderContent.customer_email,
+            product_name: `Order ${orderContent.order_number} — ${lineItems.length} item${lineItems.length !== 1 ? 's' : ''}`,
+            stripe_session_id: session.id,
+          };
+          sendPaymentAdminNotification(adminNotifPayload).catch(err =>
+            logger.warn('Order admin notification failed', { orderId, error: err.message })
+          );
+
+          // Customer receipt (only if no bookings — bookings already sent their own confirmation)
+          if (bookingIds.length === 0) {
+            sendPaymentReceipt({ ...adminNotifPayload, customer_email: orderContent.customer_email, paid_at: paidAt }).catch(err =>
+              logger.warn('Order receipt email failed', { orderId, error: err.message })
+            );
+          }
+
+          // Done — skip legacy paths
+          res.json({ received: true });
+          return;
+        }
+      }
+
+      // ── LEGACY PATHS ──
       // If this payment is for a booking, update its status to confirmed
       const bookingId = session.metadata?.booking_id;
       if (bookingId) {
