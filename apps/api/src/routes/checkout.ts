@@ -230,12 +230,37 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
   if (!colId) { colId = await getCollectionId('tours'); isTours = true; }
   if (!colId) throw new Error(`${prefix}: no bookable-resources or tours collection found`);
 
-  const { data: entry } = await supabase
+  // Tolerant lookup: exact slug → case-insensitive slug → title ilike.
+  const decoded = (() => { try { return decodeURIComponent(item.resource_slug); } catch { return item.resource_slug; } })();
+
+  const { data: exact } = await supabase
     .from('entries')
     .select('id, title, slug, content, status')
     .eq('collection_id', colId)
-    .eq('slug', item.resource_slug)
-    .single();
+    .eq('slug', decoded)
+    .maybeSingle();
+
+  let entry: any = exact;
+  if (!entry) {
+    const { data: ci } = await supabase
+      .from('entries')
+      .select('id, title, slug, content, status')
+      .eq('collection_id', colId)
+      .ilike('slug', decoded)
+      .limit(1)
+      .maybeSingle();
+    entry = ci;
+  }
+  if (!entry) {
+    const { data: byTitle } = await supabase
+      .from('entries')
+      .select('id, title, slug, content, status')
+      .eq('collection_id', colId)
+      .ilike('title', decoded)
+      .limit(1)
+      .maybeSingle();
+    entry = byTitle;
+  }
 
   if (!entry) throw new Error(`${prefix}: resource "${item.resource_slug}" not found`);
   if (entry.status !== 'published') throw new Error(`${prefix}: resource "${item.resource_slug}" is not active`);
@@ -251,7 +276,9 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
     priceChild: Number(isTours ? c.price_child : c.price_secondary) || 0,
   };
 
-  // Capacity check — how many guests already booked for this slot
+  // Capacity check — how many guests already booked for this slot.
+  // Use the resolved canonical slug (not the user-supplied one) so mixed
+  // spellings don't bypass the capacity limit.
   const bookingsColId = await getCollectionId('bookings');
   let booked = 0;
   if (bookingsColId) {
@@ -259,7 +286,7 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
       .from('entries')
       .select('content')
       .eq('collection_id', bookingsColId)
-      .filter('content->>resource_slug', 'eq', item.resource_slug)
+      .filter('content->>resource_slug', 'eq', resource.slug)
       .filter('content->>date', 'eq', item.date)
       .filter('content->>time_slot', 'eq', item.time_slot)
       .filter('content->>booking_status', 'in', '("pending","confirmed")');
@@ -301,7 +328,7 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
       total: unitAmount,
       currency: resource.currency,
       meta: {
-        resource_slug: item.resource_slug,
+        resource_slug: resource.slug,
         resource_title: resource.title,
         date: item.date,
         time_slot: item.time_slot,

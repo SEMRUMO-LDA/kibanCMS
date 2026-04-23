@@ -193,12 +193,43 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
   }
   if (!colId) return null;
 
-  const { data: entry } = await supabase
+  // Tolerant lookup. Frontends sometimes pass the title ("Rio Arade") or a
+  // URL-encoded value instead of the canonical slug — handle all three:
+  //   1. exact slug match
+  //   2. case-insensitive slug match (handles "Rio-Arade" vs "rio-arade")
+  //   3. title ilike match (handles "Rio Arade" when stored slug is "rio-arade")
+  const decoded = (() => { try { return decodeURIComponent(slug); } catch { return slug; } })();
+
+  const { data: exact } = await supabase
     .from('entries')
     .select('title, slug, content, featured_image, status')
     .eq('collection_id', colId)
-    .eq('slug', slug)
-    .single();
+    .eq('slug', decoded)
+    .maybeSingle();
+
+  let entry: any = exact;
+
+  if (!entry) {
+    const { data: ci } = await supabase
+      .from('entries')
+      .select('title, slug, content, featured_image, status')
+      .eq('collection_id', colId)
+      .ilike('slug', decoded)
+      .limit(1)
+      .maybeSingle();
+    entry = ci;
+  }
+
+  if (!entry) {
+    const { data: byTitle } = await supabase
+      .from('entries')
+      .select('title, slug, content, featured_image, status')
+      .eq('collection_id', colId)
+      .ilike('title', decoded)
+      .limit(1)
+      .maybeSingle();
+    entry = byTitle;
+  }
 
   if (!entry) return null;
   const c = (entry.content as Record<string, any>) || {};
