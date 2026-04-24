@@ -239,6 +239,8 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
   if (isTours) {
     const fixedSlots = parseJsonSafe<string[]>(c.time_slots, []);
     return {
+      external_booking_url: c.external_booking_url || '',
+      external_booking_label: c.external_booking_label || '',
       slug: entry.slug,
       title: c.title || entry.title,
       description: c.description || '',
@@ -328,6 +330,8 @@ router.get('/tours', async (_req: AuthRequest, res: Response) => {
         highlights: c.highlights || '',
         meeting_point: c.meeting_point || '',
         includes: c.includes || '',
+        external_booking_url: c.external_booking_url || '',
+        external_booking_label: c.external_booking_label || '',
       };
     });
 
@@ -561,6 +565,23 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     if (!resource || !resource.is_active) {
       return res.status(404).json({
         error: { message: 'Resource not found or inactive', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    // External booking — tour is managed on another platform (Bókun, FareHarbor, etc.)
+    // Return the redirect URL so the frontend can open it instead of creating a booking here.
+    if (resource.external_booking_url) {
+      return res.status(409).json({
+        error: {
+          message: 'This tour uses an external booking platform. Redirect to the provided URL instead.',
+          code: 'EXTERNAL_BOOKING',
+          status: 409,
+          timestamp: new Date().toISOString(),
+        },
+        data: {
+          external_booking_url: resource.external_booking_url,
+          external_booking_label: resource.external_booking_label || '',
+        },
       });
     }
 

@@ -307,6 +307,9 @@ const tours: AddonDefinition = {
         { id: 'short_description', name: 'short_description', label: 'Short Description', type: 'textarea', maxLength: 250, helpText: 'Used in listings and cards' },
         { id: 'full_description', name: 'full_description', label: 'Full Description', type: 'richtext', required: true },
         { id: 'product_code', name: 'product_code', label: 'Product Code', type: 'text', helpText: 'Internal reference (e.g. 404454P3)' },
+        // External booking (Bókun, FareHarbor, GetYourGuide, Viator, etc.)
+        { id: 'external_booking_url', name: 'external_booking_url', label: 'External Booking URL', type: 'url', placeholder: 'https://widget.bokun.io/...', helpText: 'Optional. If set, the "Book now" button redirects here instead of using the kibanCMS checkout. The tour still appears in listings with all its rich content — only the booking action is delegated.' },
+        { id: 'external_booking_label', name: 'external_booking_label', label: 'External Button Label', type: 'text', placeholder: 'Reservar em Bókun', helpText: 'Optional. Custom label for the external button. Defaults to "Reservar".' },
         // Categorization
         { id: 'tour_type', name: 'tour_type', label: 'Tour Type', type: 'select', required: true, options: [
           { label: 'Walking tour', value: 'walking' },

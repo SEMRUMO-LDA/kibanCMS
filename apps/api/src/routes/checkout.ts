@@ -266,6 +266,12 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
   if (entry.status !== 'published') throw new Error(`${prefix}: resource "${item.resource_slug}" is not active`);
 
   const c = (entry.content as Record<string, any>) || {};
+
+  // External booking platforms (Bókun, FareHarbor, GetYourGuide, Viator, etc.)
+  // — tour is sold elsewhere, not through kibanCMS checkout.
+  if (c.external_booking_url) {
+    throw new Error(`${prefix}: resource "${entry.slug}" uses an external booking platform (${c.external_booking_url}). Redirect the customer there instead of checking out here.`);
+  }
   const resource = {
     id: entry.id,
     slug: entry.slug,
