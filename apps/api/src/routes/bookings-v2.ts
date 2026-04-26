@@ -30,12 +30,17 @@ interface StripeConfig {
   defaultCurrency: string;
 }
 
-let configCache: { config: StripeConfig; fetchedAt: number } | null = null;
+// Per-tenant cache. Mirrors the pattern in payments.ts so a request from
+// tenant B never receives tenant A's Stripe credentials within the TTL window.
+const configCache = new Map<string, { config: StripeConfig; fetchedAt: number }>();
 const CONFIG_TTL = 60_000;
 
 async function getStripeConfig(): Promise<StripeConfig | null> {
-  if (configCache && Date.now() - configCache.fetchedAt < CONFIG_TTL) {
-    return configCache.config;
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+
+  const cached = configCache.get(tenantId);
+  if (cached && Date.now() - cached.fetchedAt < CONFIG_TTL) {
+    return cached.config;
   }
 
   const { data: col } = await supabase
@@ -74,7 +79,7 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
           secretKey: c.stripe_secret_key,
           defaultCurrency: (c.default_currency || 'eur').toLowerCase(),
         };
-        configCache = { config, fetchedAt: Date.now() };
+        configCache.set(tenantId, { config, fetchedAt: Date.now() });
         return config;
       }
     }
@@ -86,7 +91,7 @@ async function getStripeConfig(): Promise<StripeConfig | null> {
       secretKey,
       defaultCurrency: (process.env.STRIPE_DEFAULT_CURRENCY || 'eur').toLowerCase(),
     };
-    configCache = { config, fetchedAt: Date.now() };
+    configCache.set(tenantId, { config, fetchedAt: Date.now() });
     return config;
   }
 
