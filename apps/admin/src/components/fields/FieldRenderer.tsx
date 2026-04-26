@@ -18,11 +18,12 @@ import { WeeklyScheduleField } from './WeeklyScheduleField';
 import { FixedSlotsField } from './FixedSlotsField';
 import { MultiSelectField } from './MultiSelectField';
 import { MediaCaptionListField } from './MediaCaptionListField';
+import { ColorField } from './ColorField';
 
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect' | 'media_caption_list';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect' | 'media_caption_list' | 'color';
   required?: boolean;
   placeholder?: string;
   helpText?: string;

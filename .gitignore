@@ -42,3 +42,13 @@ lerna-debug.log*
 packages/*/dist/
 apps/*/dist/
 supabase/.temp/
+
+# Claude Code agent session data (local)
+.claude/
+
+# Stray root-level images (assets belong in apps/admin/public/)
+/*.jpg
+/*.jpeg
+/*.png
+/*.gif
+!/apps/admin/public/*
