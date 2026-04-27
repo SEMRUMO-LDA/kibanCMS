@@ -62,8 +62,14 @@
     return new URL(window.location.href).searchParams.get(name);
   }
 
+  // Bump CACHE_VERSION when shipping widget changes that should invalidate
+  // user-side caches (e.g. broader text-node coverage, bug fixes that left
+  // partial caches behind). Older keys remain in localStorage but are no
+  // longer read.
+  var CACHE_VERSION = 'v3';
+
   function getCacheKey(lang) {
-    return 'kiban-i18n-' + lang + '-' + location.pathname;
+    return 'kiban-i18n-' + CACHE_VERSION + '-' + lang + '-' + location.pathname;
   }
 
   function loadCache(lang) {
@@ -73,7 +79,7 @@
       var data = JSON.parse(raw);
       // Cache valid for 24h
       if (Date.now() - data.ts > 86400000) return null;
-      return data.map;
+      return data.map || {};
     } catch (e) { return null; }
   }
 
@@ -166,22 +172,37 @@
 
     if (allTexts.length === 0) return;
 
-    // Check cache first
-    var cached = loadCache(targetLang);
-    if (cached) {
+    // Incremental cache: apply whatever we already have, but figure out
+    // which strings still need a fresh DeepL call. A previous translatePage
+    // run may have left a partial cache (e.g. ran before a slow-mounting
+    // component appeared). We refuse to leave those untranslated.
+    var cached = loadCache(targetLang) || {};
+    var missing = [];
+    for (var i = 0; i < allTexts.length; i++) {
+      if (!cached[allTexts[i]]) missing.push(allTexts[i]);
+    }
+
+    if (missing.length === 0) {
+      // Everything is in the cache — apply and exit.
       applyTranslations(allTexts, cached, textMap);
       return;
     }
 
-    // Fetch translations from API
+    // Apply what we have NOW so the user sees something while DeepL works
+    // on the rest. Avoids the page sitting in PT for several seconds.
+    if (Object.keys(cached).length > 0) {
+      applyTranslations(allTexts, cached, textMap);
+    }
+
+    // Fetch only the missing translations from API
     isTranslating = true;
 
     // Batch in chunks of 200
     var BATCH = 200;
-    var allTranslated = {};
+    var allTranslated = Object.assign({}, cached);
     var batches = [];
-    for (var i = 0; i < allTexts.length; i += BATCH) {
-      batches.push(allTexts.slice(i, i + BATCH));
+    for (var i = 0; i < missing.length; i += BATCH) {
+      batches.push(missing.slice(i, i + BATCH));
     }
 
     var completed = 0;
