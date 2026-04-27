@@ -538,6 +538,55 @@
   }
 
   // ── Initialize ──
+  // ── SPA navigation detection ──
+  //
+  // SPA frameworks (Next.js, React Router, Vue Router, etc.) swap the page
+  // content via history.pushState / replaceState without a full reload, so
+  // a translated DOM is replaced by fresh untranslated DOM. We monkey-patch
+  // those methods + listen to popstate so the widget can re-translate the
+  // new page automatically. Debounced so a single click doesn't fire twice
+  // (frameworks often call replaceState shortly after pushState).
+  var lastPathname = (typeof location !== 'undefined') ? location.pathname : '';
+  var rerunTimer = null;
+
+  function scheduleReTranslate() {
+    if (rerunTimer) clearTimeout(rerunTimer);
+    rerunTimer = setTimeout(function () {
+      rerunTimer = null;
+      // Only re-translate if pathname actually changed (avoids work on
+      // hash-only navigation or replaceState noise from analytics).
+      if (location.pathname === lastPathname) return;
+      lastPathname = location.pathname;
+
+      // Fresh DOM means originals stored in the previous page's Map are
+      // gone — clear so the new page's nodes are stored as-is.
+      originalTexts = new Map();
+
+      if (currentLang && currentLang !== defaultLang) {
+        translatePage(currentLang);
+      }
+    }, 150); // wait for the framework to finish rendering the new tree
+  }
+
+  function patchHistoryForSpaDetection() {
+    if (window.__kibanI18nHistoryPatched) return;
+    window.__kibanI18nHistoryPatched = true;
+
+    var origPush = history.pushState;
+    var origReplace = history.replaceState;
+    history.pushState = function () {
+      var ret = origPush.apply(this, arguments);
+      scheduleReTranslate();
+      return ret;
+    };
+    history.replaceState = function () {
+      var ret = origReplace.apply(this, arguments);
+      scheduleReTranslate();
+      return ret;
+    };
+    window.addEventListener('popstate', scheduleReTranslate);
+  }
+
   function init() {
     // Listen for external language changes (e.g. a custom switcher in the
     // host app that hides our floating UI and dispatches kiban-lang-change
@@ -546,6 +595,9 @@
       var lang = e && e.detail && e.detail.lang;
       if (lang && lang !== currentLang) onLanguageChange(lang);
     });
+
+    // Detect SPA navigations so the widget re-translates new pages.
+    patchHistoryForSpaDetection();
 
     fetchJSON(BASE_URL + '/api/v1/i18n/widget', function (err, res) {
       if (!err && res && res.data) {
