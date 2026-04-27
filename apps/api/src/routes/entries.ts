@@ -112,7 +112,8 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
     let query = supabase
       .from('entries')
       .select(ENTRY_SELECT, { count: 'exact' })
-      .eq('collection_id', collection.id);
+      .eq('collection_id', collection.id)
+      .is('deleted_at', null); // exclude trash from listings
 
     if (status && typeof status === 'string') {
       query = query.eq('status', status);
@@ -194,6 +195,7 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       .select(ENTRY_SELECT)
       .eq('collection_id', collection.id)
       .eq('slug', entrySlug)
+      .is('deleted_at', null) // hide trashed entries from public reads
       .single();
 
     if (error || !entry) {
@@ -530,14 +532,17 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Soft delete (v1.6): flip deleted_at instead of removing the row, so
+    // the entry can be restored from Trash for 30 days. After 30 days, the
+    // scheduled-publisher worker hard-deletes.
     const { error } = await supabase
       .from('entries')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', existing.id);
 
     if (error) throw error;
 
-    audit(req, 'delete', 'entry', existing.id, { title: existing.title, collection: collection.slug });
+    audit(req, 'delete', 'entry', existing.id, { title: existing.title, collection: collection.slug, soft: true });
 
     res.json({
       data: { id: existing.id, title: existing.title, slug: existing.slug },

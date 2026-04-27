@@ -342,6 +342,31 @@ class ApiClient {
   }) {
     return this.request<any>('POST', '/checkout/create-session', payload, 30000);
   }
+
+  // ── Preview tokens ──
+  async createPreviewToken(entryId: string) {
+    return this.request<{ token: string; expires_at: string; entry_id: string }>(
+      'POST', '/preview/token', { entry_id: entryId },
+    );
+  }
+
+  // ── Trash ──
+  async getTrash(params?: Record<string, string>) {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.request<any[]>('GET', `/trash${qs}`);
+  }
+
+  async restoreFromTrash(entryId: string) {
+    return this.request<any>('POST', `/trash/${entryId}/restore`);
+  }
+
+  async hardDeleteEntry(entryId: string) {
+    return this.request<any>('DELETE', `/trash/${entryId}`);
+  }
+
+  async emptyTrash() {
+    return this.request<any>('POST', '/trash/empty');
+  }
 }
 
 export const api = new ApiClient();

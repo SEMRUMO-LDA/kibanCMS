@@ -13,7 +13,8 @@ import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { ArrowLeft, Loader, Clock, Eye } from 'lucide-react';
+import { ArrowLeft, Loader, Clock, Eye, Share2 } from 'lucide-react';
+import { useToast } from '../components/Toast';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { LivePreview } from '../components/LivePreview';
 import { EditingPresence } from '../components/EditingPresence';
@@ -130,6 +131,8 @@ export function EntryEdit() {
   const { collectionSlug, entryId } = useParams<{ collectionSlug: string; entryId?: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
+  const [generatingPreview, setGeneratingPreview] = useState(false);
 
   const [collection, setCollection] = useState<Collection | null>(null);
   const [entry, setEntry] = useState<Entry | null>(null);
@@ -273,6 +276,39 @@ export function EntryEdit() {
     navigate(`/content/${collectionSlug}`);
   };
 
+  const handleSharePreview = async () => {
+    if (!entry) return;
+    if (isDirty) {
+      toast.error('Save your changes first — preview shows the saved version.');
+      return;
+    }
+    setGeneratingPreview(true);
+    try {
+      const { data, error } = await api.createPreviewToken(entry.id);
+      if (error || !data) {
+        toast.error(error || 'Failed to generate preview link');
+        return;
+      }
+      // Build the URL the editor will share. The {tenant-frontend}/preview/...
+      // page must accept ?token=… and call /api/v1/preview/entry?token=… on
+      // the kibanCMS API. We expose the API URL too so frontends can construct
+      // their own preview routes.
+      const apiBase = (import.meta.env.VITE_API_URL || window.location.origin) + '/api/v1';
+      const previewUrl = `${apiBase}/preview/entry?token=${encodeURIComponent(data.token)}`;
+      try {
+        await navigator.clipboard.writeText(previewUrl);
+        toast.success(`Preview link copied — valid until ${new Date(data.expires_at).toLocaleString('pt-PT')}`);
+      } catch {
+        // Clipboard blocked — fall back to a prompt the user can copy manually
+        prompt('Copy this preview URL (valid 24h):', previewUrl);
+      }
+    } catch (err: any) {
+      toast.error('Failed to generate preview: ' + (err.message || 'Unknown error'));
+    } finally {
+      setGeneratingPreview(false);
+    }
+  };
+
   if (loading) {
     return (
       <LoadingContainer>
@@ -309,6 +345,11 @@ export function EntryEdit() {
             {isEditMode && entry && (
               <BackButton onClick={() => setShowRevisions(true)} style={{ marginBottom: '16px' }}>
                 <Clock /> History
+              </BackButton>
+            )}
+            {isEditMode && entry && (
+              <BackButton onClick={handleSharePreview} disabled={generatingPreview} style={{ marginBottom: '16px' }}>
+                <Share2 /> {generatingPreview ? 'Generating…' : 'Share Preview'}
               </BackButton>
             )}
             <BackButton onClick={() => setShowPreview(!showPreview)} style={{ marginBottom: '16px' }}>

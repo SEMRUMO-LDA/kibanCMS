@@ -18,6 +18,7 @@ import {
   Activity,
   CalendarCheck,
   ShoppingBag,
+  Trash2,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
@@ -539,7 +540,7 @@ export const DashboardLayout = () => {
           <img src="/logo.png" alt="kibanCMS" style={{ height: collapsed ? '32px' : '40px', objectFit: 'contain' }} className="logo-icon" />
           <div className="logo-text">
             <h1>kibanCMS</h1>
-            <span className="version">v1.5.0</span>
+            <span className="version">v1.6.0</span>
           </div>
         </LogoSection>
 
@@ -588,6 +589,9 @@ export const DashboardLayout = () => {
             </NavItem>
             <NavItem $active={location.pathname.startsWith('/addons')} $collapsed={collapsed} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0} title={collapsed ? t('nav.addons') : undefined}>
               <Puzzle size={20} /><span>{t('nav.addons')}</span>
+            </NavItem>
+            <NavItem $active={location.pathname === '/trash'} $collapsed={collapsed} onClick={() => handleNavigation('/trash')} role="button" tabIndex={0} title={collapsed ? 'Trash' : undefined}>
+              <Trash2 size={20} /><span>Trash</span>
             </NavItem>
             <NavItem $active={location.pathname.startsWith('/settings')} $collapsed={collapsed} onClick={() => handleNavigation('/settings')} role="button" tabIndex={0} title={collapsed ? 'Settings' : undefined}>
               <Settings size={20} />

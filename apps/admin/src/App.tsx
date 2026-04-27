@@ -21,6 +21,7 @@ import { ActivityLog } from './pages/ActivityLog';
 import { Diagnostics } from './pages/Diagnostics';
 import { BookingsManager } from './pages/BookingsManager';
 import { OrdersManager } from './pages/OrdersManager';
+import { TrashManager } from './pages/TrashManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
 
@@ -99,6 +100,7 @@ const AppContent = () => {
         <Route path="addons" element={<Addons />} />
         <Route path="bookings" element={<BookingsManager />} />
         <Route path="orders" element={<OrdersManager />} />
+        <Route path="trash" element={<TrashManager />} />
         <Route path="settings" element={<Settings />} />
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
         <Route path="addons/accessibility" element={<AccessibilitySettings />} />

@@ -20,6 +20,8 @@ import formsRouter from './routes/forms.js';
 import paymentsRouter, { webhookHandler as paymentsWebhookHandler } from './routes/payments.js';
 import bookingsV2Router from './routes/bookings-v2.js';
 import checkoutRouter from './routes/checkout.js';
+import previewRouter from './routes/preview.js';
+import trashRouter from './routes/trash.js';
 import toursRouter from './routes/tours.js';
 import couponsRouter from './routes/coupons.js';
 import emailRouter from './routes/email.js';
@@ -33,6 +35,7 @@ import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { loadTenants, resolveTenant, getAllTenants } from './config/tenants.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
+import { startScheduledPublisher } from './lib/scheduled-publisher.js';
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -217,6 +220,14 @@ app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router);
 app.use('/api/v1/bookings', validateAny, bookingsV2Router);
 // Unified checkout — single endpoint for bookings + products + custom amounts
 app.use('/api/v1/checkout', validateAny, checkoutRouter);
+// Preview: GET /entry is public (token gates access), POST /token requires JWT.
+// Conditionally skip JWT auth for the public token-gated read endpoint.
+app.use('/api/v1/preview', (req, res, next) => {
+  if (req.method === 'GET' && req.path === '/entry') return next();
+  return validateJWT(req as any, res, next);
+}, previewRouter);
+// Trash — admin-only soft-delete management
+app.use('/api/v1/trash', validateJWT, trashRouter);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
@@ -353,19 +364,22 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-// Start webhook worker
+// Start background workers
 const stopWebhookWorker = startWebhookWorker();
+const stopScheduledPublisher = startScheduledPublisher();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   stopWebhookWorker();
+  stopScheduledPublisher();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
   stopWebhookWorker();
+  stopScheduledPublisher();
   process.exit(0);
 });
 
