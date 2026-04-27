@@ -292,6 +292,12 @@ class ApiClient {
     return this.request<any>('POST', '/i18n/translate-bulk', { collection_slug: collectionSlug, target_lang: targetLang }, 120000);
   }
 
+  async translateEverything() {
+    // Long timeout — full sync across all collections × all languages can
+    // take minutes on first run. Idempotent thanks to content-hash check.
+    return this.request<any>('POST', '/i18n/translate-everything', {}, 600000);
+  }
+
   async getI18nStatus(collectionSlug: string) {
     return this.request<any>('GET', `/i18n/status/${collectionSlug}`);
   }

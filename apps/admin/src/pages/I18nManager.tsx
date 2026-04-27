@@ -178,6 +178,12 @@ export const I18nManager = () => {
   const [result, setResult] = useState<BulkResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [runningAll, setRunningAll] = useState(false);
+  const [allResult, setAllResult] = useState<{
+    collections: number; languages: number;
+    totals: BulkResult;
+    matrix: Array<{ collection: string; language: string; total: number; translated: number; skipped: number; errors: number }>;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -209,6 +215,28 @@ export const I18nManager = () => {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleTranslateAll = async () => {
+    if (!confirm('Translate every published entry across every user collection into every enabled language?\n\nThis may take a few minutes on first run. Already-translated entries are skipped (content-hash check), so it\'s safe to re-run.')) return;
+    setRunningAll(true);
+    setAllResult(null);
+    setErrorMsg(null);
+    try {
+      const { data, error } = await api.translateEverything();
+      if (error) {
+        setErrorMsg(error);
+        toast.error(error);
+        return;
+      }
+      setAllResult(data);
+      toast.success(`Full sync complete: ${data?.totals?.translated || 0} entries translated across ${data?.collections} collections × ${data?.languages} languages`);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Sweep failed');
+      toast.error(err.message || 'Sweep failed');
+    } finally {
+      setRunningAll(false);
+    }
+  };
 
   const handleRun = async () => {
     if (!selectedCollection || !selectedLang) return;
@@ -273,16 +301,80 @@ export const I18nManager = () => {
       <Header>
         <h1>Internationalization</h1>
         <p>
-          Bulk-translate collections into your enabled languages. Results are stored on each
-          entry (<code>meta.translations</code>) so the public API serves them via{' '}
-          <code>?lang=</code>.
+          Translate your content automatically. Once configured, new and edited entries
+          translate themselves on publish — you don't have to come here again.
         </p>
       </Header>
+
+      {/* ── Primary action: translate everything ── */}
+      <Card style={{ borderColor: '#6366f140' }}>
+        <CardTitle>
+          <div className="icon-wrap"><Globe /></div>
+          <h2>Translate everything</h2>
+        </CardTitle>
+        <p style={{ fontSize: typography.fontSize.sm, color: colors.gray[600], margin: `0 0 ${spacing[4]}` }}>
+          Sweeps every user collection and translates every published entry into every enabled
+          language ({languages.map(l => l.code.toUpperCase()).join(', ')}). Skips entries already
+          up-to-date — safe to run anytime.
+        </p>
+        <PrimaryBtn onClick={handleTranslateAll} disabled={runningAll}>
+          {runningAll ? (
+            <>
+              <Loader style={{ animation: 'spin 1s linear infinite' }} /> Running full sync…
+            </>
+          ) : (
+            <>
+              <Sparkles /> Translate everything
+            </>
+          )}
+        </PrimaryBtn>
+
+        {allResult && (
+          <ResultBox $kind="success">
+            <Check />
+            <div style={{ flex: 1 }}>
+              <strong>Full sync complete.</strong> {allResult.collections} collection{allResult.collections !== 1 ? 's' : ''} × {allResult.languages} language{allResult.languages !== 1 ? 's' : ''}.
+              <StatGrid>
+                <Stat $color={colors.gray[700]}>
+                  <div className="stat-value">{allResult.totals.total}</div>
+                  <div className="stat-label">Entries</div>
+                </Stat>
+                <Stat $color={colors.green[600]}>
+                  <div className="stat-value">{allResult.totals.translated}</div>
+                  <div className="stat-label">Translated</div>
+                </Stat>
+                <Stat $color={colors.gray[500]}>
+                  <div className="stat-value">{allResult.totals.skipped}</div>
+                  <div className="stat-label">Skipped</div>
+                </Stat>
+                <Stat $color={allResult.totals.errors > 0 ? colors.red[600] : colors.gray[400]}>
+                  <div className="stat-value">{allResult.totals.errors}</div>
+                  <div className="stat-label">Errors</div>
+                </Stat>
+              </StatGrid>
+              {allResult.matrix.some(m => m.translated > 0 || m.errors > 0) && (
+                <details style={{ marginTop: spacing[3] }}>
+                  <summary style={{ cursor: 'pointer', fontSize: typography.fontSize.sm, color: colors.gray[600] }}>
+                    Per-collection × per-language breakdown
+                  </summary>
+                  <div style={{ marginTop: spacing[2], fontSize: 12, color: colors.gray[600], fontFamily: typography.fontFamily.mono }}>
+                    {allResult.matrix.map((row, idx) => (
+                      <div key={idx} style={{ padding: '4px 0', borderBottom: `1px solid ${colors.gray[100]}` }}>
+                        <strong>{row.collection}</strong> → {row.language.toUpperCase()}: {row.translated} translated, {row.skipped} skipped{row.errors > 0 ? `, ${row.errors} errors` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </ResultBox>
+        )}
+      </Card>
 
       <Card>
         <CardTitle>
           <div className="icon-wrap"><Sparkles /></div>
-          <h2>Bulk translate</h2>
+          <h2>Bulk translate (single collection)</h2>
         </CardTitle>
 
         <FormRow>
@@ -376,13 +468,14 @@ export const I18nManager = () => {
       <Card>
         <CardTitle>
           <div className="icon-wrap" style={{ background: colors.gray[100], color: colors.gray[600] }}><Globe /></div>
-          <h2>How translations are served</h2>
+          <h2>How translations stay in sync</h2>
         </CardTitle>
         <ol style={{ margin: 0, paddingLeft: spacing[5], color: colors.gray[700], fontSize: typography.fontSize.sm, lineHeight: 1.7 }}>
-          <li>Run the bulk translate above to populate <code>entries.meta.translations.&lt;lang&gt;</code> for each entry.</li>
-          <li>Frontends pass <code>?lang=&lt;code&gt;</code> on every fetch (e.g. <code>/api/v1/tours?lang=en</code>).</li>
-          <li>The API overlays the stored translation onto the original content and returns it ready to render.</li>
-          <li>Future content changes automatically invalidate the cached translation (content-hash); next bulk-run translates only what changed.</li>
+          <li>One-time setup: run <strong>Translate everything</strong> above to seed all existing content.</li>
+          <li>From then on, with <code>auto_translate</code> enabled in your i18n config, every <strong>publish</strong> or <strong>edit</strong> of an entry automatically refreshes its translations in the background — no manual step needed.</li>
+          <li>Frontends pass <code>?lang=&lt;code&gt;</code> on every fetch and receive content already translated.</li>
+          <li>Static UI labels (buttons, headers, navigation) are translated client-side by the embedded widget.</li>
+          <li>Content-hash check skips work when nothing changed — translations are cheap and idempotent.</li>
         </ol>
       </Card>
     </Container>

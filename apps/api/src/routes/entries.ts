@@ -5,6 +5,7 @@ import { validateContent } from '../lib/validate-content.js';
 import { audit } from '../lib/audit.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { tenantStore } from '../middleware/tenant.js';
+import { autoTranslateEntryToAllLanguages } from './i18n.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -369,6 +370,12 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
 
     audit(req, 'create', 'entry', entry.id, { title: entry.title, collection: collection.slug });
 
+    // Auto-translate when i18n config has auto_translate=true. Fire-and-forget
+    // so the response stays fast; the i18n helper swallows its own errors.
+    if (entry.status === 'published') {
+      autoTranslateEntryToAllLanguages(entry.id, collection.slug).catch(() => { /* logged inside */ });
+    }
+
     res.status(201).json({
       data: entry,
       meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
@@ -517,6 +524,12 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     }
 
     audit(req, 'update', 'entry', entry.id, { title: entry.title, collection: collection.slug, fields: Object.keys(updateData) });
+
+    // Auto-translate refresh when content changed and entry is published.
+    // The helper hashes content and skips if nothing changed (cheap no-op).
+    if (entry.status === 'published') {
+      autoTranslateEntryToAllLanguages(entry.id, collection.slug).catch(() => { /* logged inside */ });
+    }
 
     res.json({
       data: entry,

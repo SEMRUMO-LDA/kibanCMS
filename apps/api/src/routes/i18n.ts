@@ -705,6 +705,186 @@ router.put('/translation/:entryId/:lang', async (req: AuthRequest, res: Response
 });
 
 // ============================================
+// POST /api/v1/i18n/translate-everything
+// One-click full sync: translates every published entry across every user-
+// content collection into every enabled target language. Skips system/addon
+// collections (i18n-config, stripe-*, orders, site-settings, etc.) — those
+// hold configuration, not user content. Skipped entries (content-hash
+// match) are no-ops, so re-running is cheap + idempotent.
+//
+// Returns a per-collection × per-language matrix of results so the admin
+// UI can show what was actually processed.
+// ============================================
+
+const SYSTEM_COLLECTION_SLUGS = new Set([
+  'i18n-config', 'i18n-translations',
+  'stripe-config', 'stripe-products', 'stripe-transactions',
+  'orders', 'site-settings', 'redirects',
+  'forms-config', 'form-submissions', 'newsletter-subscribers',
+  'newsletter-campaigns', 'cookie-notice', 'accessibility',
+  'automations', 'coupons', 'coupon-redemptions',
+  'bookable-resources', 'bookings',
+]);
+
+router.post('/translate-everything', async (_req: AuthRequest, res: Response) => {
+  try {
+    const config = await getI18nConfig();
+    if (!config) {
+      return res.status(503).json({
+        error: { message: 'i18n not configured', status: 503, timestamp: new Date().toISOString() },
+      });
+    }
+
+    if (config.enabledLanguages.length === 0) {
+      return res.status(400).json({
+        error: { message: 'No target languages enabled in i18n config', status: 400, timestamp: new Date().toISOString() },
+      });
+    }
+
+    // Discover user-content collections (everything except system/addon ones)
+    const { data: allCols } = await supabase
+      .from('collections')
+      .select('id, slug, name');
+
+    const userCollections = (allCols || []).filter(c => !SYSTEM_COLLECTION_SLUGS.has(c.slug));
+
+    if (userCollections.length === 0) {
+      return res.json({
+        data: { collections: 0, languages: config.enabledLanguages.length, results: [] },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // For each (collection, language) pair, run the same logic as /translate-bulk.
+    // We inline it here to avoid HTTP round-trip overhead.
+    const targets = config.enabledLanguages.map(l => l.code);
+    const matrix: Array<{
+      collection: string;
+      language: string;
+      total: number;
+      translated: number;
+      skipped: number;
+      errors: number;
+    }> = [];
+
+    for (const col of userCollections) {
+      const fields = await getCollectionFields(col.slug);
+      const { data: entries } = await supabase
+        .from('entries')
+        .select('id, title, content, meta')
+        .eq('collection_id', col.id)
+        .eq('status', 'published');
+
+      const entryList = entries || [];
+
+      for (const targetLang of targets) {
+        let translated = 0, skipped = 0, errors = 0;
+
+        // Process 5 entries concurrently per (col, lang) chunk
+        const CHUNK = 5;
+        for (let i = 0; i < entryList.length; i += CHUNK) {
+          const chunk = entryList.slice(i, i + CHUNK);
+          const results = await Promise.allSettled(
+            chunk.map(async (entry: any) => {
+              const content = entry.content as Record<string, any>;
+              const currentMeta = (entry.meta || {}) as Record<string, any>;
+              const contentHash = computeContentHash(content);
+
+              if (currentMeta.i18n?.content_hash === contentHash && currentMeta.translations?.[targetLang]) {
+                return 'skipped';
+              }
+
+              const fieldsToTranslate = extractTranslatableFields(content, fields);
+              if (Object.keys(fieldsToTranslate).length === 0) return 'skipped';
+
+              const translatedFields = await translateFields(
+                fieldsToTranslate,
+                targetLang,
+                config.googleApiKey,
+                config.defaultLanguage,
+              );
+
+              const titleTranslation = entry.title
+                ? await translateFields({ _title: entry.title }, targetLang, config.googleApiKey, config.defaultLanguage)
+                : {};
+
+              const allTranslated = { ...translatedFields, ...titleTranslation };
+
+              const updatedMeta = {
+                ...currentMeta,
+                translations: { ...(currentMeta.translations || {}), [targetLang]: allTranslated },
+                i18n: {
+                  source_lang: config.defaultLanguage,
+                  content_hash: contentHash,
+                  last_translated: new Date().toISOString(),
+                },
+              };
+
+              await supabase.from('entries').update({ meta: updatedMeta }).eq('id', entry.id);
+              return 'translated';
+            }),
+          );
+
+          for (const r of results) {
+            if (r.status === 'fulfilled') {
+              if (r.value === 'translated') translated++;
+              else skipped++;
+            } else {
+              errors++;
+              logger.error('translate-everything: entry failed', {
+                collection: col.slug,
+                lang: targetLang,
+                error: r.reason?.message,
+              });
+            }
+          }
+        }
+
+        matrix.push({
+          collection: col.slug,
+          language: targetLang,
+          total: entryList.length,
+          translated,
+          skipped,
+          errors,
+        });
+      }
+    }
+
+    const totals = matrix.reduce(
+      (acc, m) => ({
+        total: acc.total + m.total,
+        translated: acc.translated + m.translated,
+        skipped: acc.skipped + m.skipped,
+        errors: acc.errors + m.errors,
+      }),
+      { total: 0, translated: 0, skipped: 0, errors: 0 },
+    );
+
+    logger.info('translate-everything complete', {
+      collections: userCollections.length,
+      languages: targets.length,
+      ...totals,
+    });
+
+    res.json({
+      data: {
+        collections: userCollections.length,
+        languages: targets.length,
+        totals,
+        matrix,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('translate-everything failed', { error: error.message });
+    res.status(500).json({
+      error: { message: error.message || 'Translation sweep failed', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+// ============================================
 // POST /api/v1/i18n/translate-text
 // Auto-translate an array of text strings (widget use)
 // Body: { texts: string[], target_lang: string, source_lang?: string }
@@ -752,5 +932,88 @@ router.post('/translate-text', async (req: AuthRequest, res: Response) => {
     });
   }
 });
+
+// ============================================
+// EXPORTED HELPER — used by entries.ts hook
+// ============================================
+//
+// Translates a single entry to every enabled target language. Designed to
+// be fired non-blockingly from the entry save path: failures are logged
+// but never thrown back to the caller. Skips work when the content hash
+// matches (idempotent, cheap to call repeatedly).
+export async function autoTranslateEntryToAllLanguages(entryId: string, collectionSlug: string): Promise<void> {
+  try {
+    const config = await getI18nConfig();
+    if (!config) return;
+    if (!config.autoTranslate) return;
+    if (config.enabledLanguages.length === 0) return;
+
+    // Optional collection allowlist from i18n config. Empty list = all.
+    if (config.translatableCollections.length > 0 && !config.translatableCollections.includes(collectionSlug)) {
+      return;
+    }
+
+    const { data: entry } = await supabase
+      .from('entries')
+      .select('id, title, content, meta')
+      .eq('id', entryId)
+      .single();
+
+    if (!entry || !entry.content) return;
+
+    const fields = await getCollectionFields(collectionSlug);
+    const content = entry.content as Record<string, any>;
+    const currentMeta = (entry.meta || {}) as Record<string, any>;
+    const contentHash = computeContentHash(content);
+
+    let updatedMeta = { ...currentMeta };
+    let didAnyWork = false;
+
+    for (const lang of config.enabledLanguages) {
+      const targetLang = lang.code;
+      // Skip when this lang is already up-to-date
+      if (currentMeta.i18n?.content_hash === contentHash && currentMeta.translations?.[targetLang]) {
+        continue;
+      }
+
+      const fieldsToTranslate = extractTranslatableFields(content, fields);
+      if (Object.keys(fieldsToTranslate).length === 0) continue;
+
+      try {
+        const translated = await translateFields(
+          fieldsToTranslate,
+          targetLang,
+          config.googleApiKey,
+          config.defaultLanguage,
+        );
+
+        const titleTranslation = entry.title
+          ? await translateFields({ _title: entry.title }, targetLang, config.googleApiKey, config.defaultLanguage)
+          : {};
+
+        updatedMeta = {
+          ...updatedMeta,
+          translations: { ...(updatedMeta.translations || {}), [targetLang]: { ...translated, ...titleTranslation } },
+        };
+        didAnyWork = true;
+      } catch (err: any) {
+        logger.error('auto-translate: lang failed', { entryId, targetLang, error: err.message });
+      }
+    }
+
+    if (didAnyWork) {
+      updatedMeta.i18n = {
+        source_lang: config.defaultLanguage,
+        content_hash: contentHash,
+        last_translated: new Date().toISOString(),
+      };
+      await supabase.from('entries').update({ meta: updatedMeta }).eq('id', entryId);
+      logger.info('auto-translate: entry refreshed', { entryId, langs: config.enabledLanguages.length });
+    }
+  } catch (err: any) {
+    // Never throw — auto-translate must not block entry publish
+    logger.error('auto-translate failed', { entryId, error: err.message });
+  }
+}
 
 export default router;
