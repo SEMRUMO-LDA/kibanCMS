@@ -568,6 +568,78 @@
     }, 150); // wait for the framework to finish rendering the new tree
   }
 
+  // ── Async content observer ──
+  //
+  // Sites where content arrives via fetch-after-mount (e.g. Tours.tsx with
+  // useEffect → kibanTours.list() → setState) finish rendering long after
+  // the SPA navigation event fires. This observer detects new text nodes
+  // in the DOM and triggers a re-translate, debounced so a render burst
+  // collapses into one API call.
+  var mutationDebounce = null;
+  var mutationsActive = false;
+
+  function shouldHandleMutation(mut) {
+    if (mut.type !== 'childList') return false;
+    if (mut.addedNodes.length === 0) return false;
+    // Skip mutations inside the widget's own UI (avoid feedback loops)
+    var t = mut.target;
+    if (t && t.closest && t.closest('#kiban-i18n-widget')) return false;
+    // Skip purely-text or style insertions (script tags, stylesheet links)
+    var hasMeaningfulNode = false;
+    for (var i = 0; i < mut.addedNodes.length; i++) {
+      var n = mut.addedNodes[i];
+      if (n.nodeType === 1) { // Element
+        var tag = n.tagName;
+        if (tag !== 'SCRIPT' && tag !== 'STYLE' && tag !== 'LINK' && tag !== 'META') {
+          hasMeaningfulNode = true;
+          break;
+        }
+      } else if (n.nodeType === 3 && n.textContent && n.textContent.trim().length >= MIN_LENGTH) {
+        hasMeaningfulNode = true;
+        break;
+      }
+    }
+    return hasMeaningfulNode;
+  }
+
+  function startMutationObserver() {
+    if (typeof MutationObserver === 'undefined') return;
+    if (window.__kibanI18nMutationObserverActive) return;
+    window.__kibanI18nMutationObserverActive = true;
+
+    var observer = new MutationObserver(function (mutations) {
+      // If we're currently translating, the DOM mutations we see are from
+      // our own translation pass — ignore.
+      if (isTranslating || mutationsActive) return;
+      if (!currentLang || currentLang === defaultLang) return;
+
+      var anyMeaningful = false;
+      for (var i = 0; i < mutations.length; i++) {
+        if (shouldHandleMutation(mutations[i])) {
+          anyMeaningful = true;
+          break;
+        }
+      }
+      if (!anyMeaningful) return;
+
+      if (mutationDebounce) clearTimeout(mutationDebounce);
+      mutationDebounce = setTimeout(function () {
+        mutationDebounce = null;
+        mutationsActive = true;
+        translatePage(currentLang);
+        // Brief silence after our own translation pass to avoid loop
+        setTimeout(function () { mutationsActive = false; }, 200);
+      }, 350);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      // We don't watch attributes — too noisy. Async content flows almost
+      // always come through new childList nodes.
+    });
+  }
+
   function patchHistoryForSpaDetection() {
     if (window.__kibanI18nHistoryPatched) return;
     window.__kibanI18nHistoryPatched = true;
@@ -598,6 +670,14 @@
 
     // Detect SPA navigations so the widget re-translates new pages.
     patchHistoryForSpaDetection();
+
+    // MutationObserver: catch async content (Tours.tsx fetches in useEffect,
+    // images lazy-load, modals open, etc.). The 150ms history-pushState
+    // re-translate fires too early for content that arrives after fetch.
+    // This observer fires AFTER the new nodes are inserted and re-translates
+    // them. Heavy debouncing (350ms) so a stream of mutations from React
+    // rendering batches into one translate pass.
+    startMutationObserver();
 
     fetchJSON(BASE_URL + '/api/v1/i18n/widget', function (err, res) {
       if (!err && res && res.data) {

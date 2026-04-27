@@ -235,7 +235,9 @@ app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — adm
 // i18n widget — public static JS file (no auth)
 app.get('/api/v1/i18n/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  // Short TTL + must-revalidate so widget bug fixes reach users within minutes,
+  // not hours. The widget is small (~12KB) so the bandwidth hit is negligible.
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
   // Production: __dirname = /app/apps/api/dist → static at /app/apps/api/static
   // Development: __dirname = apps/api/src → static at apps/api/src/static
   const staticPath = NODE_ENV === 'production'
