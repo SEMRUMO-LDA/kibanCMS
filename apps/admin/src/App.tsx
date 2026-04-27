@@ -22,6 +22,7 @@ import { Diagnostics } from './pages/Diagnostics';
 import { BookingsManager } from './pages/BookingsManager';
 import { OrdersManager } from './pages/OrdersManager';
 import { TrashManager } from './pages/TrashManager';
+import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
 
@@ -101,6 +102,7 @@ const AppContent = () => {
         <Route path="bookings" element={<BookingsManager />} />
         <Route path="orders" element={<OrdersManager />} />
         <Route path="trash" element={<TrashManager />} />
+        <Route path="i18n" element={<I18nManager />} />
         <Route path="settings" element={<Settings />} />
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
         <Route path="addons/accessibility" element={<AccessibilitySettings />} />

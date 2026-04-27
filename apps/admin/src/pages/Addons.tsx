@@ -486,6 +486,7 @@ export const Addons = () => {
                         <Btn $variant="primary" onClick={() => navigate(
                           addon.settingsRoute ? addon.settingsRoute :
                           addon.id === 'bookings' ? '/bookings' :
+                          addon.id === 'i18n' ? '/i18n' :
                           `/content/${addon.collections[0].slug}`
                         )}>
                           {addon.settingsRoute ? 'Settings' : 'Open'} <ArrowRight />
