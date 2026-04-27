@@ -539,6 +539,14 @@
 
   // ── Initialize ──
   function init() {
+    // Listen for external language changes (e.g. a custom switcher in the
+    // host app that hides our floating UI and dispatches kiban-lang-change
+    // itself). The onLanguageChange guard prevents infinite re-dispatch.
+    window.addEventListener('kiban-lang-change', function (e) {
+      var lang = e && e.detail && e.detail.lang;
+      if (lang && lang !== currentLang) onLanguageChange(lang);
+    });
+
     fetchJSON(BASE_URL + '/api/v1/i18n/widget', function (err, res) {
       if (!err && res && res.data) {
         config.position = res.data.position || config.position;
