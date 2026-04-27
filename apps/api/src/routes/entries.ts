@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { validateContent } from '../lib/validate-content.js';
 import { audit } from '../lib/audit.js';
 import { LRUCache } from '../lib/lru-cache.js';
+import { tenantStore } from '../middleware/tenant.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -11,6 +12,38 @@ const router: Router = Router();
 /** Escape special ILIKE characters to prevent pattern injection */
 function escapeIlike(str: string): string {
   return str.replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Soft-delete availability probe.
+ *
+ * Migration 004 adds entries.deleted_at. Tenants that haven't run it yet
+ * cannot be filtered with .is('deleted_at', null) — the query 500s with a
+ * "column does not exist" error. We probe once per tenant, cache the result,
+ * and only apply the filter when the column is known to exist.
+ */
+const softDeleteAvailability = new Map<string, boolean>();
+
+async function hasSoftDelete(): Promise<boolean> {
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+  const cached = softDeleteAvailability.get(tenantId);
+  if (cached !== undefined) return cached;
+
+  const { error } = await supabase
+    .from('entries')
+    .select('deleted_at')
+    .limit(1);
+
+  const available = !error;
+  softDeleteAvailability.set(tenantId, available);
+
+  if (!available) {
+    logger.warn('Migration 004 not applied for tenant — Trash disabled', {
+      tenant: tenantId,
+      hint: 'Run database/migrations/004_soft_delete_trash.sql on this tenant\'s Supabase to enable Trash.',
+    });
+  }
+  return available;
 }
 
 // ============================================
@@ -112,8 +145,12 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
     let query = supabase
       .from('entries')
       .select(ENTRY_SELECT, { count: 'exact' })
-      .eq('collection_id', collection.id)
-      .is('deleted_at', null); // exclude trash from listings
+      .eq('collection_id', collection.id);
+
+    // Only apply soft-delete filter on tenants that ran migration 004
+    if (await hasSoftDelete()) {
+      query = query.is('deleted_at', null);
+    }
 
     if (status && typeof status === 'string') {
       query = query.eq('status', status);
@@ -190,13 +227,17 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: entry, error } = await supabase
+    let slugQuery = supabase
       .from('entries')
       .select(ENTRY_SELECT)
       .eq('collection_id', collection.id)
-      .eq('slug', entrySlug)
-      .is('deleted_at', null) // hide trashed entries from public reads
-      .single();
+      .eq('slug', entrySlug);
+
+    if (await hasSoftDelete()) {
+      slugQuery = slugQuery.is('deleted_at', null);
+    }
+
+    const { data: entry, error } = await slugQuery.single();
 
     if (error || !entry) {
       return res.status(404).json({
@@ -533,16 +574,29 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     }
 
     // Soft delete (v1.6): flip deleted_at instead of removing the row, so
-    // the entry can be restored from Trash for 30 days. After 30 days, the
-    // scheduled-publisher worker hard-deletes.
-    const { error } = await supabase
-      .from('entries')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', existing.id);
+    // the entry can be restored from Trash for 30 days. Tenants that haven't
+    // run migration 004 fall back to hard delete (legacy behaviour).
+    let softDeleted = false;
+    if (await hasSoftDelete()) {
+      const { error } = await supabase
+        .from('entries')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', existing.id);
+      if (error) throw error;
+      softDeleted = true;
+    } else {
+      const { error } = await supabase
+        .from('entries')
+        .delete()
+        .eq('id', existing.id);
+      if (error) throw error;
+    }
 
-    if (error) throw error;
-
-    audit(req, 'delete', 'entry', existing.id, { title: existing.title, collection: collection.slug, soft: true });
+    audit(req, 'delete', 'entry', existing.id, {
+      title: existing.title,
+      collection: collection.slug,
+      soft: softDeleted,
+    });
 
     res.json({
       data: { id: existing.id, title: existing.title, slug: existing.slug },
