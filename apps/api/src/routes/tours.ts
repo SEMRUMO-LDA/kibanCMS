@@ -130,7 +130,34 @@ function expandTourContent(entry: any): Record<string, any> {
     rating: Number(c.rating) || 0,
     rating_count: Number(c.rating_count) || 0,
     resource_slug: c.resource_slug || entry.slug,
+    // External booking support — when set, the kibanCMS checkout is bypassed
+    // and the tour delegates to an external platform (Bókun, FareHarbor, etc.)
+    external_booking_url: typeof c.external_booking_url === 'string' ? c.external_booking_url.trim() : '',
+    external_booking_label: typeof c.external_booking_label === 'string' ? c.external_booking_label.trim() : '',
   };
+}
+
+/**
+ * Compute the booking mode for a tour. Single source of truth used by both
+ * the list and detail endpoints — frontends key their CTA off this field
+ * instead of probing collection installs themselves.
+ *
+ *   "external"  — tour has an external_booking_url; show only that CTA
+ *   "kiban"     — Bookings add-on installed AND no external URL; use kibanCMS checkout
+ *   "disabled"  — Bookings add-on NOT installed AND no external URL; hide CTA
+ */
+function computeBookingMode(tour: ReturnType<typeof expandTourContent>, hasBookingsAddon: boolean): 'external' | 'kiban' | 'disabled' {
+  if (tour.external_booking_url) return 'external';
+  if (hasBookingsAddon) return 'kiban';
+  return 'disabled';
+}
+
+async function isBookingsAddonInstalled(): Promise<boolean> {
+  // The Bookings add-on creates the bookable-resources collection. If it
+  // exists, the add-on is installed and tours can route through internal
+  // checkout. Cached per request would be ideal, but a lookup is cheap.
+  const id = await getCollectionId('bookable-resources');
+  return !!id;
 }
 
 // ── Sync tour → bookable_resource ──
@@ -236,7 +263,13 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    const tours = (entries || []).map(expandTourContent);
+
+    const hasBookings = await isBookingsAddonInstalled();
+    const tours = (entries || []).map(expandTourContent).map(tour => ({
+      ...tour,
+      booking_mode: computeBookingMode(tour, hasBookings),
+    }));
+
     res.json({ data: tours, timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching tours', { error: error.message });
@@ -274,13 +307,19 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
     }
 
     const tour = expandTourContent(entry);
+    const hasBookings = await isBookingsAddonInstalled();
+    const booking_mode = computeBookingMode(tour, hasBookings);
 
-    // Lazy sync: fire-and-forget so the detail endpoint stays fast
-    syncTourToResource(tour).catch(err =>
-      logger.warn('Tour → resource sync failed', { slug: entry.slug, error: err.message })
-    );
+    // Only mirror to bookable-resources when the tour actually uses the
+    // internal checkout. External-URL tours don't need a resource entry,
+    // and creating one would waste storage + confuse capacity reports.
+    if (booking_mode === 'kiban') {
+      syncTourToResource(tour).catch(err =>
+        logger.warn('Tour → resource sync failed', { slug: entry.slug, error: err.message })
+      );
+    }
 
-    res.json({ data: tour, timestamp: new Date().toISOString() });
+    res.json({ data: { ...tour, booking_mode }, timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching tour', { error: error.message });
     res.status(500).json({
