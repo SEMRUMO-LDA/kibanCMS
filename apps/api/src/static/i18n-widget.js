@@ -43,6 +43,10 @@
   var originalTexts = new Map(); // node → original text
   var translationCache = {};    // loaded from localStorage
   var isTranslating = false;
+  // Set by the MutationObserver when new content lands DURING a translation
+  // pass. The translation flow checks this on completion and re-runs if true,
+  // so async content (e.g. tours fetched via useEffect) is never dropped.
+  var pendingRetranslate = false;
 
   // ── Helpers ──
   function getCookie(name) {
@@ -201,11 +205,23 @@
           isTranslating = false;
           saveCache(targetLang, allTranslated);
           applyTranslations(allTexts, allTranslated, textMap);
+          // If new content arrived during the network round-trip (e.g. async
+          // fetch in a React useEffect), re-translate to cover it.
+          if (pendingRetranslate) {
+            pendingRetranslate = false;
+            setTimeout(function () { translatePage(targetLang); }, 100);
+          }
         }
       };
       xhr.onerror = function () {
         completed++;
-        if (completed === batches.length) isTranslating = false;
+        if (completed === batches.length) {
+          isTranslating = false;
+          if (pendingRetranslate) {
+            pendingRetranslate = false;
+            setTimeout(function () { translatePage(targetLang); }, 500);
+          }
+        }
       };
       xhr.send(JSON.stringify({ texts: batch, target_lang: targetLang }));
     });
@@ -608,9 +624,9 @@
     window.__kibanI18nMutationObserverActive = true;
 
     var observer = new MutationObserver(function (mutations) {
-      // If we're currently translating, the DOM mutations we see are from
-      // our own translation pass — ignore.
-      if (isTranslating || mutationsActive) return;
+      // mutationsActive is true while applyTranslations is mutating text
+      // nodes — those are OUR mutations and we must ignore them to avoid loops.
+      if (mutationsActive) return;
       if (!currentLang || currentLang === defaultLang) return;
 
       var anyMeaningful = false;
@@ -621,6 +637,14 @@
         }
       }
       if (!anyMeaningful) return;
+
+      // If a translation pass is mid-flight (network call to DeepL takes
+      // seconds), don't drop the mutation — flag it so translatePage re-runs
+      // when it finishes, catching the async content that just landed.
+      if (isTranslating) {
+        pendingRetranslate = true;
+        return;
+      }
 
       if (mutationDebounce) clearTimeout(mutationDebounce);
       mutationDebounce = setTimeout(function () {
