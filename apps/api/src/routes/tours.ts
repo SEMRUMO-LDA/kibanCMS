@@ -81,11 +81,42 @@ function parseHighlights(value: unknown): Array<{ image: string; caption: string
   return [];
 }
 
-function expandTourContent(entry: any): Record<string, any> {
-  const c = (entry.content as Record<string, any>) || {};
+/**
+ * Apply meta.translations[lang] overlay on top of the raw content.
+ * Returns a new content map where translatable string fields are replaced
+ * with their translated counterparts (when present). Non-string fields
+ * (numbers, booleans, JSON arrays for slots/highlights/etc.) are left
+ * untouched. The entry title is overlaid via the `_title` translation key
+ * — same convention used by entries.ts.
+ */
+function applyLangOverlay(entry: any, lang: string | undefined): { content: Record<string, any>; title: string } {
+  const rawContent = (entry.content as Record<string, any>) || {};
+  const meta = (entry.meta as Record<string, any>) || {};
+  const baseTitle = rawContent.title || entry.title || '';
+
+  if (!lang) return { content: rawContent, title: baseTitle };
+
+  const translations = meta?.translations?.[lang];
+  if (!translations || typeof translations !== 'object') {
+    return { content: rawContent, title: baseTitle };
+  }
+
+  const merged = { ...rawContent };
+  for (const [key, value] of Object.entries(translations)) {
+    if (key === '_title') continue;
+    if (typeof value === 'string') merged[key] = value;
+  }
+  return {
+    content: merged,
+    title: typeof translations._title === 'string' && translations._title ? translations._title : baseTitle,
+  };
+}
+
+function expandTourContent(entry: any, lang?: string): Record<string, any> {
+  const { content: c, title: localizedTitle } = applyLangOverlay(entry, lang);
   return {
     slug: entry.slug,
-    title: c.title || entry.title,
+    title: c.title || localizedTitle,
     subtitle: c.subtitle || '',
     short_description: c.short_description || '',
     full_description: c.full_description || '',
@@ -246,7 +277,7 @@ async function syncTourToResource(tour: ReturnType<typeof expandTourContent>): P
 // List published tours
 // ============================================
 
-router.get('/', async (_req: AuthRequest, res: Response) => {
+router.get('/', async (req: AuthRequest, res: Response) => {
   try {
     const colId = await getCollectionId('tours');
     if (!colId) {
@@ -255,9 +286,13 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
       });
     }
 
+    // Include meta so we can overlay translations. lang query param
+    // controls which language the response is rendered in.
+    const lang = (req.query.lang as string | undefined)?.toLowerCase();
+
     const { data: entries, error } = await supabase
       .from('entries')
-      .select('id, title, slug, content, featured_image, status')
+      .select('id, title, slug, content, featured_image, status, meta')
       .eq('collection_id', colId)
       .eq('status', 'published')
       .order('created_at', { ascending: true });
@@ -265,12 +300,16 @@ router.get('/', async (_req: AuthRequest, res: Response) => {
     if (error) throw error;
 
     const hasBookings = await isBookingsAddonInstalled();
-    const tours = (entries || []).map(expandTourContent).map(tour => ({
+    const tours = (entries || []).map(e => expandTourContent(e, lang)).map(tour => ({
       ...tour,
       booking_mode: computeBookingMode(tour, hasBookings),
     }));
 
-    res.json({ data: tours, timestamp: new Date().toISOString() });
+    res.json({
+      data: tours,
+      meta: lang ? { lang } : undefined,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: any) {
     logger.error('Error fetching tours', { error: error.message });
     res.status(500).json({
@@ -293,9 +332,11 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    const lang = (req.query.lang as string | undefined)?.toLowerCase();
+
     const { data: entry, error } = await supabase
       .from('entries')
-      .select('id, title, slug, content, featured_image, status')
+      .select('id, title, slug, content, featured_image, status, meta')
       .eq('collection_id', colId)
       .eq('slug', req.params.slug)
       .single();
@@ -306,7 +347,7 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const tour = expandTourContent(entry);
+    const tour = expandTourContent(entry, lang);
     const hasBookings = await isBookingsAddonInstalled();
     const booking_mode = computeBookingMode(tour, hasBookings);
 
@@ -319,7 +360,11 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
       );
     }
 
-    res.json({ data: { ...tour, booking_mode }, timestamp: new Date().toISOString() });
+    res.json({
+      data: { ...tour, booking_mode },
+      meta: lang ? { lang } : undefined,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: any) {
     logger.error('Error fetching tour', { error: error.message });
     res.status(500).json({
