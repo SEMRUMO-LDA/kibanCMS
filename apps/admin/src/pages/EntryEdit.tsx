@@ -74,6 +74,29 @@ const Subtitle = styled.p`
   margin: 0;
 `;
 
+// Compact action row inside the PublishBox — same look as the box's own
+// rows so History / Share Preview / Preview line up cleanly above the
+// status selector.
+const PublishBoxRow = styled.button`
+  display: flex;
+  align-items: center;
+  gap: ${spacing[2]};
+  width: 100%;
+  padding: ${spacing[2]} 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: ${typography.fontFamily.sans};
+  font-size: 13px;
+  font-weight: 500;
+  color: ${colors.gray[700]};
+  cursor: pointer;
+  transition: color 0.15s;
+  svg { width: 14px; height: 14px; flex-shrink: 0; color: ${colors.gray[500]}; }
+  &:hover { color: ${colors.gray[900]}; svg { color: ${colors.gray[700]}; } }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+`;
+
 const LoadingContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -336,27 +359,10 @@ export function EntryEdit() {
   return (
     <>
       <PageHeader>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <BackButton onClick={handleCancel}>
-            <ArrowLeft />
-            Back to {collection.name}
-          </BackButton>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {isEditMode && entry && (
-              <BackButton onClick={() => setShowRevisions(true)} style={{ marginBottom: '16px' }}>
-                <Clock /> History
-              </BackButton>
-            )}
-            {isEditMode && entry && (
-              <BackButton onClick={handleSharePreview} disabled={generatingPreview} style={{ marginBottom: '16px' }}>
-                <Share2 /> {generatingPreview ? 'Generating…' : 'Share Preview'}
-              </BackButton>
-            )}
-            <BackButton onClick={() => setShowPreview(!showPreview)} style={{ marginBottom: '16px' }}>
-              <Eye /> {showPreview ? 'Hide Preview' : 'Preview'}
-            </BackButton>
-          </div>
-        </div>
+        <BackButton onClick={handleCancel}>
+          <ArrowLeft />
+          Back to {collection.name}
+        </BackButton>
         <Title>
           {isEditMode ? 'Edit Entry' : 'Create New Entry'}
         </Title>
@@ -390,6 +396,23 @@ export function EntryEdit() {
         onCancel={handleCancel}
         saveButtonText={isEditMode ? 'Update Entry' : 'Create Entry'}
         onChange={() => setIsDirty(true)}
+        extraActions={
+          <>
+            {isEditMode && entry && (
+              <PublishBoxRow onClick={() => setShowRevisions(true)}>
+                <Clock /> History
+              </PublishBoxRow>
+            )}
+            {isEditMode && entry && (
+              <PublishBoxRow onClick={handleSharePreview} disabled={generatingPreview}>
+                <Share2 /> {generatingPreview ? 'Generating…' : 'Share Preview'}
+              </PublishBoxRow>
+            )}
+            <PublishBoxRow onClick={() => setShowPreview(!showPreview)}>
+              <Eye /> {showPreview ? 'Hide Preview' : 'Preview'}
+            </PublishBoxRow>
+          </>
+        }
       />
 
       {showRevisions && entry && (

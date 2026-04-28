@@ -18,7 +18,9 @@ const EditorContainer = styled.div`
   display: grid;
   grid-template-columns: 1fr 280px;
   gap: ${spacing[6]};
-  align-items: flex-start;
+  /* No align-items here — default 'stretch' is what we want so the right
+     column inherits the form's full height, giving position:sticky room
+     to travel as the user scrolls. */
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
@@ -31,6 +33,7 @@ const Form = styled.form`
   border-radius: ${borders.radius.xl};
   overflow: hidden;
   min-width: 0; /* allow grid item to shrink + stop horizontal overflow */
+  align-self: start; /* don't stretch the form; keep its natural height */
 `;
 
 const FormBody = styled.div`
@@ -191,6 +194,9 @@ interface EntryEditorProps {
   onCancel?: () => void;
   saveButtonText?: string;
   onChange?: () => void;
+  /** Extra rows rendered inside the right-rail PublishBox above the status
+   *  selector — typically History, Share Preview, Preview links. */
+  extraActions?: React.ReactNode;
 }
 
 export function EntryEditor({
@@ -201,6 +207,7 @@ export function EntryEditor({
   onCancel,
   saveButtonText = 'Save Entry',
   onChange,
+  extraActions,
 }: EntryEditorProps) {
   const [data, setData] = useState<EntryData>(initialData);
   const [status, setStatus] = useState<ContentStatus>(initialStatus);
@@ -436,7 +443,9 @@ export function EntryEditor({
         saveStatus={saveStatus}
         saveError={saveError}
         hint={isDirty ? 'Unsaved changes' : undefined}
-      />
+      >
+        {extraActions}
+      </PublishBox>
     </EditorContainer>
   );
 }
