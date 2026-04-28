@@ -575,7 +575,7 @@ const stripePayments: AddonDefinition = {
 
 const i18n: AddonDefinition = {
   id: 'i18n',
-  name: 'Internationalization',
+  name: 'Languages',
   description: 'Multi-language content with automatic translation and language switcher',
   longDescription: 'Add multi-language support to your content. Detect your default language, enable additional languages, and translate content automatically using DeepL. Each client uses their own DeepL API key. Includes an embeddable language switcher widget and a ?lang= API parameter for frontends.',
   icon: 'globe',

@@ -7,6 +7,7 @@ import { useI18n } from '../lib/i18n';
 import {
   FileText, ArrowRight, Loader, Plus, Pencil, Trash2,
   Mail, Search, CreditCard, CalendarCheck, Zap, Sparkles, Package, Globe,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -406,6 +407,13 @@ function buildAddonSlugMap() {
 
 const addonSlugMap = buildAddonSlugMap();
 
+// Slugs that USED to belong to add-ons but were removed in a registry refactor.
+// They linger in existing tenant DBs as orphan collections — we surface a
+// one-click cleanup banner so operators can delete them without going hunting.
+//   - newsletter-campaigns: removed in v2.0 of Newsletter add-on (campaigns
+//     now live in Brevo, not the CMS).
+const REMOVED_ADDON_SLUGS = new Set<string>(['newsletter-campaigns']);
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -461,10 +469,11 @@ export const Collections = () => {
     return () => { active = false; clearTimeout(timeout); };
   }, [user?.id]);
 
-  // ── Separate collections into addon groups and standalone ──
-  const { addonGroups, standaloneCollections } = (() => {
+  // ── Separate collections into addon groups, standalone, and orphans ──
+  const { addonGroups, standaloneCollections, orphanedCollections } = (() => {
     const grouped = new Map<string, { addon: typeof ADDONS_REGISTRY[0]; collections: Collection[] }>();
     const standalone: Collection[] = [];
+    const orphans: Collection[] = [];
 
     for (const col of collections) {
       const addon = addonSlugMap.get(col.slug);
@@ -473,6 +482,8 @@ export const Collections = () => {
           grouped.set(addon.id, { addon, collections: [] });
         }
         grouped.get(addon.id)!.collections.push(col);
+      } else if (REMOVED_ADDON_SLUGS.has(col.slug)) {
+        orphans.push(col);
       } else {
         standalone.push(col);
       }
@@ -481,8 +492,25 @@ export const Collections = () => {
     return {
       addonGroups: Array.from(grouped.values()),
       standaloneCollections: standalone,
+      orphanedCollections: orphans,
     };
   })();
+
+  // One-click cleanup of orphan collections (removed-but-still-in-DB)
+  const handleCleanupOrphans = async () => {
+    if (orphanedCollections.length === 0) return;
+    const names = orphanedCollections.map(c => `• ${c.name}`).join('\n');
+    if (!confirm(`Delete ${orphanedCollections.length} orphan collection(s) and ALL their entries?\n\n${names}\n\nThis cannot be undone.`)) return;
+    for (const col of orphanedCollections) {
+      try {
+        await api.deleteCollection(col.slug);
+      } catch (err: any) {
+        toast.error(`Failed to delete ${col.name}: ${err?.message || 'Unknown error'}`);
+      }
+    }
+    setCollections(prev => prev.filter(c => !orphanedCollections.find(o => o.id === c.id)));
+    toast.success(`Cleaned up ${orphanedCollections.length} collection(s)`);
+  };
 
   if (loading) {
     return (
@@ -539,6 +567,48 @@ export const Collections = () => {
         )}
       </Header>
 
+      {/* Orphan cleanup banner — shown when removed-add-on collections still
+          linger in the DB. One-click delete keeps the Content list tidy. */}
+      {orphanedCollections.length > 0 && isAdmin && (
+        <div style={{
+          padding: `${spacing[3]} ${spacing[4]}`,
+          background: '#fffbeb',
+          border: '1px solid #fde68a',
+          borderRadius: borders.radius.lg,
+          marginBottom: spacing[5],
+          display: 'flex',
+          alignItems: 'center',
+          gap: spacing[3],
+          flexWrap: 'wrap',
+        }}>
+          <Trash2 size={18} style={{ color: '#92400e', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 220, fontSize: typography.fontSize.sm, color: '#78350f' }}>
+            <strong style={{ display: 'block', marginBottom: 2 }}>Orphan collection{orphanedCollections.length > 1 ? 's' : ''} detected</strong>
+            <span>
+              {orphanedCollections.map(c => c.name).join(', ')}
+              {' '}— these collections were part of an old add-on schema that was retired. Safe to delete.
+            </span>
+          </div>
+          <button
+            onClick={handleCleanupOrphans}
+            style={{
+              padding: `${spacing[2]} ${spacing[4]}`,
+              background: '#92400e',
+              color: '#fff',
+              border: 'none',
+              borderRadius: borders.radius.md,
+              cursor: 'pointer',
+              fontSize: typography.fontSize.sm,
+              fontWeight: 600,
+              fontFamily: typography.fontFamily.sans,
+              flexShrink: 0,
+            }}
+          >
+            Clean up
+          </button>
+        </div>
+      )}
+
       {collections.length === 0 ? (
         <EmptyState>
           <div className="empty-icon">
@@ -578,6 +648,29 @@ export const Collections = () => {
                         </AddonCardHeader>
 
                         <AddonCollectionList>
+                          {/* Configuration row — first row when the add-on
+                              has a dedicated settings page (Newsletter→Brevo,
+                              Stripe, i18n, etc.). Mirrors the Settings entry
+                              on the /addons cards so operators can jump
+                              straight to config from /content too. */}
+                          {addon.settingsRoute && (
+                            <AddonCollectionRow
+                              onClick={() => navigate(addon.settingsRoute!)}
+                              style={{ background: addon.color + '0d' }}
+                            >
+                              <div className="row-left">
+                                <SettingsIcon size={16} style={{ color: addon.color, flexShrink: 0 }} />
+                                <div className="row-text">
+                                  <div className="row-name">Configuration</div>
+                                  <div className="row-desc">Configure {addon.name.toLowerCase()} settings and integrations</div>
+                                </div>
+                              </div>
+                              <div className="row-right">
+                                <ArrowRight className="row-arrow" />
+                              </div>
+                            </AddonCollectionRow>
+                          )}
+
                           {addonCols.map(col => (
                             <AddonCollectionRow
                               key={col.id}

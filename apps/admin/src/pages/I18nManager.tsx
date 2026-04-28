@@ -278,7 +278,7 @@ export const I18nManager = () => {
     return (
       <Container>
         <Header>
-          <h1>Internationalization</h1>
+          <h1>Languages</h1>
           <p>Translate your content to multiple languages.</p>
         </Header>
         <Card>
@@ -287,7 +287,7 @@ export const I18nManager = () => {
             <div>
               <strong>i18n not configured.</strong>
               <div style={{ marginTop: 4 }}>
-                Install the <em>Internationalization</em> add-on and create an <code>i18n-config</code> entry with your DeepL API key + at least one enabled target language.
+                Install the <em>Languages</em> add-on and create an <code>i18n-config</code> entry with your DeepL API key + at least one enabled target language.
               </div>
             </div>
           </ResultBox>
@@ -299,7 +299,7 @@ export const I18nManager = () => {
   return (
     <Container>
       <Header>
-        <h1>Internationalization</h1>
+        <h1>Languages</h1>
         <p>
           Translate your content automatically. Once configured, new and edited entries
           translate themselves on publish — you don't have to come here again.
