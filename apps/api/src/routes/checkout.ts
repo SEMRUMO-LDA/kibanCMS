@@ -283,7 +283,7 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
     slug: entry.slug,
     title: c.title || entry.title,
     currency: (c.currency || defaultCurrency).toLowerCase(),
-    capacity: Number(isTours ? c.max_capacity : c.capacity) || 1,
+    capacity: Number(isTours ? (c.capacity ?? c.max_capacity) : c.capacity) || 1,
     priceAdult: Number(isTours ? c.price_adult : c.price) || 0,
     priceChild: Number(isTours ? c.price_child : c.price_secondary) || 0,
   };
