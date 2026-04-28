@@ -652,9 +652,9 @@ export const DashboardLayout = () => {
             <NavItem $active={location.pathname.startsWith('/addons')} $collapsed={collapsed} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0} title={collapsed ? t('nav.addons') : undefined}>
               <Puzzle size={20} /><span>{t('nav.addons')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/trash'} $collapsed={collapsed} onClick={() => handleNavigation('/trash')} role="button" tabIndex={0} title={collapsed ? 'Trash' : undefined}>
-              <Trash2 size={20} /><span>Trash</span>
-            </NavItem>
+            {/* Trash hidden until the soft-delete UX is fully wired across
+                all collections + bulk-actions are reviewed. Route remains
+                active at /trash for direct access during testing. */}
             <NavItem $active={location.pathname.startsWith('/settings')} $collapsed={collapsed} onClick={() => handleNavigation('/settings')} role="button" tabIndex={0} title={collapsed ? 'Settings' : undefined}>
               <Settings size={20} />
               <span>Settings</span>
