@@ -284,6 +284,38 @@ app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: { message: err.message, status: 500 } }); }
 });
 
+// WhatsApp Widget — public static JS file (no auth, served to any origin)
+app.get('/api/v1/whatsapp-widget/widget.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  // 5-min cache + must-revalidate so config changes propagate quickly
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  const staticPath = NODE_ENV === 'production'
+    ? path.join(__dirname, '../static/whatsapp-widget.js')
+    : path.join(__dirname, 'static/whatsapp-widget.js');
+  res.sendFile(staticPath);
+});
+// WhatsApp Widget config — API Key auth (frontend reads config)
+// Reads the single entry with slug 'config' from the 'whatsapp-widget' collection.
+app.get('/api/v1/whatsapp-widget/config', validateApiKey, async (_req, res) => {
+  try {
+    const { data: col } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
+    if (!col) return res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
+
+    const { data: entry } = await supabaseImport
+      .from('entries')
+      .select('content')
+      .eq('collection_id', col.id)
+      .eq('slug', 'config')
+      .eq('status', 'published')
+      .maybeSingle();
+
+    res.setHeader('Cache-Control', 'public, max-age=60'); // 1-min CDN cache
+    res.json({ data: entry?.content || { enabled: false }, timestamp: new Date().toISOString() });
+  } catch {
+    res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
+  }
+});
+
 // Accessibility widget — public static JS file (no auth)
 app.get('/api/v1/accessibility/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');

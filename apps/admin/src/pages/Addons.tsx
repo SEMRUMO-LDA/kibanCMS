@@ -11,6 +11,7 @@ import {
   Mail, Search, FileInput, CalendarCheck, Package,
   CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
   Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility, Power, PowerOff, RefreshCw,
+  MessageCircle,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
@@ -207,6 +208,7 @@ const ICON_MAP: Record<string, any> = {
   'globe': Globe,
   'cookie': Cookie,
   'accessibility': Accessibility,
+  'message-circle': MessageCircle,
 };
 
 // ============================================

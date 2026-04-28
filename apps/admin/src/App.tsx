@@ -25,6 +25,7 @@ import { TrashManager } from './pages/TrashManager';
 import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
+import { WhatsAppWidgetSettings } from './pages/WhatsAppWidgetSettings';
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -106,6 +107,7 @@ const AppContent = () => {
         <Route path="settings" element={<Settings />} />
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
         <Route path="addons/accessibility" element={<AccessibilitySettings />} />
+        <Route path="addons/whatsapp-widget" element={<WhatsAppWidgetSettings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 
         {/* Placeholder for other routes */}

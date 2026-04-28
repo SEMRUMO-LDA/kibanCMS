@@ -739,6 +739,81 @@ const coupons: AddonDefinition = {
 };
 
 // ============================================
+// WHATSAPP WIDGET ADD-ON
+// ============================================
+
+const whatsappWidget: AddonDefinition = {
+  id: 'whatsapp-widget',
+  name: 'WhatsApp Chat Widget',
+  description: 'Floating chat widget that opens a WhatsApp conversation — drop-in script, zero code',
+  longDescription: 'Add a customizable WhatsApp chat button to any frontend with a single <script> tag. Configure the phone number, agent identity (name, role, avatar), greeting message, button color, position, working hours, and bubble notifications — all from the CMS. Changes apply live without redeploying. Includes optional GDPR consent before opening WhatsApp and click tracking via dataLayer events for GA/GTM.',
+  icon: 'message-circle',
+  color: '#25D366',
+  category: 'marketing',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  settingsRoute: '/addons/whatsapp-widget',
+  collections: [
+    {
+      name: 'WhatsApp Widget',
+      slug: 'whatsapp-widget',
+      description: 'Configuration for the WhatsApp chat widget — single config entry with slug "config"',
+      type: 'custom',
+      fields: [
+        // ── Connection ──
+        { id: 'enabled', name: 'enabled', label: 'Widget Enabled', type: 'boolean', helpText: 'Master switch — turn the widget on/off without removing the script' },
+        { id: 'phone_number', name: 'phone_number', label: 'WhatsApp Phone Number', type: 'text', required: true, placeholder: '+351912345678', helpText: 'Full international format with + and country code. No spaces or dashes.' },
+        { id: 'default_message', name: 'default_message', label: 'Pre-filled Message', type: 'textarea', placeholder: 'Hi! I would like to know more about...', helpText: 'Auto-typed in WhatsApp when the user clicks. Leave empty for no message.' },
+
+        // ── Display ──
+        { id: 'position', name: 'position', label: 'Position', type: 'select', required: true, options: [
+          { label: 'Bottom Right', value: 'bottom-right' },
+          { label: 'Bottom Left', value: 'bottom-left' },
+        ]},
+        { id: 'button_color', name: 'button_color', label: 'Button Color', type: 'text', placeholder: '#25D366', helpText: 'Hex color (default WhatsApp green: #25D366)' },
+        { id: 'show_after_seconds', name: 'show_after_seconds', label: 'Show After (seconds)', type: 'number', placeholder: '0', helpText: 'Delay before the widget appears. 0 = immediately.' },
+        { id: 'show_on_mobile', name: 'show_on_mobile', label: 'Show on Mobile', type: 'boolean' },
+        { id: 'show_on_desktop', name: 'show_on_desktop', label: 'Show on Desktop', type: 'boolean' },
+
+        // ── Agent ──
+        { id: 'agent_name', name: 'agent_name', label: 'Agent Name', type: 'text', placeholder: 'Maria', helpText: 'Person\'s first name shown in the chat header' },
+        { id: 'agent_role', name: 'agent_role', label: 'Agent Role', type: 'text', placeholder: 'Customer Support', helpText: 'Job title shown under the name' },
+        { id: 'agent_avatar', name: 'agent_avatar', label: 'Agent Avatar', type: 'image', helpText: 'Square photo (recommended 200x200). Falls back to initials if empty.' },
+
+        // ── Greeting ──
+        { id: 'greeting_title', name: 'greeting_title', label: 'Greeting Title', type: 'text', placeholder: 'Need help?', helpText: 'Headline shown when the widget popup opens' },
+        { id: 'greeting_message', name: 'greeting_message', label: 'Greeting Message', type: 'textarea', placeholder: 'We typically reply within an hour. Send us a message!', helpText: 'Body text shown to the user before they click WhatsApp' },
+        { id: 'cta_button_text', name: 'cta_button_text', label: 'CTA Button Text', type: 'text', placeholder: 'Start chat on WhatsApp' },
+
+        // ── Working hours ──
+        { id: 'use_working_hours', name: 'use_working_hours', label: 'Enable Working Hours', type: 'boolean', helpText: 'When enabled, show offline message outside hours' },
+        { id: 'working_hours_monday', name: 'working_hours_monday', label: 'Monday', type: 'text', placeholder: '09:00-18:00', helpText: 'Format: HH:MM-HH:MM. Empty or "closed" = closed.' },
+        { id: 'working_hours_tuesday', name: 'working_hours_tuesday', label: 'Tuesday', type: 'text', placeholder: '09:00-18:00' },
+        { id: 'working_hours_wednesday', name: 'working_hours_wednesday', label: 'Wednesday', type: 'text', placeholder: '09:00-18:00' },
+        { id: 'working_hours_thursday', name: 'working_hours_thursday', label: 'Thursday', type: 'text', placeholder: '09:00-18:00' },
+        { id: 'working_hours_friday', name: 'working_hours_friday', label: 'Friday', type: 'text', placeholder: '09:00-18:00' },
+        { id: 'working_hours_saturday', name: 'working_hours_saturday', label: 'Saturday', type: 'text', placeholder: 'closed' },
+        { id: 'working_hours_sunday', name: 'working_hours_sunday', label: 'Sunday', type: 'text', placeholder: 'closed' },
+        { id: 'working_hours_timezone', name: 'working_hours_timezone', label: 'Timezone', type: 'text', placeholder: 'Europe/Lisbon', helpText: 'IANA timezone for working hours (default: Europe/Lisbon)' },
+        { id: 'offline_message', name: 'offline_message', label: 'Offline Message', type: 'textarea', placeholder: 'We\'re offline. Leave a message and we\'ll get back to you.', helpText: 'Shown when outside working hours' },
+
+        // ── Bubble notification ──
+        { id: 'show_bubble', name: 'show_bubble', label: 'Show Bubble Notification', type: 'boolean', helpText: 'Small badge that appears on the button to grab attention' },
+        { id: 'bubble_text', name: 'bubble_text', label: 'Bubble Text', type: 'text', placeholder: '1', helpText: 'Short text or number (e.g. "1", "New", "•")' },
+        { id: 'bubble_delay_seconds', name: 'bubble_delay_seconds', label: 'Bubble Delay (seconds)', type: 'number', placeholder: '5', helpText: 'How long to wait before showing the bubble' },
+
+        // ── GDPR ──
+        { id: 'require_consent', name: 'require_consent', label: 'Require Consent', type: 'boolean', helpText: 'Show GDPR consent checkbox before opening WhatsApp (recommended for EU)' },
+        { id: 'consent_text', name: 'consent_text', label: 'Consent Text', type: 'textarea', placeholder: 'I agree my data will be transferred to WhatsApp.', helpText: 'Markdown supported. Use [Privacy Policy](url) for links.' },
+
+        // ── Tracking ──
+        { id: 'track_clicks', name: 'track_clicks', label: 'Track Clicks', type: 'boolean', helpText: 'Push a "whatsapp_widget_click" event to dataLayer for GA/GTM' },
+      ],
+    },
+  ],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -756,6 +831,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   aiContent,
   stripePayments,
   i18n,
+  whatsappWidget,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {
