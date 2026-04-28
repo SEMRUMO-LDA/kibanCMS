@@ -71,7 +71,19 @@ class ApiClient {
       const json = await res.json();
 
       if (!res.ok) {
-        return { data: null, error: (json as ApiError).error?.message || `HTTP ${res.status}` };
+        // Surface server-side validation details when present. The entries
+        // route returns { error: { message, details: { fields: string[] } } }
+        // for content validation failures — without this enrichment the
+        // operator only saw "Content validation failed" with no clue which
+        // field broke. We append the field list so the editor can show
+        // something useful.
+        const apiErr = (json as ApiError).error as any;
+        let message = apiErr?.message || `HTTP ${res.status}`;
+        if (apiErr?.details?.fields && Array.isArray(apiErr.details.fields)) {
+          const list = apiErr.details.fields.filter(Boolean).join(' · ');
+          if (list) message += ` — ${list}`;
+        }
+        return { data: null, error: message };
       }
 
       const response = json as ApiResponse<T>;
