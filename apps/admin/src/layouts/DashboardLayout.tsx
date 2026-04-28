@@ -22,6 +22,11 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ExternalLink,
+  Mail,
+  FileInput,
+  CreditCard,
+  Tag,
+  type LucideIcon,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -497,7 +502,20 @@ export const DashboardLayout = () => {
   const [hasBookings, setHasBookings] = useState(false);
   const [hasOrders, setHasOrders] = useState(false);
   const [siteUrl, setSiteUrl] = useState<string>('');
+  const [shortcuts, setShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const { user, profile, signOut } = useAuth();
+
+  // Operational collections — these hold daily-use data (subscribers, form
+  // submissions, transactions) that the operator wants to consult without
+  // navigating through Content. Add-on settings collections (newsletter-
+  // campaigns, forms-config, stripe-config, etc.) are NOT here — those
+  // remain under Content where they belong.
+  const OPERATIONAL_SHORTCUTS: Array<{ slug: string; label: string; icon: LucideIcon }> = [
+    { slug: 'newsletter-subscribers', label: 'Newsletter', icon: Mail },
+    { slug: 'form-submissions', label: 'Forms', icon: FileInput },
+    { slug: 'stripe-transactions', label: 'Transactions', icon: CreditCard },
+    { slug: 'coupon-redemptions', label: 'Coupons', icon: Tag },
+  ];
 
   // Detect which add-ons are installed to conditionally render nav items.
   // Also pull the public site URL from site-settings (fallback used by
@@ -509,6 +527,9 @@ export const DashboardLayout = () => {
         const slugs = new Set(data.map((c: any) => c.slug));
         setHasBookings(slugs.has('tours') || slugs.has('bookings'));
         setHasOrders(slugs.has('orders'));
+        // Build the dynamic shortcut list from the registry: keep order,
+        // include only collections that actually exist in this tenant.
+        setShortcuts(OPERATIONAL_SHORTCUTS.filter(s => slugs.has(s.slug)));
       }
     }).catch(() => {});
 
@@ -640,6 +661,34 @@ export const DashboardLayout = () => {
               </NavItem>
             )}
           </NavSection>
+
+          {/* Inbox — daily-use add-on collections. Only rendered when at
+              least one is installed, otherwise the section disappears
+              completely (no empty header). */}
+          {shortcuts.length > 0 && (
+            <NavSection>
+              <NavLabel $collapsed={collapsed}>Inbox</NavLabel>
+              {shortcuts.map(s => {
+                const Icon = s.icon;
+                const path = `/content/${s.slug}`;
+                const active = location.pathname === path || location.pathname.startsWith(path + '/');
+                return (
+                  <NavItem
+                    key={s.slug}
+                    $active={active}
+                    $collapsed={collapsed}
+                    onClick={() => handleNavigation(path)}
+                    role="button"
+                    tabIndex={0}
+                    title={collapsed ? s.label : undefined}
+                  >
+                    <Icon size={20} />
+                    <span>{s.label}</span>
+                  </NavItem>
+                );
+              })}
+            </NavSection>
+          )}
 
           <NavSection>
             <NavLabel $collapsed={collapsed}>{t('nav.system')}</NavLabel>
