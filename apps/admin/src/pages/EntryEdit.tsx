@@ -192,13 +192,14 @@ export function EntryEdit() {
         if (colErr || !colData) throw new Error(colErr || 'Collection not found');
         setCollection(colData);
 
-        // Fetch entry via API if editing
-        if (isEditMode && collectionSlug) {
-          // Need to find entry by ID — use entries list filtered
-          const { data: entriesData } = await api.getEntries(collectionSlug);
-          const found = (entriesData || []).find((e: any) => e.id === entryId);
-          if (found) setEntry(found);
-          else throw new Error('Entry not found');
+        // Fetch entry via API if editing. We previously listed the whole
+        // collection and filtered client-side which broke for collections
+        // larger than the listing limit (100/500) and silently dropped
+        // soft-deleted entries. Direct UUID lookup is reliable.
+        if (isEditMode && entryId) {
+          const { data: entryData, error: entryErr } = await api.getEntryById(entryId);
+          if (entryErr || !entryData) throw new Error(entryErr || 'Entry not found');
+          setEntry(entryData);
         }
       } catch (err: any) {
         setError(err.message || 'Failed to load data');

@@ -123,6 +123,65 @@ const ENTRY_SELECT_COMPACT = `
  * - sort: sort field (default: created_at)
  * - order: asc or desc (default: desc)
  */
+
+/**
+ * GET /api/v1/entries/by-id/:id
+ *
+ * Direct UUID lookup. The admin EntryEdit page uses entry IDs in its URLs
+ * (/content/<col>/edit/<uuid>) but the public route is slug-based, so the
+ * editor used to fetch the whole collection and filter client-side — which
+ * silently broke when collections crossed the page-size limit (default 100,
+ * max 500) and when soft-deleted entries were filtered out of the listing.
+ * This endpoint sidesteps both issues.
+ *
+ * IMPORTANT: defined BEFORE the slug-based GET handlers so Express doesn't
+ * route "/by-id/<uuid>" into "/:collection".
+ */
+router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Lightweight UUID guard — keeps obvious junk from hitting Postgres.
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      return res.status(400).json({
+        error: { message: 'Invalid id', status: 400, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const { data: entry, error } = await supabase
+      .from('entries')
+      .select(ENTRY_SELECT)
+      .eq('id', id)
+      .single();
+
+    if (error || !entry) {
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    // Resolve collection metadata so the editor doesn't have to do a second round-trip
+    const { data: collection } = await supabase
+      .from('collections')
+      .select('id, name, slug')
+      .eq('id', (entry as any).collection_id)
+      .single();
+
+    res.json({
+      data: entry,
+      meta: collection
+        ? { collection: { id: collection.id, name: collection.name, slug: collection.slug } }
+        : undefined,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error fetching entry by id', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
 router.get('/:collection', async (req: AuthRequest, res: Response) => {
   try {
     const { collection: collectionSlug } = req.params;

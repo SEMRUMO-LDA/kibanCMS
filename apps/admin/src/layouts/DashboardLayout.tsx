@@ -26,6 +26,8 @@ import {
   FileInput,
   CreditCard,
   Tag,
+  Map,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
@@ -502,14 +504,24 @@ export const DashboardLayout = () => {
   const [hasBookings, setHasBookings] = useState(false);
   const [hasOrders, setHasOrders] = useState(false);
   const [siteUrl, setSiteUrl] = useState<string>('');
+  const [contentShortcuts, setContentShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const [shortcuts, setShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const { user, profile, signOut } = useAuth();
 
-  // Operational collections — these hold daily-use data (subscribers, form
-  // submissions, transactions) that the operator wants to consult without
-  // navigating through Content. Add-on settings collections (newsletter-
-  // campaigns, forms-config, stripe-config, etc.) are NOT here — those
-  // remain under Content where they belong.
+  // Content shortcuts — collections that hold the operator's primary
+  // content (tours, testimonials, blog posts) and deserve a top-level
+  // entry in the MAIN section so they're one click away. Editing the
+  // collection schema still happens in Content; these are pure shortcuts
+  // to /content/<slug>.
+  const CONTENT_SHORTCUTS: Array<{ slug: string; label: string; icon: LucideIcon }> = [
+    { slug: 'tours', label: 'Tours', icon: Map },
+    { slug: 'testimonials', label: 'Testimonials', icon: MessageSquare },
+  ];
+
+  // Operational collections — daily-use data (subscribers, form submissions,
+  // transactions) the operator wants to consult without navigating through
+  // Content. Add-on settings collections (newsletter-campaigns, forms-config,
+  // stripe-config, etc.) are NOT here — those remain under Content.
   const OPERATIONAL_SHORTCUTS: Array<{ slug: string; label: string; icon: LucideIcon }> = [
     { slug: 'newsletter-subscribers', label: 'Newsletter', icon: Mail },
     { slug: 'form-submissions', label: 'Forms', icon: FileInput },
@@ -525,10 +537,16 @@ export const DashboardLayout = () => {
     api.getCollections().then(({ data }) => {
       if (data) {
         const slugs = new Set(data.map((c: any) => c.slug));
-        setHasBookings(slugs.has('tours') || slugs.has('bookings'));
+        // Bookings page (admin BookingsManager) only makes sense when the
+        // Bookings add-on is installed (creates the bookings collection).
+        // Tours alone is NOT enough — Tours is content; Bookings is the
+        // operational view of reservations.
+        setHasBookings(slugs.has('bookings'));
         setHasOrders(slugs.has('orders'));
-        // Build the dynamic shortcut list from the registry: keep order,
-        // include only collections that actually exist in this tenant.
+        // Filter the static registries by what's actually installed in
+        // this tenant. Add new shortcuts by editing the registry constants
+        // above — no need to add another piece of state per collection.
+        setContentShortcuts(CONTENT_SHORTCUTS.filter(s => slugs.has(s.slug)));
         setShortcuts(OPERATIONAL_SHORTCUTS.filter(s => slugs.has(s.slug)));
       }
     }).catch(() => {});
@@ -648,6 +666,27 @@ export const DashboardLayout = () => {
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
             </NavItem>
+            {/* Content shortcuts — Tours, Testimonials, etc. — driven by
+                the CONTENT_SHORTCUTS registry. Order respects the array. */}
+            {contentShortcuts.map(s => {
+              const Icon = s.icon;
+              const path = `/content/${s.slug}`;
+              const active = location.pathname === path || location.pathname.startsWith(path + '/');
+              return (
+                <NavItem
+                  key={s.slug}
+                  $active={active}
+                  $collapsed={collapsed}
+                  onClick={() => handleNavigation(path)}
+                  role="button"
+                  tabIndex={0}
+                  title={collapsed ? s.label : undefined}
+                >
+                  <Icon size={20} />
+                  <span>{s.label}</span>
+                </NavItem>
+              );
+            })}
             {hasBookings && (
               <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
                 <CalendarCheck size={20} />

@@ -132,6 +132,12 @@ class ApiClient {
     return this.request<any>('POST', `/entries/${collectionSlug}/${entrySlug}/duplicate`);
   }
 
+  // Direct UUID lookup — used by the admin entry editor where the URL
+  // carries an ID, not a slug. Avoids fetching a whole collection page.
+  async getEntryById(id: string) {
+    return this.request<any>('GET', `/entries/by-id/${id}`);
+  }
+
   // ── Users ──
   async getUsers(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';
