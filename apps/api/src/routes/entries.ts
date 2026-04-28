@@ -545,6 +545,133 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
 });
 
 /**
+ * POST /api/v1/entries/:collection/:slug/duplicate
+ *
+ * Clone an entry. Creates a new entry with the same content but:
+ *  - status forced to "draft" (never accidentally republished)
+ *  - title suffixed with " (Copy)"
+ *  - slug = first available "<original>-copy[-N]"
+ *  - published_at cleared, author_id reset to current user
+ *  - meta.translations preserved (so the duplicate inherits work) but
+ *    transactional fields (stripe_session_id, related_booking_ids,
+ *    booking_status, deleted_at) are cleared
+ */
+router.post('/:collection/:slug/duplicate', async (req: AuthRequest, res: Response) => {
+  try {
+    const { collection: collectionSlug, slug: entrySlug } = req.params;
+    const authorId = req.profileId;
+
+    if (!authorId) {
+      return res.status(401).json({
+        error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const collection = await getCollection(collectionSlug as string);
+    if (!collection) {
+      return res.status(404).json({
+        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const { data: source, error: srcErr } = await supabase
+      .from('entries')
+      .select('title, slug, content, meta, tags, featured_image')
+      .eq('collection_id', collection.id)
+      .eq('slug', entrySlug)
+      .single();
+
+    if (srcErr || !source) {
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    // Find a free slug — start with "<orig>-copy" then -copy-2, -copy-3...
+    const baseSlug = `${source.slug}-copy`;
+    let candidateSlug = baseSlug;
+    let suffix = 2;
+    // Cap attempts at 100 to avoid hammering DB if something's wrong
+    for (let i = 0; i < 100; i++) {
+      const { data: clash } = await supabase
+        .from('entries')
+        .select('id')
+        .eq('collection_id', collection.id)
+        .eq('slug', candidateSlug)
+        .maybeSingle();
+      if (!clash) break;
+      candidateSlug = `${baseSlug}-${suffix}`;
+      suffix++;
+    }
+
+    // Strip transactional / booking-specific fields from the cloned content.
+    // These should never carry over from one entry to a different entry.
+    const SKIP_CONTENT_KEYS = new Set([
+      'stripe_session_id', 'stripe_payment_intent', 'paid_at', 'payment_status',
+      'booking_status', 'confirmed_at', 'cancelled_at', 'related_booking_ids',
+      'order_number', 'order_id',
+    ]);
+    const sourceContent = (source.content as Record<string, any>) || {};
+    const newContent: Record<string, any> = {};
+    for (const [k, v] of Object.entries(sourceContent)) {
+      if (!SKIP_CONTENT_KEYS.has(k)) newContent[k] = v;
+    }
+
+    // Strip soft-delete + i18n stale-hash from meta but keep translations —
+    // the editor probably wants to start with the same multilingual copy.
+    const sourceMeta = (source.meta as Record<string, any>) || {};
+    const newMeta: Record<string, any> = { ...sourceMeta };
+    delete newMeta.deleted_at;
+    if (newMeta.i18n) {
+      // The hash referenced the OLD content. Drop it so auto-translate
+      // re-evaluates on the next publish (translations are still valid
+      // text content, just need a fresh hash anchor when content changes).
+      delete newMeta.i18n.content_hash;
+    }
+
+    const newTitle = source.title ? `${source.title} (Copy)` : `Copy of ${entrySlug}`;
+
+    const { data: clone, error: insertError } = await supabase
+      .from('entries')
+      .insert({
+        collection_id: collection.id,
+        title: newTitle,
+        slug: candidateSlug,
+        content: newContent,
+        meta: newMeta,
+        status: 'draft',
+        tags: source.tags || [],
+        featured_image: source.featured_image || null,
+        author_id: authorId,
+      } as any)
+      .select(ENTRY_SELECT)
+      .single();
+
+    if (insertError) throw insertError;
+
+    audit(req, 'duplicate', 'entry', clone.id, {
+      source_slug: entrySlug,
+      new_slug: candidateSlug,
+      collection: collection.slug,
+    });
+
+    res.status(201).json({
+      data: clone,
+      meta: {
+        collection: { id: collection.id, name: collection.name, slug: collection.slug },
+        source_slug: entrySlug,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    logger.error('Error duplicating entry', { error: error.message });
+    res.status(500).json({
+      error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+    });
+  }
+});
+
+/**
  * DELETE /api/v1/entries/:collection/:slug
  * Delete an entry. Returns the deleted entry data.
  */

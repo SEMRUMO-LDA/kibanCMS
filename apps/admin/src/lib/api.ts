@@ -128,6 +128,10 @@ class ApiClient {
     return this.request<any>('DELETE', `/entries/${collectionSlug}/${entrySlug}`);
   }
 
+  async duplicateEntry(collectionSlug: string, entrySlug: string) {
+    return this.request<any>('POST', `/entries/${collectionSlug}/${entrySlug}/duplicate`);
+  }
+
   // ── Users ──
   async getUsers(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';

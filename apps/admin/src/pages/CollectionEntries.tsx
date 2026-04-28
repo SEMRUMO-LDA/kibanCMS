@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera, Copy } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { SnapshotManager } from '../components/SnapshotManager';
@@ -836,6 +836,23 @@ export const CollectionEntries = () => {
     }
   };
 
+  const handleDuplicate = async (id: string) => {
+    const entry = entries.find(e => e.id === id);
+    if (!entry || !collectionSlug) return;
+
+    try {
+      const { data, error } = await api.duplicateEntry(collectionSlug, entry.slug);
+      if (error) throw new Error(error);
+      // Insert the new draft at the top so the user sees it immediately
+      if (data) setEntries(prev => [data, ...prev]);
+      toast.success(`Duplicated as "${data?.title || 'new entry'}" — opening editor`);
+      // Jump straight into the editor so the user can rename / publish
+      if (data?.id) navigate(`/content/${collectionSlug}/edit/${data.id}`);
+    } catch (err: any) {
+      toast.error('Failed to duplicate: ' + (err.message || 'Unknown error'));
+    }
+  };
+
   const toggleSelectEntry = (id: string) => {
     setSelectedEntries(prev => {
       const newSet = new Set(prev);
@@ -1144,6 +1161,13 @@ export const CollectionEntries = () => {
                         title="Edit"
                       >
                         <Edit2 size={16} />
+                      </ActionButton>
+                      <ActionButton
+                        onClick={() => handleDuplicate(entry.id)}
+                        aria-label="Duplicate entry"
+                        title="Duplicate"
+                      >
+                        <Copy size={16} />
                       </ActionButton>
                       <ActionButton
                         className="delete"
