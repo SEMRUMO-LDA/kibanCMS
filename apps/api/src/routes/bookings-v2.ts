@@ -185,55 +185,65 @@ function dayKeyFromDateStr(dateStr: string): DayKey {
   return DAY_KEYS[d.getUTCDay()];
 }
 
-async function loadResource(slug: string): Promise<Record<string, any> | null> {
-  // Prefer the generic bookable-resources collection, but fall back to the
-  // legacy tours collection so existing tenants (built around Tours & Bookings
-  // add-on v2.0) keep working without migrating their data.
-  let colId = await getCollectionId('bookable-resources');
-  let isTours = false;
-
-  if (!colId) {
-    colId = await getCollectionId('tours');
-    isTours = true;
-  }
-  if (!colId) return null;
-
-  // Tolerant lookup. Frontends sometimes pass the title ("Rio Arade") or a
-  // URL-encoded value instead of the canonical slug — handle all three:
-  //   1. exact slug match
-  //   2. case-insensitive slug match (handles "Rio-Arade" vs "rio-arade")
-  //   3. title ilike match (handles "Rio Arade" when stored slug is "rio-arade")
-  const decoded = (() => { try { return decodeURIComponent(slug); } catch { return slug; } })();
-
+/**
+ * Tolerant entry lookup inside a single collection. Tries:
+ *   1. exact slug match
+ *   2. case-insensitive slug match (handles "Rio-Arade" vs "rio-arade")
+ *   3. title ilike match (handles "Rio Arade" when stored slug is "rio-arade")
+ */
+async function findEntryInCollection(colId: string, decoded: string): Promise<any | null> {
   const { data: exact } = await supabase
     .from('entries')
     .select('title, slug, content, featured_image, status')
     .eq('collection_id', colId)
     .eq('slug', decoded)
     .maybeSingle();
+  if (exact) return exact;
 
-  let entry: any = exact;
+  const { data: ci } = await supabase
+    .from('entries')
+    .select('title, slug, content, featured_image, status')
+    .eq('collection_id', colId)
+    .ilike('slug', decoded)
+    .limit(1)
+    .maybeSingle();
+  if (ci) return ci;
 
-  if (!entry) {
-    const { data: ci } = await supabase
-      .from('entries')
-      .select('title, slug, content, featured_image, status')
-      .eq('collection_id', colId)
-      .ilike('slug', decoded)
-      .limit(1)
-      .maybeSingle();
-    entry = ci;
+  const { data: byTitle } = await supabase
+    .from('entries')
+    .select('title, slug, content, featured_image, status')
+    .eq('collection_id', colId)
+    .ilike('title', decoded)
+    .limit(1)
+    .maybeSingle();
+  return byTitle || null;
+}
+
+async function loadResource(slug: string): Promise<Record<string, any> | null> {
+  // Prefer the generic bookable-resources collection, but fall through to the
+  // legacy tours collection so existing tenants (built around Tours & Bookings
+  // add-on v2.0) keep working without migrating their data.
+  //
+  // Important: we fall through whenever the *entry* isn't found, not only when
+  // the bookable-resources *collection* doesn't exist. Without this, a tenant
+  // who has an empty bookable-resources collection (e.g. installed the add-on
+  // upgrade but kept tour data in `tours`) would get 404 on every checkout.
+  const decoded = (() => { try { return decodeURIComponent(slug); } catch { return slug; } })();
+
+  let entry: any = null;
+  let isTours = false;
+
+  const bookableColId = await getCollectionId('bookable-resources');
+  if (bookableColId) {
+    entry = await findEntryInCollection(bookableColId, decoded);
   }
 
   if (!entry) {
-    const { data: byTitle } = await supabase
-      .from('entries')
-      .select('title, slug, content, featured_image, status')
-      .eq('collection_id', colId)
-      .ilike('title', decoded)
-      .limit(1)
-      .maybeSingle();
-    entry = byTitle;
+    const toursColId = await getCollectionId('tours');
+    if (toursColId) {
+      entry = await findEntryInCollection(toursColId, decoded);
+      if (entry) isTours = true;
+    }
   }
 
   if (!entry) return null;
