@@ -21,6 +21,7 @@ import {
   Trash2,
   ChevronsLeft,
   ChevronsRight,
+  ExternalLink,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
 
@@ -456,6 +457,33 @@ const SearchHint = styled.div<{ $collapsed?: boolean }>`
   }
 `;
 
+const ViewSiteLink = styled.a<{ $collapsed?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
+  gap: ${spacing[2]};
+  padding: ${p => p.$collapsed ? spacing[2.5] : `${spacing[2.5]} ${spacing[3.5]}`};
+  margin: 0 ${p => p.$collapsed ? spacing[2] : spacing[4]} ${spacing[3]};
+  background: ${colors.accent[500]};
+  color: ${colors.white};
+  border-radius: ${borders.radius.lg};
+  font-size: ${typography.fontSize.sm};
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all ${animations.duration.fast} ${animations.easing.out};
+  box-shadow: 0 2px 8px ${colors.accent[500]}33;
+
+  &:hover {
+    background: ${colors.accent[600]};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px ${colors.accent[500]}55;
+  }
+
+  svg { flex-shrink: 0; width: 15px; height: 15px; }
+  span { display: ${p => p.$collapsed ? 'none' : 'inline'}; }
+`;
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -468,9 +496,13 @@ export const DashboardLayout = () => {
   });
   const [hasBookings, setHasBookings] = useState(false);
   const [hasOrders, setHasOrders] = useState(false);
+  const [siteUrl, setSiteUrl] = useState<string>('');
   const { user, profile, signOut } = useAuth();
 
-  // Detect which add-ons are installed to conditionally render nav items
+  // Detect which add-ons are installed to conditionally render nav items.
+  // Also pull the public site URL from site-settings (fallback used by
+  // "Ver site" sidebar link) so the operator can preview the live site
+  // in one click.
   useEffect(() => {
     api.getCollections().then(({ data }) => {
       if (data) {
@@ -479,6 +511,21 @@ export const DashboardLayout = () => {
         setHasOrders(slugs.has('orders'));
       }
     }).catch(() => {});
+
+    // Resolve the public site URL: prefer site-settings.site_url (set in
+    // Settings → General), fall back to the SEO add-on's canonical_url.
+    // Used by the sidebar "Ver site" link to open the live site in a tab.
+    const resolveSiteUrl = async () => {
+      try {
+        const { data: ss } = await api.getEntry('site-settings', 'global');
+        const fromSettings = ss?.content?.site_url || ss?.content?.canonical_url;
+        if (typeof fromSettings === 'string' && fromSettings.trim()) {
+          setSiteUrl(fromSettings.trim().replace(/\/+$/, ''));
+          return;
+        }
+      } catch { /* site-settings not installed yet — fine */ }
+    };
+    resolveSiteUrl();
   }, []);
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -549,6 +596,21 @@ export const DashboardLayout = () => {
           <span>Search...</span>
           <kbd>⌘K</kbd>
         </SearchHint>
+
+        {/* "Ver site" / View site — opens the public website in a new tab.
+            Only renders when site_url is configured in Settings → General. */}
+        {siteUrl && (
+          <ViewSiteLink
+            href={siteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            $collapsed={collapsed}
+            title={collapsed ? `Ver site (${siteUrl})` : undefined}
+          >
+            <ExternalLink />
+            <span>Ver site</span>
+          </ViewSiteLink>
+        )}
 
         <Nav>
           <NavSection>

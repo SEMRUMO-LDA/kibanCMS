@@ -10,10 +10,19 @@ import styled from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { FieldRenderer, type FieldDefinition } from './fields/FieldRenderer';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { PublishBox } from './PublishBox';
 
 const EditorContainer = styled.div`
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: ${spacing[6]};
+  align-items: flex-start;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const Form = styled.form`
@@ -21,6 +30,7 @@ const Form = styled.form`
   border: 1px solid ${colors.gray[200]};
   border-radius: ${borders.radius.xl};
   overflow: hidden;
+  min-width: 0; /* allow grid item to shrink + stop horizontal overflow */
 `;
 
 const FormBody = styled.div`
@@ -285,6 +295,19 @@ export function EntryEditor({
 
   const hasErrors = Object.keys(errors).length > 0;
 
+  // Single submit path used by both the inline footer and the sticky publish
+  // box on the right rail. Keeping handleSubmit on the form preserves browser
+  // shortcuts (Cmd+Enter to submit) and any future native validation.
+  const triggerSave = () => {
+    const form = document.activeElement?.closest('form');
+    if (form) {
+      form.requestSubmit();
+    } else {
+      // Fallback: synthesize a submit event
+      handleSubmit({ preventDefault: () => {} } as any);
+    }
+  };
+
   return (
     <EditorContainer>
       <Form onSubmit={handleSubmit}>
@@ -391,6 +414,29 @@ export function EntryEditor({
           </ButtonGroup>
         </FormFooter>
       </Form>
+
+      {/* WordPress-style sticky publish box on the right rail. Mirrors the
+          inline footer but stays visible while the operator scrolls a long
+          form. Both paths drive the same handleSubmit. */}
+      <PublishBox
+        title="Publish"
+        status={status}
+        statusOptions={[
+          { value: 'draft', label: 'Draft' },
+          { value: 'review', label: 'Review' },
+          { value: 'published', label: 'Published' },
+          { value: 'archived', label: 'Archived' },
+        ]}
+        onStatusChange={(s) => { setStatus(s as ContentStatus); setIsDirty(true); }}
+        onSave={triggerSave}
+        saveLabel={status === 'published' ? 'Update' : saveButtonText}
+        saveDisabled={saveStatus === 'saving'}
+        onCancel={onCancel}
+        cancelLabel="Back"
+        saveStatus={saveStatus}
+        saveError={saveError}
+        hint={isDirty ? 'Unsaved changes' : undefined}
+      />
     </EditorContainer>
   );
 }
