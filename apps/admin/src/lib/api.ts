@@ -269,6 +269,32 @@ class ApiClient {
     return this.request<any>('GET', '/dashboard/stats');
   }
 
+  // ── Brevo (Newsletter integration) ──
+  /** Test the Brevo API key — pass `apiKey` to test before saving, or omit to use the saved one */
+  async brevoTestConnection(apiKey?: string) {
+    const qs = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '';
+    return this.request<{
+      email: string; firstName: string; lastName: string;
+      companyName?: string;
+    }>('GET', `/brevo/account${qs}`);
+  }
+
+  /** List Brevo contact lists — pass `apiKey` to test before saving */
+  async brevoListLists(apiKey?: string) {
+    const qs = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : '';
+    return this.request<Array<{ id: number; name: string; totalSubscribers?: number }>>(
+      'GET', `/brevo/lists${qs}`
+    );
+  }
+
+  /** Re-sync all subscribers to Brevo. Long-running (one HTTP per subscriber). */
+  async brevoSyncAll() {
+    return this.request<{
+      total: number; synced: number; failed: number;
+      errors: Array<{ email: string; message: string }>;
+    }>('POST', '/brevo/sync-all', undefined, 120000); // 2-min budget
+  }
+
   // ── Activity ──
   async getActivity(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';

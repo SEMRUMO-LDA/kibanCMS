@@ -299,25 +299,27 @@ export const WhatsAppWidgetSettings = () => {
 
   const load = async () => {
     try {
-      // Check installed
+      // Always treat as installed — addon settings page is reachable only when
+      // the addon is enabled in /addons. The collection is created lazily on
+      // first save (Addons page doesn't create collections for widget addons).
+      setInstalled(true);
+
       const { data: cols } = await api.getCollections();
       const col = (cols || []).find((c: any) => c.slug === COLLECTION_SLUG);
 
-      if (!col) {
-        setInstalled(false);
-        setLoading(false);
-        return;
-      }
-      setInstalled(true);
-      setCollectionId(col.id);
+      if (col) {
+        setCollectionId(col.id);
 
-      // Load existing config entry
-      const { data: entries } = await api.getEntries(COLLECTION_SLUG);
-      const configEntry = (entries || []).find((e: any) => e.slug === ENTRY_SLUG);
-      if (configEntry) {
-        setEntryId(configEntry.id);
-        setConfig({ ...DEFAULTS, ...(configEntry.content || {}) });
+        // Load existing config entry
+        const { data: entries } = await api.getEntries(COLLECTION_SLUG);
+        const configEntry = (entries || []).find((e: any) => e.slug === ENTRY_SLUG);
+        if (configEntry) {
+          setEntryId(configEntry.id);
+          setConfig({ ...DEFAULTS, ...(configEntry.content || {}) });
+        }
       }
+      // If collection doesn't exist yet, just show empty form with defaults.
+      // It'll be created on first save.
 
       // Try to fetch a public API key for the embed snippet
       try {
@@ -335,13 +337,31 @@ export const WhatsAppWidgetSettings = () => {
   };
 
   const handleSave = async () => {
-    if (!collectionId) return;
     if (!config.phone_number || !/^\+?[0-9]{8,15}$/.test(config.phone_number.replace(/\s/g, ''))) {
       toast.error(t('Phone number is required (international format)', 'Número de telefone obrigatório (formato internacional)'));
       return;
     }
     setSaving(true);
     try {
+      // Lazy-create the collection on first save (Addons page doesn't create
+      // collections for widget addons that have a settingsRoute).
+      let resolvedCollectionId = collectionId;
+      if (!resolvedCollectionId) {
+        const addonDef = (await import('../config/addons-registry')).getAddon('whatsapp-widget');
+        const colSpec = addonDef?.collections.find(c => c.slug === COLLECTION_SLUG);
+        if (!colSpec) throw new Error('Add-on registry missing whatsapp-widget collection');
+        const { error: createErr } = await api.createCollection({
+          name: colSpec.name, slug: colSpec.slug, description: colSpec.description,
+          type: colSpec.type, fields: colSpec.fields,
+        });
+        if (createErr && !createErr.includes('already exists')) throw new Error(createErr);
+        const { data: cols } = await api.getCollections();
+        const col = (cols || []).find((c: any) => c.slug === COLLECTION_SLUG);
+        if (!col) throw new Error('Failed to create collection');
+        resolvedCollectionId = col.id;
+        setCollectionId(col.id);
+      }
+
       if (entryId) {
         await api.updateEntry(COLLECTION_SLUG, ENTRY_SLUG, {
           title: 'WhatsApp Widget Config',

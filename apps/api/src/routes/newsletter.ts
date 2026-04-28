@@ -2,9 +2,96 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { sendNewsletterWelcome, sendNewsletterAdminNotification } from '../lib/email.js';
+import { brevoUpsertContact, buildBrevoAttributes, BrevoError, type BrevoConfig } from '../lib/brevo.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
+
+/**
+ * Load Brevo config from addon_configs (newsletter row). Returns null when
+ * Brevo is not configured — sync is skipped silently in that case so the
+ * subscribe endpoint stays usable even before the agency wires up Brevo.
+ */
+async function loadBrevoConfig(): Promise<BrevoConfig | null> {
+  try {
+    const { data } = await supabase
+      .from('addon_configs')
+      .select('config')
+      .eq('addon_id', 'newsletter')
+      .maybeSingle();
+    const cfg = (data?.config as Record<string, any>) || {};
+    if (!cfg.brevo_api_key || cfg.sync_mode === 'manual') return null;
+    return {
+      apiKey: cfg.brevo_api_key,
+      listId: cfg.brevo_list_id,
+      doubleOptIn: !!cfg.brevo_double_opt_in,
+      redirectUrl: cfg.brevo_redirect_url,
+      templateId: cfg.brevo_template_id,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Push a subscriber to Brevo and update their entry with sync metadata.
+ * Non-blocking caller responsibility: this is awaited inside the route but
+ * any error is captured into the entry, never propagated to the public API.
+ */
+async function syncSubscriberToBrevo(params: {
+  entryId: string;
+  email: string;
+  name: string;
+  source: string;
+  tags: string;
+  baseContent: Record<string, any>;
+}): Promise<void> {
+  const cfg = await loadBrevoConfig();
+  if (!cfg) return; // Not configured — kiban-only mode
+
+  const now = new Date().toISOString();
+  const previousAttempts = Number(params.baseContent.sync_attempts) || 0;
+
+  try {
+    const contactId = await brevoUpsertContact(cfg, {
+      email: params.email,
+      attributes: buildBrevoAttributes({
+        name: params.name,
+        source: params.source,
+        tags: params.tags,
+      }),
+    });
+
+    await supabase
+      .from('entries')
+      .update({
+        content: {
+          ...params.baseContent,
+          synced_to_brevo: true,
+          brevo_contact_id: contactId ? String(contactId) : '',
+          sync_error: '',
+          sync_attempts: previousAttempts + 1,
+          last_synced_at: now,
+        },
+      })
+      .eq('id', params.entryId);
+  } catch (err: any) {
+    const message = err instanceof BrevoError ? err.message : (err.message || 'Brevo sync failed');
+    logger.warn('Brevo sync failed for subscriber', { email: params.email, error: message });
+    await supabase
+      .from('entries')
+      .update({
+        content: {
+          ...params.baseContent,
+          synced_to_brevo: false,
+          sync_error: message,
+          sync_attempts: previousAttempts + 1,
+          last_synced_at: now,
+        },
+      })
+      .eq('id', params.entryId);
+  }
+}
 
 /**
  * POST /api/v1/newsletter/subscribe
@@ -74,20 +161,28 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     const timestamp = new Date().toISOString();
     const slug = `sub-${cleanEmail.replace(/[^a-z0-9]/g, '-').slice(0, 30)}-${Date.now().toString(36)}`;
 
+    const baseContent = {
+      email: cleanEmail,
+      name: cleanName,
+      source: cleanSource,
+      subscribed_at: timestamp,
+      is_active: true,
+      tags: '',
+      // Brevo sync metadata — populated by syncSubscriberToBrevo below
+      synced_to_brevo: false,
+      brevo_contact_id: '',
+      sync_error: '',
+      sync_attempts: 0,
+      last_synced_at: '',
+    };
+
     const { data: entry, error: insertError } = await supabase
       .from('entries')
       .insert({
         collection_id: collection.id,
         title: cleanName || cleanEmail,
         slug,
-        content: {
-          email: cleanEmail,
-          name: cleanName,
-          source: cleanSource,
-          subscribed_at: timestamp,
-          is_active: true,
-          tags: '',
-        },
+        content: baseContent,
         status: 'published',
         published_at: timestamp,
         author_id: req.profileId,
@@ -110,6 +205,20 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     sendNewsletterAdminNotification(cleanEmail, cleanSource || '').catch(err =>
       logger.warn('Newsletter admin notification failed', { email: cleanEmail, error: err.message })
     );
+
+    // Push to Brevo if configured (sync_mode=realtime). Awaited so the
+    // sync_* fields are persisted before we respond, but failures never
+    // block the subscribe (errors captured in the entry's sync_error).
+    if (entry?.id) {
+      await syncSubscriberToBrevo({
+        entryId: entry.id,
+        email: cleanEmail,
+        name: cleanName,
+        source: cleanSource,
+        tags: '',
+        baseContent,
+      });
+    }
 
     res.status(201).json({
       success: true,

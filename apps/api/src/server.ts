@@ -28,6 +28,7 @@ import couponsRouter from './routes/coupons.js';
 import emailRouter from './routes/email.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
+import brevoRouter from './routes/brevo.js';
 import authRouter from './routes/auth.js';
 import snapshotsRouter from './routes/snapshots.js';
 import { supabase as supabaseImport } from './lib/supabase.js';
@@ -209,6 +210,7 @@ app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
 app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key + stricter rate limit
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
+app.use('/api/v1/brevo', adminLimiter, validateJWT, brevoRouter); // Brevo admin endpoints — JWT only
 // Stripe webhook — mounted as a direct POST handler (not via router) so the
 // request body reaches the handler without falling through to the generic
 // `/payments` mount (which requires API key and would 401 Stripe's unsigned
