@@ -225,13 +225,15 @@ const bookings: AddonDefinition = {
         { id: 'price_secondary', name: 'price_secondary', label: 'Secondary Price', type: 'number', helpText: 'Optional — e.g. child price for group activities' },
         { id: 'price_secondary_label', name: 'price_secondary_label', label: 'Secondary Price Label', type: 'text', placeholder: 'Child (4–12 years)' },
         { id: 'currency', name: 'currency', label: 'Currency', type: 'text', placeholder: 'eur', helpText: 'ISO 4217 code (eur, usd, gbp)' },
-        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'Weekly recurring hours or fixed daily times', options: [
+        { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, helpText: 'Weekly recurring hours, fixed daily times, or specific dates', options: [
           { label: 'Recurring (weekly hours)', value: 'recurring' },
           { label: 'Fixed time slots', value: 'fixed_slots' },
+          { label: 'Specific dates', value: 'date_slots' },
         ] },
         { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used when schedule_type=recurring. Set open windows per day of week.' },
         { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval (minutes)', type: 'number', helpText: 'Used with recurring. Gap between generated slots (e.g. 30 = slots every 30 min)', placeholder: '30' },
         { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used when schedule_type=fixed_slots. Add each daily start time.' },
+        { id: 'date_slots', name: 'date_slots', label: 'Date Slots', type: 'date_slots', helpText: 'Used when schedule_type=date_slots. Add a specific date + time per departure.' },
         { id: 'buffer_minutes', name: 'buffer_minutes', label: 'Buffer Between Bookings (minutes)', type: 'number', helpText: 'Cleanup/reset gap after each booking', placeholder: '0' },
         { id: 'booking_window_days', name: 'booking_window_days', label: 'Booking Window (days)', type: 'number', helpText: 'How far ahead customers can book', placeholder: '60' },
         { id: 'min_notice_hours', name: 'min_notice_hours', label: 'Minimum Notice (hours)', type: 'number', helpText: 'Minimum advance notice required', placeholder: '2' },
@@ -348,9 +350,11 @@ const tours: AddonDefinition = {
         { id: 'schedule_type', name: 'schedule_type', label: 'Schedule Type', type: 'select', required: true, options: [
           { label: 'Recurring (weekly hours)', value: 'recurring' },
           { label: 'Fixed time slots', value: 'fixed_slots' },
+          { label: 'Specific dates', value: 'date_slots' },
         ] },
         { id: 'fixed_slots', name: 'fixed_slots', label: 'Fixed Time Slots', type: 'fixed_slots', helpText: 'Used if schedule_type=fixed_slots. Each daily start time.' },
         { id: 'weekly_schedule', name: 'weekly_schedule', label: 'Weekly Schedule', type: 'weekly_schedule', helpText: 'Used if schedule_type=recurring. Open windows per day of week.' },
+        { id: 'date_slots', name: 'date_slots', label: 'Date Slots', type: 'date_slots', helpText: 'Used if schedule_type=date_slots. Add a specific date + time per departure.' },
         { id: 'slot_interval_minutes', name: 'slot_interval_minutes', label: 'Slot Interval', type: 'number', placeholder: '30' },
         // Rich content
         { id: 'cover_image', name: 'cover_image', label: 'Cover Image', type: 'image' },

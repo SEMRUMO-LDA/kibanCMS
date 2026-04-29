@@ -16,6 +16,7 @@ import { ImageField } from './ImageField';
 import { ReferenceField } from './ReferenceField';
 import { WeeklyScheduleField } from './WeeklyScheduleField';
 import { FixedSlotsField } from './FixedSlotsField';
+import { DateSlotsField } from './DateSlotsField';
 import { MultiSelectField } from './MultiSelectField';
 import { MediaCaptionListField } from './MediaCaptionListField';
 import { ColorField } from './ColorField';
@@ -23,7 +24,7 @@ import { ColorField } from './ColorField';
 export interface FieldDefinition {
   id: string;
   name: string;
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'multiselect' | 'media_caption_list' | 'color';
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'date' | 'select' | 'image' | 'url' | 'email' | 'slug' | 'reference' | 'weekly_schedule' | 'fixed_slots' | 'date_slots' | 'multiselect' | 'media_caption_list' | 'color';
   required?: boolean;
   placeholder?: string;
   helpText?: string;
@@ -184,6 +185,15 @@ export function FieldRenderer({
     case 'fixed_slots':
       return (
         <FixedSlotsField
+          {...commonProps}
+          value={value}
+          onChange={onChange}
+        />
+      );
+
+    case 'date_slots':
+      return (
+        <DateSlotsField
           {...commonProps}
           value={value}
           onChange={onChange}

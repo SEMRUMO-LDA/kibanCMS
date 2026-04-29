@@ -146,6 +146,25 @@ type DayKey = (typeof DAY_KEYS)[number];
 interface WeeklyWindow { start: string; end: string }
 type WeeklySchedule = Partial<Record<DayKey, WeeklyWindow[]>>;
 
+interface DateSlot { date: string; time: string }
+
+function parseDateSlots(value: unknown): DateSlot[] {
+  let arr: any[] = [];
+  if (Array.isArray(value)) arr = value;
+  else if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) arr = parsed;
+    } catch { /* ignore */ }
+  }
+  return arr
+    .map(item => ({
+      date: typeof item?.date === 'string' ? item.date : '',
+      time: typeof item?.time === 'string' ? item.time : '',
+    }))
+    .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s.date) && /^([01]\d|2[0-3]):[0-5]\d$/.test(s.time));
+}
+
 function minutesFromHHMM(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -252,7 +271,10 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
   // Tours collection maps slightly different field names. Normalize to the
   // resource shape the v2 routes expect.
   if (isTours) {
-    const fixedSlots = parseJsonSafe<string[]>(c.time_slots, []);
+    // Tours collection legacy shape stored times under `time_slots`. Newer
+    // tours add-on installs use `fixed_slots` directly. Accept both.
+    const fixedSlots = parseJsonSafe<string[]>(c.fixed_slots ?? c.time_slots, []);
+    const dateSlots = parseDateSlots(c.date_slots);
     return {
       external_booking_url: c.external_booking_url || '',
       external_booking_label: c.external_booking_label || '',
@@ -266,10 +288,11 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
       price_secondary: Number(c.price_child) || 0,
       price_secondary_label: c.child_age_range || 'Criança',
       currency: (c.currency || 'eur').toLowerCase(),
-      schedule_type: 'fixed_slots',
+      schedule_type: c.schedule_type || 'fixed_slots',
       fixed_slots: fixedSlots,
-      weekly_schedule: {},
-      slot_interval_minutes: 30,
+      weekly_schedule: parseJsonSafe<WeeklySchedule>(c.weekly_schedule, {}),
+      date_slots: dateSlots,
+      slot_interval_minutes: Number(c.slot_interval_minutes) || 30,
       buffer_minutes: 0,
       booking_window_days: 60,
       min_notice_hours: 0,
@@ -292,6 +315,7 @@ async function loadResource(slug: string): Promise<Record<string, any> | null> {
     schedule_type: c.schedule_type || 'fixed_slots',
     fixed_slots: parseJsonSafe<string[]>(c.fixed_slots, []),
     weekly_schedule: parseJsonSafe<WeeklySchedule>(c.weekly_schedule, {}),
+    date_slots: parseDateSlots(c.date_slots),
     slot_interval_minutes: Number(c.slot_interval_minutes) || 30,
     buffer_minutes: Number(c.buffer_minutes) || 0,
     booking_window_days: Number(c.booking_window_days) || 60,
@@ -495,6 +519,11 @@ router.get('/resources/:slug/availability', async (req: AuthRequest, res: Respon
         resource.duration_minutes,
         resource.buffer_minutes,
       );
+    } else if (resource.schedule_type === 'date_slots') {
+      // Only return slots whose date matches the request. Other dates produce
+      // an empty list so the calendar shows them as unavailable.
+      const dateSlots: DateSlot[] = Array.isArray(resource.date_slots) ? resource.date_slots : [];
+      candidateSlots = dateSlots.filter(s => s.date === date).map(s => s.time);
     } else {
       candidateSlots = Array.isArray(resource.fixed_slots) ? resource.fixed_slots : [];
     }
@@ -603,6 +632,18 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     const primary = Number(party_size);
     const secondary = Number(party_size_secondary || 0);
     const total = primary + secondary;
+
+    // For specific-date schedules, only accept (date, time) pairs that the
+    // resource declared. Prevents off-calendar bookings being crafted by hand.
+    if (resource.schedule_type === 'date_slots') {
+      const dateSlots: DateSlot[] = Array.isArray(resource.date_slots) ? resource.date_slots : [];
+      const matched = dateSlots.some(s => s.date === date && s.time === time_slot);
+      if (!matched) {
+        return res.status(400).json({
+          error: { message: 'Selected date and time are not available for this resource', status: 400, timestamp: new Date().toISOString() },
+        });
+      }
+    }
 
     // Check remaining capacity for that slot
     const bookingsColId = await getCollectionId('bookings');
