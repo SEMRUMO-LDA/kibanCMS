@@ -25,6 +25,7 @@ import trashRouter from './routes/trash.js';
 import seoRouter from './routes/seo.js';
 import toursRouter from './routes/tours.js';
 import couponsRouter from './routes/coupons.js';
+import affiliatesRouter from './routes/affiliates.js';
 import emailRouter from './routes/email.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
@@ -237,6 +238,7 @@ app.get('/api/v1/seo/robots.txt', (req, res, next) => seoRouter(req as any, res,
 app.use('/api/v1/seo', validateAny, seoRouter);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
+app.use('/api/v1/affiliates', adminLimiter, validateJWT, affiliatesRouter); // Affiliates — admin-only (commission management).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)

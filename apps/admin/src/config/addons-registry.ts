@@ -707,6 +707,7 @@ const coupons: AddonDefinition = {
         { id: 'stackable', name: 'stackable', label: 'Stackable', type: 'boolean', helpText: 'Allow combining with other coupons (default: false)' },
         { id: 'stripe_coupon_id', name: 'stripe_coupon_id', label: 'Stripe Coupon ID', type: 'text', helpText: 'Auto-linked to Stripe coupon. Read-only.' },
         { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Inactive coupons are always rejected' },
+        { id: 'affiliate_id', name: 'affiliate_id', label: 'Affiliate ID', type: 'text', helpText: 'Optional. Entry ID from the Affiliates collection — when set, every confirmed redemption accrues commission to the linked affiliate. Requires the Affiliates add-on.' },
       ],
     },
     {
@@ -811,6 +812,90 @@ const whatsappWidget: AddonDefinition = {
 };
 
 // ============================================
+// AFFILIATES ADD-ON (commission tracking — depends on Coupons)
+// ============================================
+
+const affiliates: AddonDefinition = {
+  id: 'affiliates',
+  name: 'Affiliates',
+  description: 'Track business partners and pay commission on coupon-driven sales',
+  longDescription: 'Register business partners and link each one to a discount coupon. Every confirmed order paid with their coupon accrues a commission (fixed % per affiliate) to a tamper-proof ledger. Refunds proportionally reverse the commission. The monthly report aggregates accruals per affiliate, hides balances below a configurable minimum payout (default €100 — carries over to next month), and exports CSV. Mark-as-paid creates a payout entry in the ledger so balances reset cleanly. Requires the Coupons add-on.',
+  icon: 'handshake',
+  color: '#7c3aed',
+  category: 'commerce',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Affiliates',
+      slug: 'affiliates',
+      description: 'Business partners that earn commission on coupon-driven sales',
+      type: 'custom',
+      fields: [
+        { id: 'name', name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'João Silva / Acme Travel Agency' },
+        { id: 'email', name: 'email', label: 'Email', type: 'email', required: true, placeholder: 'partner@example.com' },
+        { id: 'phone', name: 'phone', label: 'Phone', type: 'text', placeholder: '+351 912 345 678' },
+        { id: 'tax_id', name: 'tax_id', label: 'Tax ID / NIF', type: 'text', helpText: 'For invoicing the commission payment' },
+        { id: 'commission_rate', name: 'commission_rate', label: 'Commission Rate (%)', type: 'number', required: true, helpText: 'Fixed percentage applied to the customer-paid total of every confirmed order using this affiliate\'s coupon. E.g. 10 = 10%.', placeholder: '10' },
+        { id: 'payment_method', name: 'payment_method', label: 'Payment Method', type: 'select', options: [
+          { label: 'Bank transfer (IBAN)', value: 'bank_transfer' },
+          { label: 'PayPal', value: 'paypal' },
+          { label: 'MB Way', value: 'mbway' },
+          { label: 'Other (see notes)', value: 'other' },
+        ] },
+        { id: 'iban', name: 'iban', label: 'IBAN', type: 'text', helpText: 'Used when payment_method=bank_transfer', placeholder: 'PT50 0000 0000 0000 0000 0000 0' },
+        { id: 'payment_details', name: 'payment_details', label: 'Payment Details', type: 'text', helpText: 'PayPal email / MB Way phone / etc. — used when payment_method ≠ bank_transfer' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select', required: true, options: [
+          { label: 'Active', value: 'active' },
+          { label: 'Paused', value: 'paused' },
+          { label: 'Archived', value: 'archived' },
+        ] },
+        { id: 'min_payout_eur', name: 'min_payout_eur', label: 'Minimum Payout (€)', type: 'number', helpText: 'Override the global €100 threshold for this specific affiliate. Empty = use global default.', placeholder: '100' },
+        { id: 'joined_at', name: 'joined_at', label: 'Joined At', type: 'date' },
+        { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea', helpText: 'Internal notes — not shown to the affiliate' },
+      ],
+    },
+    {
+      name: 'Commission Ledger',
+      slug: 'commission-ledger',
+      description: 'Append-only ledger of commission events (accrual / reversal / payout / adjustment) — never edit existing rows',
+      type: 'custom',
+      fields: [
+        { id: 'affiliate_id', name: 'affiliate_id', label: 'Affiliate ID', type: 'text', required: true, helpText: 'Entry ID of the affiliate this row belongs to' },
+        { id: 'type', name: 'type', label: 'Type', type: 'select', required: true, options: [
+          { label: 'Accrual (commission earned)', value: 'accrual' },
+          { label: 'Reversal (refund offset)', value: 'reversal' },
+          { label: 'Payout (paid to affiliate)', value: 'payout' },
+          { label: 'Adjustment (manual)', value: 'adjustment' },
+        ] },
+        { id: 'amount_cents', name: 'amount_cents', label: 'Amount (cents)', type: 'number', required: true, helpText: 'Positive for accrual, negative for reversal/payout. Stored in cents to avoid float rounding.' },
+        { id: 'currency', name: 'currency', label: 'Currency', type: 'text', required: true, placeholder: 'eur' },
+        { id: 'commission_rate_snapshot', name: 'commission_rate_snapshot', label: 'Rate Snapshot (%)', type: 'number', helpText: 'Affiliate commission rate at the time of the event. Frozen so historical accruals stay correct if the rate is later changed.' },
+        { id: 'order_total_cents_snapshot', name: 'order_total_cents_snapshot', label: 'Order Total Snapshot (cents)', type: 'number', helpText: 'Customer-paid total at the time of accrual (in cents)' },
+        { id: 'order_id', name: 'order_id', label: 'Order ID', type: 'text', helpText: 'Linked order entry ID' },
+        { id: 'booking_id', name: 'booking_id', label: 'Booking ID', type: 'text', helpText: 'Linked booking entry ID (for legacy non-order flows)' },
+        { id: 'coupon_id', name: 'coupon_id', label: 'Coupon ID', type: 'text', helpText: 'Coupon entry ID that triggered this event' },
+        { id: 'coupon_code', name: 'coupon_code', label: 'Coupon Code', type: 'text', helpText: 'Denormalised for easy reading' },
+        { id: 'stripe_session_id', name: 'stripe_session_id', label: 'Stripe Session ID', type: 'text' },
+        { id: 'stripe_payment_intent', name: 'stripe_payment_intent', label: 'Stripe Payment Intent', type: 'text', helpText: 'Used to correlate refunds back to the original accrual' },
+        { id: 'related_event_id', name: 'related_event_id', label: 'Related Event ID', type: 'text', helpText: 'For reversals — points to the accrual entry being reversed. For payouts — empty.' },
+        { id: 'period', name: 'period', label: 'Period (YYYY-MM)', type: 'text', required: true, helpText: 'Month bucket for reporting. Set automatically.' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select', required: true, options: [
+          { label: 'Pending', value: 'pending' },
+          { label: 'Confirmed', value: 'confirmed' },
+          { label: 'Cancelled', value: 'cancelled' },
+        ] },
+        { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea' },
+      ],
+    },
+  ],
+  configFields: [
+    { id: 'min_payout_eur', name: 'min_payout_eur', label: 'Global Minimum Payout (€)', type: 'number', helpText: 'Default minimum balance required to mark an affiliate as paid in the monthly report. Balances below this carry over to the next month. Per-affiliate overrides take precedence.', placeholder: '100' },
+  ],
+  settingsRoute: '/affiliates',
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -823,6 +908,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   bookings,
   tours,
   coupons,
+  affiliates,
   redirects,
   webhooksVisual,
   aiContent,

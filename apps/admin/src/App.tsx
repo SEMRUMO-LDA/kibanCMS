@@ -21,6 +21,9 @@ import { ActivityLog } from './pages/ActivityLog';
 import { Diagnostics } from './pages/Diagnostics';
 import { BookingsManager } from './pages/BookingsManager';
 import { OrdersManager } from './pages/OrdersManager';
+import { AffiliatesManager } from './pages/AffiliatesManager';
+import { AffiliateDetail } from './pages/AffiliateDetail';
+import { CommissionReport } from './pages/CommissionReport';
 import { TrashManager } from './pages/TrashManager';
 import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
@@ -103,6 +106,9 @@ const AppContent = () => {
         <Route path="addons" element={<Addons />} />
         <Route path="bookings" element={<BookingsManager />} />
         <Route path="orders" element={<OrdersManager />} />
+        <Route path="affiliates" element={<AffiliatesManager />} />
+        <Route path="affiliates/report" element={<CommissionReport />} />
+        <Route path="affiliates/:id" element={<AffiliateDetail />} />
         <Route path="trash" element={<TrashManager />} />
         <Route path="i18n" element={<I18nManager />} />
         <Route path="settings" element={<Settings />} />

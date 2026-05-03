@@ -421,6 +421,31 @@ class ApiClient {
   async emptyTrash() {
     return this.request<any>('POST', '/trash/empty');
   }
+
+  // ── Affiliates ──
+  async getAffiliates() {
+    return this.request<any[]>('GET', '/affiliates');
+  }
+
+  async getAffiliate(id: string) {
+    return this.request<any>('GET', `/affiliates/${id}`);
+  }
+
+  async getAffiliateLedger(id: string) {
+    return this.request<any[]>('GET', `/affiliates/${id}/ledger`);
+  }
+
+  async getAffiliateReport(month: string) {
+    return this.request<any[]>('GET', `/affiliates/report?month=${encodeURIComponent(month)}`);
+  }
+
+  async payoutAffiliate(id: string, amountCents: number, notes?: string) {
+    return this.request<any>('POST', `/affiliates/${id}/payout`, {
+      amount_cents: amountCents,
+      currency: 'eur',
+      notes: notes || '',
+    });
+  }
 }
 
 export const api = new ApiClient();

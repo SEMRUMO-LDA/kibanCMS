@@ -6,6 +6,7 @@ import { logger } from '../lib/logger.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation, sendBookingAdminNotification, sendPaymentReceipt, sendPaymentAdminNotification } from '../lib/email.js';
 import { confirmRedemption, cancelPendingRedemption } from '../lib/coupons.js';
+import { accrueCommission, reverseCommissionForCharge } from '../lib/affiliates.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
 import type { AuthRequest } from '../middleware/auth.js';
@@ -129,6 +130,33 @@ async function getCollectionId(slug: string): Promise<string | null> {
     .eq('slug', slug)
     .single();
   return data?.id || null;
+}
+
+/**
+ * Resolve a coupon entry by code (case-insensitive) — returns null if not found.
+ * Used by the affiliate accrual hook to map a coupon_code on the order/booking
+ * to the coupon ID needed to read its affiliate_id link.
+ */
+async function findCouponByCode(code: string): Promise<{ id: string; content: Record<string, any> } | null> {
+  if (!code) return null;
+  const colId = await getCollectionId('coupons');
+  if (!colId) return null;
+  const upper = code.toUpperCase();
+  const { data } = await supabase
+    .from('entries')
+    .select('id, content')
+    .eq('collection_id', colId)
+    .filter('content->>code', 'eq', upper)
+    .limit(1);
+  if (data && data.length > 0) return data[0] as any;
+  // Fallback: codes may have been stored as-typed. Try the literal value too.
+  const { data: alt } = await supabase
+    .from('entries')
+    .select('id, content')
+    .eq('collection_id', colId)
+    .filter('content->>code', 'eq', code)
+    .limit(1);
+  return (alt && alt.length > 0) ? (alt[0] as any) : null;
 }
 
 // ============================================
@@ -515,6 +543,23 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             }
           }
 
+          // Affiliate commission accrual (non-blocking) — one per order.
+          // Order total is already in cents on the Stripe session (amount_total).
+          if (orderContent.coupon_code) {
+            findCouponByCode(orderContent.coupon_code).then(coupon => {
+              if (!coupon) return;
+              return accrueCommission({
+                couponId: coupon.id,
+                couponCode: orderContent.coupon_code,
+                orderId,
+                orderTotalCents: Number(session.amount_total) || 0,
+                currency: orderContent.currency || session.currency || 'eur',
+                stripeSessionId: session.id,
+                stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : '',
+              });
+            }).catch(err => logger.warn('Affiliate accrual failed', { orderId, error: err.message }));
+          }
+
           // Admin notification (one per order)
           const adminNotifPayload = {
             amount: orderContent.total || session.amount_total || 0,
@@ -581,6 +626,20 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             confirmRedemption(bookingId, session.id).catch(err =>
               logger.warn('Coupon redemption confirm failed', { bookingId, error: err.message })
             );
+
+            // Affiliate commission accrual for legacy booking flow (non-blocking)
+            findCouponByCode(session.metadata.coupon_code).then(coupon => {
+              if (!coupon) return;
+              return accrueCommission({
+                couponId: coupon.id,
+                couponCode: session.metadata!.coupon_code!,
+                bookingId,
+                orderTotalCents: Number(session.amount_total) || 0,
+                currency: session.currency || 'eur',
+                stripeSessionId: session.id,
+                stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : '',
+              });
+            }).catch(err => logger.warn('Affiliate accrual failed', { bookingId, error: err.message }));
           }
         }
       } else {
@@ -643,6 +702,20 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
 
           logger.info('Transaction marked as refunded', { chargeId: charge.id });
         }
+      }
+
+      // Proportional commission reversal (non-blocking).
+      // Stripe sends `amount_refunded` (cumulative, in cents) and `amount` (the
+      // original charge total). The lib computes the delta vs prior reversals,
+      // so multiple partial refunds for the same charge are handled correctly.
+      if (charge.payment_intent) {
+        reverseCommissionForCharge({
+          stripePaymentIntent: charge.payment_intent,
+          refundedCents: Number(charge.amount_refunded) || 0,
+          originalChargeCents: Number(charge.amount) || 0,
+        }).catch(err =>
+          logger.warn('Affiliate commission reversal failed', { chargeId: charge.id, error: err.message })
+        );
       }
     }
 

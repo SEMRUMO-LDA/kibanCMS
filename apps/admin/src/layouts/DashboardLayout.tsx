@@ -18,6 +18,7 @@ import {
   Activity,
   CalendarCheck,
   ShoppingBag,
+  Handshake,
   Trash2,
   ChevronsLeft,
   ChevronsRight,
@@ -503,6 +504,7 @@ export const DashboardLayout = () => {
   });
   const [hasBookings, setHasBookings] = useState(false);
   const [hasOrders, setHasOrders] = useState(false);
+  const [hasAffiliates, setHasAffiliates] = useState(false);
   const [siteUrl, setSiteUrl] = useState<string>('');
   const [contentShortcuts, setContentShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const [shortcuts, setShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
@@ -543,6 +545,7 @@ export const DashboardLayout = () => {
         // operational view of reservations.
         setHasBookings(slugs.has('bookings'));
         setHasOrders(slugs.has('orders'));
+        setHasAffiliates(slugs.has('affiliates'));
         // Filter the static registries by what's actually installed in
         // this tenant. Add new shortcuts by editing the registry constants
         // above — no need to add another piece of state per collection.
@@ -697,6 +700,12 @@ export const DashboardLayout = () => {
               <NavItem $active={location.pathname === '/orders'} $collapsed={collapsed} onClick={() => handleNavigation('/orders')} role="button" tabIndex={0} title={collapsed ? 'Orders' : undefined}>
                 <ShoppingBag size={20} />
                 <span>Orders</span>
+              </NavItem>
+            )}
+            {hasAffiliates && (
+              <NavItem $active={location.pathname === '/affiliates' || location.pathname.startsWith('/affiliates/')} $collapsed={collapsed} onClick={() => handleNavigation('/affiliates')} role="button" tabIndex={0} title={collapsed ? 'Affiliates' : undefined}>
+                <Handshake size={20} />
+                <span>Affiliates</span>
               </NavItem>
             )}
           </NavSection>
