@@ -88,7 +88,7 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
             defaultFromEmail: process.env.DEFAULT_FROM_EMAIL || 'noreply@kiban.pt',
             defaultFromName: c.default_from_name || c.site_name || process.env.DEFAULT_FROM_NAME || 'KibanCMS',
             defaultReplyTo: c.default_reply_to || c.contact_email || '',
-            notificationEmails: (c.contact_email || process.env.NOTIFICATION_EMAIL || '')
+            notificationEmails: (c.notification_emails || c.contact_email || process.env.NOTIFICATION_EMAIL || '')
               .split(',').map((e: string) => e.trim()).filter(Boolean),
             source: 'env-var',
           };

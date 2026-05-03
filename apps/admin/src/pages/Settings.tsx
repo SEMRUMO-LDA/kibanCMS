@@ -169,6 +169,7 @@ interface SiteSettings {
   privacy_policy_url: string; data_retention_days: string; cookie_consent: string; gdpr_contact: string;
   // Email (Resend — multi-tenant)
   resend_api_key: string; default_from_email: string; default_from_name: string; default_reply_to: string;
+  notification_emails: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -183,6 +184,7 @@ const DEFAULTS: SiteSettings = {
   entry_url_pattern: '/{collection}/{slug}', collection_url_pattern: '/{slug}',
   privacy_policy_url: '', data_retention_days: '365', cookie_consent: 'false', gdpr_contact: '',
   resend_api_key: '', default_from_email: '', default_from_name: '', default_reply_to: '',
+  notification_emails: '',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -573,11 +575,11 @@ export const Settings = () => {
             <Field $full>
               <label>Notification Email(s)</label>
               <input
-                value={settings.contact_email}
-                onChange={e => update('contact_email', e.target.value)}
+                value={settings.notification_emails}
+                onChange={e => update('notification_emails', e.target.value)}
                 placeholder="admin@yourdomain.com, sales@yourdomain.com"
               />
-              <p className="help">Comma-separated. Receives form submissions and booking alerts. Uses the General tab's "Contact Email" field.</p>
+              <p className="help">Comma-separated. Receives form submissions, booking alerts and order copies. Leave blank to fall back to the General tab's "Contact Email".</p>
             </Field>
           </Grid>
 
