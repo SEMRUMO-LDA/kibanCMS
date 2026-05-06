@@ -27,7 +27,7 @@ router.get('/resolve', async (req: Request, res: Response) => {
     }
 
     // Search for matching redirect directly in DB (no full table scan)
-    const { data: match } = await supabase
+    let { data: match } = await supabase
       .from('entries')
       .select('id, content')
       .eq('collection_id', col.id)
@@ -35,6 +35,22 @@ router.get('/resolve', async (req: Request, res: Response) => {
       .filter('content->>from_path', 'eq', path)
       .limit(1)
       .maybeSingle();
+
+    // Fallback: tolerate from_path stored as a full URL whose pathname equals the requested path.
+    // Common when entries were imported/typed with the domain prefix by mistake.
+    if (!match) {
+      const { data: candidates } = await supabase
+        .from('entries')
+        .select('id, content')
+        .eq('collection_id', col.id)
+        .eq('status', 'published')
+        .like('content->>from_path', `%${path}`);
+      match = (candidates || []).find((c: any) => {
+        const fp = c.content?.from_path;
+        if (typeof fp !== 'string' || !/^https?:\/\//i.test(fp)) return false;
+        try { return new URL(fp).pathname === path; } catch { return false; }
+      }) || null;
+    }
 
     if (!match) {
       return res.status(404).json({ data: null, message: 'No redirect found' });

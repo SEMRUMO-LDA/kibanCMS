@@ -418,8 +418,8 @@ const redirects: AddonDefinition = {
       description: 'URL redirect rules (301/302)',
       type: 'custom',
       fields: [
-        { id: 'from_path', name: 'from_path', label: 'From Path', type: 'text', required: true, placeholder: '/old-page', helpText: 'The old URL path (without domain)' },
-        { id: 'to_path', name: 'to_path', label: 'To Path', type: 'text', required: true, placeholder: '/new-page', helpText: 'The new URL path or full URL' },
+        { id: 'from_path', name: 'from_path', label: 'From Path', type: 'text', required: true, placeholder: '/old-page', helpText: 'Path only — no domain. Example: /benagil-cave (not https://your-site.com/benagil-cave).' },
+        { id: 'to_path', name: 'to_path', label: 'To Path', type: 'text', required: true, placeholder: '/new-page', helpText: 'Where to send visitors. Path (e.g. /new-page) for same-site, or full URL for external.' },
         { id: 'type', name: 'type', label: 'Redirect Type', type: 'select', required: true, options: [
           { label: '301 — Permanent', value: '301' },
           { label: '302 — Temporary', value: '302' },
