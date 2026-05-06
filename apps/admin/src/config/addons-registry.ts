@@ -420,7 +420,10 @@ const redirects: AddonDefinition = {
       fields: [
         { id: 'from_path', name: 'from_path', label: 'From Path', type: 'text', required: true, placeholder: '/old-page', helpText: 'The old URL path (without domain)' },
         { id: 'to_path', name: 'to_path', label: 'To Path', type: 'text', required: true, placeholder: '/new-page', helpText: 'The new URL path or full URL' },
-        { id: 'type', name: 'type', label: 'Redirect Type', type: 'select', required: true },
+        { id: 'type', name: 'type', label: 'Redirect Type', type: 'select', required: true, options: [
+          { label: '301 — Permanent', value: '301' },
+          { label: '302 — Temporary', value: '302' },
+        ] },
         { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean' },
         { id: 'notes', name: 'notes', label: 'Notes', type: 'text', placeholder: 'Reason for redirect' },
         { id: 'hit_count', name: 'hit_count', label: 'Hit Count', type: 'number' },
