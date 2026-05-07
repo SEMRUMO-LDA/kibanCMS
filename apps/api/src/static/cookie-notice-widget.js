@@ -253,11 +253,11 @@
   function initSilktide(config) {
     if (!config.enabled) return;
 
-    // Inject color overrides before Silktide loads
-    injectColorOverrides(config);
-
-    // Load Silktide CSS
+    // Load Silktide CSS first, THEN inject overrides — CSS rule order in
+    // the DOM decides who wins between same-specificity #stcm-wrapper rules,
+    // so our overrides have to be appended after the Silktide stylesheet.
     loadCSS(SILKTIDE_CSS);
+    injectColorOverrides(config);
 
     // Load Silktide JS then initialise
     loadJS(SILKTIDE_JS, function () {
