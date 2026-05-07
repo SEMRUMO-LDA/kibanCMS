@@ -17,14 +17,17 @@
  * normal bookings UI surfaces them without code changes.
  */
 
-import { Router, type Request, type Response } from 'express';
+import express, { type Request, type Response, type Router as ExpressRouter } from 'express';
 import crypto from 'node:crypto';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { getAdapter, listAdapters } from '../lib/channels/index.js';
 import type { NormalizedBooking } from '../lib/channels/index.js';
 
-export const channelManagerRouter = Router();
+// Explicit annotation: with `declaration: true`, the inferred Router type
+// references @pnpm/-internal paths which TS2742s the build. Annotating with
+// the public `Router` symbol keeps the .d.ts portable.
+export const channelManagerRouter: ExpressRouter = express.Router();
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
