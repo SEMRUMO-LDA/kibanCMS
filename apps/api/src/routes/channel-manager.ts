@@ -96,16 +96,24 @@ async function handleWebhook(req: Request, res: Response, urlToken: string | nul
     .maybeSingle();
 
   if (!conn || !conn.enabled || !conn.webhook_secret) {
-    // Don't leak whether the provider is configured — opaque 401.
+    logger.warn('channel-manager: webhook rejected, connection missing/disabled', { provider });
     return res.status(401).json({ error: { message: 'Webhook rejected' } });
   }
 
   // Path 1: url-token auth — compare URL-supplied token to stored secret.
   if (adapter.webhookAuthMode === 'url-token') {
-    if (!urlToken) return res.status(401).json({ error: { message: 'Missing token' } });
+    if (!urlToken) {
+      logger.warn('channel-manager: webhook missing token in URL', { provider });
+      return res.status(401).json({ error: { message: 'Missing token' } });
+    }
     const expected = Buffer.from(conn.webhook_secret);
     const provided = Buffer.from(urlToken);
     if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
+      logger.warn('channel-manager: webhook token mismatch', {
+        provider,
+        provided_prefix: urlToken.slice(0, 6),
+        expected_prefix: conn.webhook_secret.slice(0, 6),
+      });
       return res.status(401).json({ error: { message: 'Invalid token' } });
     }
   }
