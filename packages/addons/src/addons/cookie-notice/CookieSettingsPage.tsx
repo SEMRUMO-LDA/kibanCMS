@@ -206,6 +206,7 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -236,10 +237,15 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
 
   const handleSave = async () => {
     setSaving(true);
-    await supabase
+    setSaveError(null);
+    const { error } = await supabase
       .from('addon_configs')
-      .upsert({ addon_id: addonId, config });
+      .upsert({ addon_id: addonId, config }, { onConflict: 'addon_id' });
     setSaving(false);
+    if (error) {
+      setSaveError(`${error.code || 'error'}: ${error.message}${error.details ? ` (${error.details})` : ''}`);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -498,6 +504,11 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
       <button style={styles.btnSave} onClick={handleSave} disabled={saving}>
         {saving ? 'A guardar...' : saved ? 'Guardado!' : 'Guardar Definições'}
       </button>
+      {saveError && (
+        <p style={{ marginTop: '12px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#b91c1c', fontSize: '13px' }}>
+          Falha ao guardar — {saveError}
+        </p>
+      )}
     </div>
   );
 }

@@ -30,9 +30,11 @@
   var VISITOR_KEY = 'kiban_visitor_id';
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
 
-  // Silktide CDN assets
-  var SILKTIDE_CSS = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.css';
-  var SILKTIDE_JS  = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.js';
+  // Silktide CDN assets — Silktide ships only on GitHub, not npm. The npm
+  // path returns 404 and silently breaks the banner; the GitHub jsdelivr path
+  // is the canonical one published by Silktide themselves.
+  var SILKTIDE_CSS = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.css';
+  var SILKTIDE_JS  = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.js';
 
   // ── Helpers ──────────────────────────────────────────────────────────
 

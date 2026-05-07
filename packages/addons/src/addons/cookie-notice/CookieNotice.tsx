@@ -34,9 +34,11 @@ export interface CookieNoticeConfig {
   apiUrl?: string;
 }
 
-// Silktide CDN assets
-const SILKTIDE_CSS = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.css';
-const SILKTIDE_JS  = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.js';
+// Silktide CDN assets — Silktide ships only on GitHub, not npm. The npm path
+// returns 404 and silently breaks the banner; the GitHub jsdelivr path is the
+// canonical one published by Silktide themselves.
+const SILKTIDE_CSS = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.css';
+const SILKTIDE_JS  = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.js';
 
 declare global {
   interface Window {
