@@ -150,6 +150,29 @@
     style.textContent = css;
   }
 
+  // Auto-discover non-KIBAN floating elements that opt in via attributes:
+  //   <button id="back-to-top" data-kiban-stack-corner="bottomRight"
+  //           data-kiban-stack-height="48">↑</button>
+  // The loader treats them like any other widget for stacking purposes.
+  // Height falls back to the element's measured offsetHeight if the
+  // attribute is omitted.
+  function autoRegisterMarkedElements() {
+    if (!document.body) return;
+    var nodes = document.querySelectorAll('[data-kiban-stack-corner]');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var id = el.getAttribute('data-kiban-stack-id') || el.id || ('site-' + i);
+      var selector = el.id ? '#' + el.id : '[data-kiban-stack-id="' + id + '"]';
+      var height = parseInt(el.getAttribute('data-kiban-stack-height'), 10)
+                   || el.offsetHeight || 44;
+      window.KibanWidgets.register(id, {
+        selector: selector,
+        corner: el.getAttribute('data-kiban-stack-corner'),
+        height: height,
+      });
+    }
+  }
+
   // ── Public API ──────────────────────────────────────────────────────
   window.KibanWidgets = {
     getBaseUrl: function () { return BASE_URL; },
@@ -164,5 +187,12 @@
       clearTimeout(stackTimer);
       stackTimer = setTimeout(arrangeStack, 80);
     },
+    rearrange: function () { arrangeStack(); },
   };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoRegisterMarkedElements);
+  } else {
+    autoRegisterMarkedElements();
+  }
 })();
