@@ -484,11 +484,14 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Código de Integração</h3>
         <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }}>
-          Copie e cole este snippet no <code>&lt;head&gt;</code> do seu website.
+          Use o <strong>Widget Loader</strong> para carregar automaticamente todos os add-ons ativados (cookies, acessibilidade, WhatsApp, idiomas) com um único script:
         </p>
         <div style={styles.embedBox}>
-          {`<script src="${window.location.origin}/api/v1/cookie-notice/widget.js" data-api-key="YOUR_API_KEY"></script>`}
+          {`<script src="${window.location.origin}/api/v1/widgets/loader.js" data-api-key="YOUR_API_KEY"></script>`}
         </div>
+        <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+          ☝️ Recomendado — injeta automaticamente apenas os widgets ativados no painel Add-ons.
+        </p>
       </div>
 
       {/* Save */}

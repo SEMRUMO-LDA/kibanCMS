@@ -258,6 +258,58 @@ app.get('/api/v1/i18n/widget.js', (req, res) => {
 app.use('/api/v1/i18n', validateAny, i18nRouter); // i18n — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
+// ── Universal Widget Loader ────────────────────────────────────────
+// Single script tag that auto-loads all enabled widget add-ons.
+// Usage: <script src="https://your-cms.com/api/v1/widgets/loader.js" data-api-key="KEY"></script>
+app.get('/api/v1/widgets/loader.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+  const staticPath = NODE_ENV === 'production'
+    ? path.join(__dirname, '../static/widgets-loader.js')
+    : path.join(__dirname, 'static/widgets-loader.js');
+  res.sendFile(staticPath);
+});
+
+// Which widget add-ons are enabled — called by the loader to decide what to inject.
+// Returns an array of addon_id strings for add-ons that have widgets AND are enabled.
+const WIDGET_ADDON_IDS = ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'];
+
+app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
+  try {
+    const { data: configs } = await supabaseImport
+      .from('addon_configs')
+      .select('addon_id, config')
+      .in('addon_id', WIDGET_ADDON_IDS);
+
+    // An add-on is "enabled" if it has a row in addon_configs AND config.enabled !== false.
+    // (No row = not installed = not enabled.)
+    const enabled = (configs || [])
+      .filter(row => row.config?.enabled !== false)
+      .map(row => row.addon_id);
+
+    // WhatsApp widget stores config in a collection entry, not addon_configs.
+    // Check if it's installed by looking for the collection + published config entry.
+    if (!enabled.includes('whatsapp-widget')) {
+      const { data: col } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
+      if (col) {
+        const { data: entry } = await supabaseImport
+          .from('entries')
+          .select('content')
+          .eq('collection_id', col.id)
+          .eq('slug', 'config')
+          .eq('status', 'published')
+          .maybeSingle();
+        if (entry?.content?.enabled) enabled.push('whatsapp-widget');
+      }
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json({ data: enabled, timestamp: new Date().toISOString() });
+  } catch {
+    res.json({ data: [], timestamp: new Date().toISOString() });
+  }
+});
+
 // Cookie Notice widget — public static JS file (no auth)
 app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
