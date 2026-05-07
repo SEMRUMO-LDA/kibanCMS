@@ -228,7 +228,7 @@
     });
 
     document.addEventListener('click', function (e) {
-      if (isOpen && !panel.contains(e.target) && e.target !== btn) {
+      if (isOpen && !panel.contains(e.target) && !btn.contains(e.target)) {
         isOpen = false;
         panel.style.display = 'none';
         btn.setAttribute('aria-expanded', 'false');
