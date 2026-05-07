@@ -244,6 +244,11 @@
     // ships at 60px which clashes visually when both are present.
     css += '#stcm-icon { width: 44px !important; height: 44px !important; }\n';
     css += '#stcm-icon svg { width: 60% !important; height: 60% !important; }\n';
+    // Render the cookie glyph in white to match the other floating widgets.
+    // brightness(0) collapses every fill/stroke to black, invert(1) flips
+    // it to white — works whether Silktide ships the icon as inline SVG or
+    // as an <img>.
+    css += '#stcm-icon svg, #stcm-icon img { filter: brightness(0) invert(1) !important; }\n';
 
     // Hide icon entirely when admin opted out — Silktide has no native flag.
     if (config.showIcon === false) {
