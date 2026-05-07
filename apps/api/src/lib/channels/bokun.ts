@@ -55,33 +55,84 @@ function bokunDate(): string {
  * only consume the fields we know we need and stash the rest under `raw`.
  */
 function normalizeBokunBooking(payload: any): NormalizedBooking | undefined {
+  // Bokun's webhook ships the booking object at the root (no `booking` wrapper).
   const b = payload?.booking ?? payload;
   if (!b || !b.confirmationCode) return undefined;
 
-  // Bokun structures customer info on the lead passenger.
-  const lead = b.customer || b.leadCustomer || b.passengers?.[0] || {};
+  // Customer is at the root for Bokun ("customer"); invoice.recipient mirrors
+  // it but with extra fields. Fall back to passengers/leadCustomer for older
+  // payload variants seen in docs.
+  const lead = b.customer || b.invoice?.recipient || b.leadCustomer || b.passengers?.[0] || {};
 
-  // Pick the first product activity (most bookings are single-product).
+  // First (and usually only) activity in the booking. Real Bokun payloads put
+  // the product id on `productId` directly, not under a `product` sub-object.
+  // The product sub-object exists on activity.invoice.product.
   const activity = b.activityBookings?.[0] || b.productBookings?.[0] || {};
-  const product = activity.product || activity.experience || {};
+  const productId = activity.productId
+                 ?? activity.product?.id
+                 ?? activity.invoice?.product?.id;
+  const productTitle = activity.title
+                    || activity.invoice?.product?.title
+                    || activity.product?.title
+                    || 'Bokun booking';
 
-  const startDate = activity.startDate || activity.date || b.startDate;
-  const startTime = activity.startTime || b.startTime;
+  // Date/time: prefer the absolute startDateTime (epoch ms) because it carries
+  // both. Fallback to startTime (already "HH:mm") and date (epoch ms or
+  // YYYY-MM-DD string depending on Bokun version).
+  const startEpoch: number | undefined =
+    typeof activity.startDateTime === 'number' ? activity.startDateTime
+    : typeof activity.date === 'number' ? activity.date
+    : undefined;
+
+  let dateStr: string;
+  let timeStr: string | undefined;
+  if (startEpoch) {
+    const dt = new Date(startEpoch);
+    dateStr = dt.toISOString().slice(0, 10);
+    timeStr = dt.toISOString().slice(11, 16);
+  } else if (typeof activity.startDate === 'string') {
+    dateStr = activity.startDate.slice(0, 10);
+  } else {
+    dateStr = new Date().toISOString().slice(0, 10);
+  }
+  // Explicit startTime field always wins over the one derived from epoch
+  // (Bokun stores it pre-formatted in operator's local timezone).
+  if (typeof activity.startTime === 'string') timeStr = activity.startTime.slice(0, 5);
+
+  // Participants: per-rate quantities live on activity.fields.lineItems
+  // (`people` per category) — sum them. Older payloads may have the
+  // pre-summed totalParticipants.
+  const lineItems = activity.invoice?.lineItems || [];
+  const participantsFromLineItems = lineItems.reduce(
+    (sum: number, li: any) => sum + (Number(li.people) || 0),
+    0,
+  );
+  const participants = Number(
+    activity.totalParticipants || b.totalParticipants || participantsFromLineItems || 1,
+  );
+
+  // Amount comes from b.totalPrice (major units, e.g. 40 EUR) on real Bokun
+  // payloads. invoice.totalAsMoney.amount is also in major units.
+  const amountMajor = Number(
+    b.totalPrice ?? b.invoice?.totalAsMoney?.amount ?? 0,
+  );
 
   return {
     external_id: String(b.confirmationCode || b.id),
-    customer_name: [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim() || lead.name || 'Unknown',
+    customer_name: [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim()
+                || lead.name
+                || 'Unknown',
     customer_email: lead.email || '',
-    customer_phone: lead.phoneNumber || lead.phone || undefined,
-    product_external_id: product.id ? String(product.id) : undefined,
-    product_title: product.title || activity.title || 'Bokun booking',
-    date: typeof startDate === 'string' ? startDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
-    time_slot: typeof startTime === 'string' ? startTime.slice(0, 5) : undefined,
-    participants: Number(activity.totalParticipants || b.totalParticipants || 1),
-    amount_cents: Math.round(Number(b.totalPrice || 0) * 100),
-    currency: b.currency || 'EUR',
-    status: (b.status || 'CONFIRMED').toLowerCase().includes('cancel') ? 'cancelled'
-            : (b.status || 'CONFIRMED').toLowerCase().includes('pend') ? 'pending'
+    customer_phone: lead.phoneNumber || lead.phoneNumberLinkable || lead.phone || undefined,
+    product_external_id: productId != null ? String(productId) : undefined,
+    product_title: productTitle,
+    date: dateStr,
+    time_slot: timeStr,
+    participants,
+    amount_cents: Math.round(amountMajor * 100),
+    currency: b.currency || b.invoice?.currency || 'EUR',
+    status: (b.status || activity.status || 'CONFIRMED').toLowerCase().includes('cancel') ? 'cancelled'
+            : (b.status || activity.status || 'CONFIRMED').toLowerCase().includes('pend') ? 'pending'
             : 'confirmed',
     notes: b.note || b.customerComment || undefined,
     raw: payload,

@@ -81,6 +81,7 @@ export const ChannelManagerSettings = () => {
   const [newCreds, setNewCreds] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [revealedUrl, setRevealedUrl] = useState<{ id: string; url: string } | null>(null);
+  const [payloadModal, setPayloadModal] = useState<{ id: string; payload: any } | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -137,6 +138,13 @@ export const ChannelManagerSettings = () => {
     const { error } = await api.channelUpdateConnection(c.id, { enabled: !c.enabled });
     if (error) setError(error);
     refresh();
+  }
+
+  async function handleViewPayload(logId: string) {
+    setError(null);
+    const { data, error } = await api.channelGetLogPayload(logId);
+    if (error) { setError(error); return; }
+    setPayloadModal({ id: logId, payload: data?.payload });
   }
 
   if (loading) return <p style={{ padding: 20 }}>A carregar...</p>;
@@ -291,6 +299,7 @@ export const ChannelManagerSettings = () => {
                 <th style={styles.th}>External ID</th>
                 <th style={styles.th}>Estado</th>
                 <th style={styles.th}>Booking</th>
+                <th style={styles.th}>Payload</th>
               </tr>
             </thead>
             <tbody>
@@ -307,12 +316,51 @@ export const ChannelManagerSettings = () => {
                   <td style={styles.td}>
                     {l.entry_id ? <code style={{ fontSize: 11 }}>{l.entry_id.slice(0, 8)}…</code> : <span style={{ color: '#9ca3af' }}>—</span>}
                   </td>
+                  <td style={styles.td}>
+                    <button style={styles.btnGhost} onClick={() => handleViewPayload(l.id)}>Ver JSON</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {payloadModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
+          }}
+          onClick={() => setPayloadModal(null)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 12, maxWidth: '90vw', maxHeight: '85vh',
+              width: 900, padding: 20, boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+              display: 'flex', flexDirection: 'column',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>Webhook payload — <code style={{ fontSize: 12 }}>{payloadModal.id.slice(0, 8)}…</code></h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={styles.btnGhost}
+                  onClick={() => navigator.clipboard.writeText(JSON.stringify(payloadModal.payload, null, 2))}
+                >Copiar JSON</button>
+                <button style={styles.btnGhost} onClick={() => setPayloadModal(null)}>Fechar</button>
+              </div>
+            </div>
+            <pre style={{
+              flex: 1, overflow: 'auto', background: '#0f172a', color: '#e2e8f0',
+              padding: 16, borderRadius: 8, fontSize: 12, lineHeight: 1.4, margin: 0,
+            }}>
+              {JSON.stringify(payloadModal.payload, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

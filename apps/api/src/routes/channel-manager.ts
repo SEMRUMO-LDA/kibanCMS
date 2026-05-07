@@ -410,3 +410,16 @@ channelManagerRouter.get('/log', async (req, res) => {
   if (error) return res.status(500).json({ error: { message: error.message } });
   res.json({ data: data || [] });
 });
+
+// Full row including the raw provider payload — separate from /log so the list
+// view stays cheap (payloads can be 50KB+).
+channelManagerRouter.get('/log/:id', async (req, res) => {
+  const { data, error } = await supabase
+    .from('channel_bookings_log')
+    .select('*')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: { message: error.message } });
+  if (!data) return res.status(404).json({ error: { message: 'Log entry not found' } });
+  res.json({ data });
+});

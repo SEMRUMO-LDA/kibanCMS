@@ -475,6 +475,10 @@ class ApiClient {
   async channelListLog(limit = 50) {
     return this.request<any[]>('GET', `/channel-manager/log?limit=${limit}`);
   }
+
+  async channelGetLogPayload(id: string) {
+    return this.request<any>('GET', `/channel-manager/log/${id}`);
+  }
 }
 
 export const api = new ApiClient();
