@@ -1,6 +1,7 @@
 /**
  * CookieSettingsPage — Admin page for configuring the cookie notice.
- * Allows editing theme, position, messages, cookie categories, and viewing consent stats.
+ * Now powered by Silktide Consent Manager.
+ * Allows editing position, colors, messages, cookie categories, and viewing consent stats.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -19,6 +20,13 @@ interface CookieConfig {
     preferences: boolean;
   };
   customCSS: string;
+  // Silktide-specific options
+  position: 'bottomRight' | 'bottomLeft' | 'bottomCenter' | 'center';
+  iconPosition: 'bottomLeft' | 'bottomRight';
+  showBackdrop: boolean;
+  primaryColor: string;
+  backgroundColor: string;
+  textColor: string;
 }
 
 interface ConsentRecord {
@@ -39,16 +47,35 @@ const DEFAULT_CONFIG: CookieConfig = {
   title: 'Informação sobre cookies',
   message: 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros. Estes cookies podem ser utilizados para melhorar o funcionamento do website ou para lhe oferecer uma experiência de navegação mais personalizada. Poderá aceitar ou personalizar as suas definições de cookies através dos botões disponibilizados.',
   buttonText: 'Aceitar todos',
-  declineText: 'Gerir cookies',
+  declineText: 'Rejeitar não essenciais',
   policyUrl: '/privacy-policy',
   cookieTypes: { necessary: true, analytics: false, marketing: false, preferences: false },
   customCSS: '',
+  position: 'bottomRight',
+  iconPosition: 'bottomRight',
+  showBackdrop: false,
+  primaryColor: '#533BE2',
+  backgroundColor: '#FFFFFF',
+  textColor: '#253B48',
 };
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     maxWidth: '720px',
+  },
+  poweredBy: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 14px',
+    background: '#f0f0ff',
+    border: '1px solid #ddd8ff',
+    borderRadius: '20px',
+    fontSize: '12px',
+    fontWeight: 500,
+    color: '#533BE2',
+    marginBottom: '20px',
   },
   section: {
     background: '#fff',
@@ -62,6 +89,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     margin: '0 0 16px 0',
     color: '#111827',
+  },
+  sectionSubtitle: {
+    fontSize: '13px',
+    color: '#6b7280',
+    margin: '-8px 0 16px 0',
   },
   field: {
     marginBottom: '16px',
@@ -106,6 +138,20 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '8px',
     fontSize: '14px',
   },
+  colorRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: '12px',
+  },
+  colorInput: {
+    width: '100%',
+    height: '40px',
+    padding: '2px',
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    background: '#fff',
+  },
   btnSave: {
     padding: '10px 24px',
     background: '#4f46e5',
@@ -139,12 +185,18 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#6b7280',
     margin: '4px 0 0',
   },
-  badge: {
-    display: 'inline-block',
-    padding: '2px 8px',
-    borderRadius: '12px',
+  embedBox: {
+    background: '#f8f9fa',
+    border: '1px solid #e5e7eb',
+    borderRadius: '8px',
+    padding: '14px',
+    fontFamily: 'monospace',
     fontSize: '12px',
-    fontWeight: 500,
+    lineHeight: '1.6',
+    color: '#374151',
+    overflowX: 'auto' as const,
+    whiteSpace: 'pre-wrap' as const,
+    wordBreak: 'break-all' as const,
   },
 };
 
@@ -200,6 +252,11 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
 
   return (
     <div style={styles.page}>
+      {/* Powered by badge */}
+      <div style={styles.poweredBy}>
+        🍪 Powered by <a href="https://silktide.com/tools/cookie-consent/" target="_blank" rel="noopener noreferrer" style={{ color: '#533BE2', fontWeight: 600, textDecoration: 'none' }}>Silktide Consent Manager</a>
+      </div>
+
       {/* Stats */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Consent Overview</h3>
@@ -235,6 +292,89 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
         </div>
       </div>
 
+      {/* Position & Display */}
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Posição & Apresentação</h3>
+        <p style={styles.sectionSubtitle}>Opções do Silktide Consent Manager para posicionamento e comportamento visual.</p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={styles.field}>
+            <label style={styles.label}>Posição do Banner</label>
+            <select
+              style={styles.select}
+              value={config.position}
+              onChange={e => setConfig(c => ({ ...c, position: e.target.value as CookieConfig['position'] }))}
+            >
+              <option value="bottomRight">Inferior Direito</option>
+              <option value="bottomLeft">Inferior Esquerdo</option>
+              <option value="bottomCenter">Inferior Centro</option>
+              <option value="center">Centro (modal)</option>
+            </select>
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Posição do Ícone</label>
+            <select
+              style={styles.select}
+              value={config.iconPosition}
+              onChange={e => setConfig(c => ({ ...c, iconPosition: e.target.value as CookieConfig['iconPosition'] }))}
+            >
+              <option value="bottomRight">Inferior Direito</option>
+              <option value="bottomLeft">Inferior Esquerdo</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.checkbox}>
+            <input
+              type="checkbox"
+              checked={config.showBackdrop}
+              onChange={e => setConfig(c => ({ ...c, showBackdrop: e.target.checked }))}
+            />
+            Mostrar backdrop (fundo escuro atrás do banner)
+          </label>
+        </div>
+      </div>
+
+      {/* Colors */}
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Cores</h3>
+        <p style={styles.sectionSubtitle}>Personalizar as cores do Silktide Consent Manager via CSS variables.</p>
+
+        <div style={styles.colorRow}>
+          <div style={styles.field}>
+            <label style={styles.label}>Cor Principal</label>
+            <input
+              type="color"
+              style={styles.colorInput}
+              value={config.primaryColor}
+              onChange={e => setConfig(c => ({ ...c, primaryColor: e.target.value }))}
+            />
+            <span style={{ fontSize: '11px', color: '#9ca3af' }}>{config.primaryColor}</span>
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Fundo</label>
+            <input
+              type="color"
+              style={styles.colorInput}
+              value={config.backgroundColor}
+              onChange={e => setConfig(c => ({ ...c, backgroundColor: e.target.value }))}
+            />
+            <span style={{ fontSize: '11px', color: '#9ca3af' }}>{config.backgroundColor}</span>
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Texto</label>
+            <input
+              type="color"
+              style={styles.colorInput}
+              value={config.textColor}
+              onChange={e => setConfig(c => ({ ...c, textColor: e.target.value }))}
+            />
+            <span style={{ fontSize: '11px', color: '#9ca3af' }}>{config.textColor}</span>
+          </div>
+        </div>
+      </div>
+
       {/* Text */}
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Texto & Links</h3>
@@ -259,7 +399,7 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div style={styles.field}>
-            <label style={styles.label}>Accept Button Text</label>
+            <label style={styles.label}>Texto do Botão Aceitar</label>
             <input
               style={styles.input}
               value={config.buttonText}
@@ -267,7 +407,7 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
             />
           </div>
           <div style={styles.field}>
-            <label style={styles.label}>Decline Button Text</label>
+            <label style={styles.label}>Texto do Botão Rejeitar</label>
             <input
               style={styles.input}
               value={config.declineText}
@@ -288,14 +428,14 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
 
       {/* Cookie Categories */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Cookie Categories</h3>
+        <h3 style={styles.sectionTitle}>Categorias de Cookies</h3>
         <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }}>
-          Select which cookie categories visitors can opt into.
+          Selecione quais categorias de cookies os visitantes podem aceitar. O Silktide integra automaticamente com Google Consent Mode v2.
         </p>
 
         <label style={{ ...styles.checkbox, opacity: 0.6 }}>
           <input type="checkbox" checked disabled />
-          Necessary (always required)
+          Necessários (sempre obrigatório)
         </label>
         <label style={styles.checkbox}>
           <input
@@ -303,7 +443,7 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
             checked={config.cookieTypes.analytics}
             onChange={e => setConfig(c => ({ ...c, cookieTypes: { ...c.cookieTypes, analytics: e.target.checked } }))}
           />
-          Analytics
+          Analytics <span style={{ fontSize: '11px', color: '#9ca3af', marginLeft: '4px' }}>→ analytics_storage (Google)</span>
         </label>
         <label style={styles.checkbox}>
           <input
@@ -311,7 +451,7 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
             checked={config.cookieTypes.marketing}
             onChange={e => setConfig(c => ({ ...c, cookieTypes: { ...c.cookieTypes, marketing: e.target.checked } }))}
           />
-          Marketing
+          Marketing <span style={{ fontSize: '11px', color: '#9ca3af', marginLeft: '4px' }}>→ ad_storage, ad_user_data, ad_personalization (Google)</span>
         </label>
         <label style={styles.checkbox}>
           <input
@@ -319,27 +459,41 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
             checked={config.cookieTypes.preferences}
             onChange={e => setConfig(c => ({ ...c, cookieTypes: { ...c.cookieTypes, preferences: e.target.checked } }))}
           />
-          Preferences
+          Preferências
         </label>
       </div>
 
       {/* Custom CSS */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Custom CSS</h3>
+        <h3 style={styles.sectionTitle}>CSS Personalizado</h3>
         <div style={styles.field}>
-          <label style={styles.label}>Override banner styles</label>
+          <label style={styles.label}>Sobrescrever estilos do Silktide</label>
           <textarea
             style={{ ...styles.textarea, fontFamily: 'monospace', fontSize: '13px' }}
-            placeholder=".cookie-notice { ... }"
+            placeholder="#stcm-wrapper { --fontFamily: 'Your Font', sans-serif; }"
             value={config.customCSS}
             onChange={e => setConfig(c => ({ ...c, customCSS: e.target.value }))}
           />
+          <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+            Variáveis disponíveis: --fontFamily, --primaryColor, --backgroundColor, --textColor, --boxShadow, --iconColor, --iconBackgroundColor
+          </p>
+        </div>
+      </div>
+
+      {/* Embed Code */}
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Código de Integração</h3>
+        <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px' }}>
+          Copie e cole este snippet no <code>&lt;head&gt;</code> do seu website.
+        </p>
+        <div style={styles.embedBox}>
+          {`<script src="${window.location.origin}/api/v1/cookie-notice/widget.js" data-api-key="YOUR_API_KEY"></script>`}
         </div>
       </div>
 
       {/* Save */}
       <button style={styles.btnSave} onClick={handleSave} disabled={saving}>
-        {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Settings'}
+        {saving ? 'A guardar...' : saved ? 'Guardado!' : 'Guardar Definições'}
       </button>
     </div>
   );

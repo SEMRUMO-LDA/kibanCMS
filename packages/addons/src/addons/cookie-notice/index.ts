@@ -1,6 +1,7 @@
 /**
- * Cookie Notice Add-on
- * GDPR-compliant cookie consent management
+ * Cookie Notice Add-on — Powered by Silktide Consent Manager
+ * GDPR-compliant cookie consent management using Silktide (open-source, MIT).
+ * Supports Google Consent Mode v2 natively.
  */
 
 import type { AddonManifest } from '../../types';
@@ -10,8 +11,8 @@ import { CookieSettingsPage } from './CookieSettingsPage';
 export const CookieNoticeAddon: AddonManifest = {
   id: 'cookie-notice',
   name: 'Cookie Notice',
-  version: '1.0.0',
-  description: 'GDPR-compliant cookie consent banner with customizable design',
+  version: '2.0.0',
+  description: 'GDPR-compliant cookie consent banner powered by Silktide Consent Manager',
   author: 'Kiban Agency',
   category: 'compliance',
   icon: '🍪',
@@ -24,34 +25,45 @@ export const CookieNoticeAddon: AddonManifest = {
       defaultValue: true,
       required: true,
     },
-    theme: {
-      type: 'select',
-      label: 'Theme',
-      options: ['light', 'dark'],
-      defaultValue: 'dark',
-    },
     position: {
       type: 'select',
-      label: 'Position',
-      options: ['top', 'bottom', 'center'],
-      defaultValue: 'bottom',
+      label: 'Banner Position',
+      options: ['bottomRight', 'bottomLeft', 'bottomCenter', 'center'],
+      defaultValue: 'bottomRight',
+    },
+    iconPosition: {
+      type: 'select',
+      label: 'Re-open Icon Position',
+      options: ['bottomLeft', 'bottomRight'],
+      defaultValue: 'bottomRight',
+    },
+    showBackdrop: {
+      type: 'boolean',
+      label: 'Show Backdrop',
+      defaultValue: false,
+    },
+    title: {
+      type: 'text',
+      label: 'Title',
+      defaultValue: 'Informação sobre cookies',
+      localized: true,
     },
     message: {
       type: 'text',
       label: 'Consent Message',
-      defaultValue: 'We use cookies to enhance your experience. By continuing to visit this site you agree to our use of cookies.',
+      defaultValue: 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros.',
       localized: true,
     },
     buttonText: {
       type: 'text',
       label: 'Accept Button Text',
-      defaultValue: 'Accept',
+      defaultValue: 'Aceitar todos',
       localized: true,
     },
     declineText: {
       type: 'text',
-      label: 'Decline Button Text',
-      defaultValue: 'Decline',
+      label: 'Reject Button Text',
+      defaultValue: 'Rejeitar não essenciais',
       localized: true,
     },
     policyUrl: {
@@ -86,10 +98,25 @@ export const CookieNoticeAddon: AddonManifest = {
         },
       },
     },
+    primaryColor: {
+      type: 'text',
+      label: 'Primary Color',
+      defaultValue: '#533BE2',
+    },
+    backgroundColor: {
+      type: 'text',
+      label: 'Background Color',
+      defaultValue: '#FFFFFF',
+    },
+    textColor: {
+      type: 'text',
+      label: 'Text Color',
+      defaultValue: '#253B48',
+    },
     customCSS: {
       type: 'textarea',
       label: 'Custom CSS',
-      placeholder: '.cookie-notice { ... }',
+      placeholder: '#stcm-wrapper { --fontFamily: "Your Font", sans-serif; }',
     },
   },
 
@@ -188,7 +215,7 @@ export const CookieNoticeAddon: AddonManifest = {
   // Lifecycle hooks
   hooks: {
     onActivate: async (context) => {
-      console.log('Cookie Notice activated');
+      console.log('Cookie Notice (Silktide) activated');
       // Initialize default settings
       await context.supabase
         .from('addon_configs')
@@ -196,14 +223,16 @@ export const CookieNoticeAddon: AddonManifest = {
           addon_id: 'cookie-notice',
           config: {
             enabled: true,
-            theme: 'dark',
-            position: 'bottom',
+            position: 'bottomRight',
+            iconPosition: 'bottomRight',
+            showBackdrop: false,
+            primaryColor: '#533BE2',
           },
         });
     },
 
     onDeactivate: async (context) => {
-      console.log('Cookie Notice deactivated');
+      console.log('Cookie Notice (Silktide) deactivated');
     },
 
     onConfigUpdate: async (config, context) => {
@@ -238,4 +267,3 @@ export const CookieNoticeAddon: AddonManifest = {
 
 // Export component for direct use
 export { CookieNoticeComponent as KibanCookieNotice } from './CookieNotice';
-export { useCookieConsent } from './hooks/useCookieConsent';

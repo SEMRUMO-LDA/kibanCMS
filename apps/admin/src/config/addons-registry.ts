@@ -270,6 +270,11 @@ const bookings: AddonDefinition = {
         { id: 'notes', name: 'notes', label: 'Notes', type: 'textarea' },
         { id: 'confirmed_at', name: 'confirmed_at', label: 'Confirmed At', type: 'date' },
         { id: 'cancelled_at', name: 'cancelled_at', label: 'Cancelled At', type: 'date' },
+        { id: 'customer_language', name: 'customer_language', label: 'Customer Language', type: 'select', helpText: 'Optional. Determines the language of post-tour automated emails. Falls back to the site default.', options: [
+          { label: 'Portuguese', value: 'pt' },
+          { label: 'English', value: 'en' },
+        ] },
+        { id: 'review_email_sent_at', name: 'review_email_sent_at', label: 'Review Email Sent At', type: 'date', helpText: 'Auto-set by the Post-Tour Reviews add-on. Empty = not sent yet. Set manually only to skip a booking.' },
       ],
     },
   ],
@@ -636,12 +641,12 @@ const i18n: AddonDefinition = {
 const cookieNotice: AddonDefinition = {
   id: 'cookie-notice',
   name: 'Cookie Notice',
-  description: 'GDPR-compliant cookie consent banner with granular controls',
-  longDescription: 'Display a customisable cookie consent banner to comply with GDPR/ePrivacy. Visitors choose which cookie categories to accept (necessary, analytics, marketing, preferences). All consent records are stored for audit. Includes dark/light themes, custom CSS, and a consent analytics dashboard.',
+  description: 'GDPR-compliant cookie consent banner powered by Silktide Consent Manager',
+  longDescription: 'Banner de consentimento de cookies GDPR com Silktide Consent Manager (open-source). Suporta Google Consent Mode v2, categorias granulares (analytics, marketing, preferências), posicionamento flexível e script injection automático. Totalmente personalizável via CSS variables. Todas as respostas de consentimento são registadas no CMS para auditoria.',
   icon: 'cookie',
-  color: '#f59e0b',
+  color: '#533BE2',
   category: 'compliance',
-  version: '1.0.0',
+  version: '2.0.0',
   author: 'kibanCMS',
   collections: [],
   settingsRoute: '/addons/cookie-notice',
@@ -899,6 +904,47 @@ const affiliates: AddonDefinition = {
 };
 
 // ============================================
+// POST-TOUR REVIEWS ADD-ON (auto review-request emails — depends on Bookings)
+// ============================================
+
+const postTourReviews: AddonDefinition = {
+  id: 'post-tour-reviews',
+  name: 'Post-Tour Reviews',
+  description: 'Automated review-request email a few days after each tour — drives Google + TripAdvisor reviews',
+  longDescription: 'Sends a thank-you email with one-click CTAs to Google and TripAdvisor a configurable number of days after a confirmed booking. Bilingual (PT/EN) — picks the language from the booking\'s customer_language field, falls back to the site default. Idempotent — each booking is emailed at most once. Skips cancelled and refunded bookings automatically. Single dedicated config entry; no per-tour setup needed.',
+  icon: 'star',
+  color: '#f59e0b',
+  category: 'marketing',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  settingsRoute: '/addons/post-tour-reviews',
+  collections: [
+    {
+      name: 'Post-Tour Reviews Config',
+      slug: 'post-tour-reviews',
+      description: 'Config entry for the Post-Tour Reviews add-on — single entry with slug "config"',
+      type: 'custom',
+      fields: [
+        { id: 'enabled', name: 'enabled', label: 'Enabled', type: 'boolean', helpText: 'Master switch — disable to pause the worker without uninstalling the add-on' },
+        { id: 'delay_days', name: 'delay_days', label: 'Delay (days after tour)', type: 'number', required: true, helpText: 'Days after the booking date before sending the review request. Default: 2.', placeholder: '2' },
+        { id: 'google_review_url', name: 'google_review_url', label: 'Google Review URL', type: 'text', helpText: 'Direct link to your Google Business profile review form (g.page/r/...). Leave blank to hide this CTA.', placeholder: 'https://g.page/r/...' },
+        { id: 'tripadvisor_url', name: 'tripadvisor_url', label: 'TripAdvisor URL', type: 'text', helpText: 'Direct link to your TripAdvisor review form. Leave blank to hide this CTA.', placeholder: 'https://www.tripadvisor.com/UserReviewEdit-...' },
+        // ── PT template ──
+        { id: 'subject_pt', name: 'subject_pt', label: 'Subject (PT)', type: 'text', helpText: 'Placeholders: {customer_name}, {tour_name}, {tour_date}', placeholder: 'Olá {customer_name}, como foi a sua experiência?' },
+        { id: 'body_pt', name: 'body_pt', label: 'Body (PT)', type: 'textarea', helpText: 'Plain text or basic HTML. Same placeholders as subject.', placeholder: 'Obrigado por escolher-nos! Adoraríamos receber a sua avaliação...' },
+        { id: 'cta_google_label_pt', name: 'cta_google_label_pt', label: 'Google CTA Label (PT)', type: 'text', placeholder: 'Avaliar no Google' },
+        { id: 'cta_tripadvisor_label_pt', name: 'cta_tripadvisor_label_pt', label: 'TripAdvisor CTA Label (PT)', type: 'text', placeholder: 'Avaliar no TripAdvisor' },
+        // ── EN template ──
+        { id: 'subject_en', name: 'subject_en', label: 'Subject (EN)', type: 'text', helpText: 'Placeholders: {customer_name}, {tour_name}, {tour_date}', placeholder: 'Hi {customer_name}, how was your experience?' },
+        { id: 'body_en', name: 'body_en', label: 'Body (EN)', type: 'textarea', helpText: 'Plain text or basic HTML. Same placeholders as subject.', placeholder: 'Thanks for choosing us! We would love to hear about your experience...' },
+        { id: 'cta_google_label_en', name: 'cta_google_label_en', label: 'Google CTA Label (EN)', type: 'text', placeholder: 'Review on Google' },
+        { id: 'cta_tripadvisor_label_en', name: 'cta_tripadvisor_label_en', label: 'TripAdvisor CTA Label (EN)', type: 'text', placeholder: 'Review on TripAdvisor' },
+      ],
+    },
+  ],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -918,6 +964,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   stripePayments,
   i18n,
   whatsappWidget,
+  postTourReviews,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {

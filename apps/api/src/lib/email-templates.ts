@@ -330,3 +330,104 @@ export function paymentAdminNotificationTemplate(
     html: layout(body, siteName),
   };
 }
+
+// ── Post-Tour Review Request ──
+
+interface PostTourReviewInput {
+  booking: Record<string, any>;
+  language: 'pt' | 'en';
+  config: Record<string, any>;
+  siteName: string;
+}
+
+/**
+ * Render a bilingual review-request email. Picks PT or EN copy from config,
+ * substitutes placeholders, and inlines up to two CTAs (Google + TripAdvisor).
+ * Falls back to PT defaults if the requested language has empty templates.
+ */
+export function postTourReviewTemplate(
+  input: PostTourReviewInput,
+): { subject: string; html: string } {
+  const { booking, language, config, siteName } = input;
+
+  const customerName = booking.customer_name || '';
+  const tourName = booking.tour_name || booking.resource_title || booking.resource_slug || '';
+  const tourDate = booking.date || '';
+
+  // Pick template values; if the requested language is empty, fall back to PT,
+  // and if PT is also empty, use a sensible hardcoded default.
+  const pick = (lang: 'pt' | 'en', key: string, fallback: string): string => {
+    const langKey = `${key}_${lang}`;
+    const v = (config[langKey] || '').toString().trim();
+    if (v) return v;
+    if (lang !== 'pt') {
+      const pt = (config[`${key}_pt`] || '').toString().trim();
+      if (pt) return pt;
+    }
+    return fallback;
+  };
+
+  const defaults = {
+    pt: {
+      subject: `Como foi a sua experiência com {tour_name}?`,
+      body: `Obrigado por escolher-nos!\n\nEsperamos que tenha aproveitado {tour_name} no dia {tour_date}. Se tiver um momento, adoraríamos receber a sua opinião — ajuda-nos imenso e leva poucos segundos.`,
+      ctaGoogle: 'Avaliar no Google',
+      ctaTripadvisor: 'Avaliar no TripAdvisor',
+    },
+    en: {
+      subject: `How was your {tour_name} experience?`,
+      body: `Thanks for choosing us!\n\nWe hope you enjoyed {tour_name} on {tour_date}. If you have a moment, we would love to hear your feedback — it helps us a lot and takes just a few seconds.`,
+      ctaGoogle: 'Review on Google',
+      ctaTripadvisor: 'Review on TripAdvisor',
+    },
+  };
+  const d = defaults[language];
+
+  const subjectRaw = pick(language, 'subject', d.subject);
+  const bodyRaw = pick(language, 'body', d.body);
+  const ctaGoogleLabel = pick(language, 'cta_google_label', d.ctaGoogle);
+  const ctaTripadvisorLabel = pick(language, 'cta_tripadvisor_label', d.ctaTripadvisor);
+
+  const replace = (s: string) => s
+    .replace(/\{customer_name\}/g, customerName)
+    .replace(/\{tour_name\}/g, tourName)
+    .replace(/\{tour_date\}/g, tourDate);
+
+  const subject = replace(subjectRaw);
+  const greeting = customerName
+    ? (language === 'pt' ? `Olá ${escapeHtml(customerName)},` : `Hi ${escapeHtml(customerName)},`)
+    : (language === 'pt' ? 'Olá,' : 'Hi,');
+
+  // Body is plain text; preserve paragraphs by splitting on double newlines.
+  const bodyHtml = replace(escapeHtml(bodyRaw))
+    .split(/\n\s*\n/)
+    .map(p => `<p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;line-height:1.55;">${p.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  const googleUrl = (config.google_review_url || '').toString().trim();
+  const tripadvisorUrl = (config.tripadvisor_url || '').toString().trim();
+
+  const ctaButton = (url: string, label: string, bg: string) => `
+    <a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;margin:6px 4px;background:${bg};color:#fff;text-decoration:none;border-radius:6px;font-size:15px;font-weight:600;">${escapeHtml(label)}</a>
+  `;
+
+  let ctas = '';
+  if (googleUrl) ctas += ctaButton(googleUrl, ctaGoogleLabel, '#4285f4');
+  if (tripadvisorUrl) ctas += ctaButton(tripadvisorUrl, ctaTripadvisorLabel, '#00aa6c');
+
+  const ctaBlock = ctas
+    ? `<div style="text-align:center;margin:24px 0;">${ctas}</div>`
+    : '';
+
+  const sign = language === 'pt' ? 'Obrigado!' : 'Thank you!';
+
+  const html = layout(`
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">${greeting}</p>
+    ${bodyHtml}
+    ${ctaBlock}
+    <p style="margin:24px 0 0;font-size:14px;color:#888;">${sign}</p>
+    <p style="margin:4px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `, siteName);
+
+  return { subject, html };
+}

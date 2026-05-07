@@ -22,6 +22,7 @@ import {
   newsletterAdminNotificationTemplate,
   paymentReceiptTemplate,
   paymentAdminNotificationTemplate,
+  postTourReviewTemplate,
 } from './email-templates.js';
 
 // ── Types ──
@@ -348,4 +349,29 @@ export async function sendPaymentAdminNotification(payment: {
     html,
     replyTo: payment.customer_email,
   });
+}
+
+/**
+ * Send a post-tour review-request email. Bilingual — picks PT or EN based on
+ * `language` arg. The caller (worker) is responsible for marking the booking
+ * as sent before invoking, to avoid double-send on transient errors.
+ */
+export async function sendPostTourReview(
+  booking: Record<string, any>,
+  language: 'pt' | 'en',
+  reviewConfig: Record<string, any>,
+): Promise<{ id: string } | null> {
+  if (!booking.customer_email) return null;
+
+  const config = await getEmailConfig();
+  if (!config) return null;
+
+  const { subject, html } = postTourReviewTemplate({
+    booking,
+    language,
+    config: reviewConfig,
+    siteName: config.defaultFromName,
+  });
+
+  return sendEmail({ to: booking.customer_email, subject, html });
 }

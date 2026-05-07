@@ -39,6 +39,7 @@ import { requestIdMiddleware } from './middleware/request-id.js';
 import { loadTenants, resolveTenant, getAllTenants } from './config/tenants.js';
 import { startWebhookWorker } from './lib/webhook-worker.js';
 import { startScheduledPublisher } from './lib/scheduled-publisher.js';
+import { startPostTourReviewWorker } from './lib/post-tour-reviews-worker.js';
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -410,12 +411,14 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 // Start background workers
 const stopWebhookWorker = startWebhookWorker();
 const stopScheduledPublisher = startScheduledPublisher();
+const stopPostTourReviewWorker = startPostTourReviewWorker();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully...');
   stopWebhookWorker();
   stopScheduledPublisher();
+  stopPostTourReviewWorker();
   process.exit(0);
 });
 
@@ -423,6 +426,7 @@ process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully...');
   stopWebhookWorker();
   stopScheduledPublisher();
+  stopPostTourReviewWorker();
   process.exit(0);
 });
 

@@ -1,16 +1,23 @@
 /**
- * CookieNotice — GDPR consent banner component.
- * Renders a customizable banner at top/bottom/center of the viewport.
- * Integrates with useCookieConsent for state management.
+ * CookieNotice — Silktide Consent Manager React wrapper.
+ *
+ * Dynamically loads the Silktide Consent Manager CSS + JS from CDN
+ * and initialises it with the provided configuration.
+ *
+ * For most use-cases the embeddable widget.js is preferred (zero React dependency).
+ * This component is provided for internal React-based frontends that want
+ * a declarative way to mount the cookie banner.
  */
 
-import React, { useState } from 'react';
-import { useCookieConsent, type CookieCategories } from './hooks/useCookieConsent';
+import React, { useEffect, useRef } from 'react';
 
 export interface CookieNoticeConfig {
   theme?: 'light' | 'dark';
-  position?: 'top' | 'bottom' | 'center';
+  position?: 'bottomRight' | 'bottomLeft' | 'bottomCenter' | 'center';
+  iconPosition?: 'bottomLeft' | 'bottomRight';
+  showBackdrop?: boolean;
   message?: string;
+  title?: string;
   buttonText?: string;
   declineText?: string;
   policyUrl?: string;
@@ -21,177 +28,149 @@ export interface CookieNoticeConfig {
     preferences?: boolean;
   };
   customCSS?: string;
+  primaryColor?: string;
+  backgroundColor?: string;
+  textColor?: string;
   apiUrl?: string;
 }
 
-const DEFAULT_MESSAGE = 'We use cookies to enhance your experience. By continuing to visit this site you agree to our use of cookies.';
+// Silktide CDN assets
+const SILKTIDE_CSS = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.css';
+const SILKTIDE_JS  = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.js';
+
+declare global {
+  interface Window {
+    silktideConsentManager?: {
+      init: (config: any) => void;
+      update: (config: any) => void;
+      resetConsent: () => void;
+      getInstance: () => any;
+    };
+  }
+}
+
+function loadAsset(tag: 'link' | 'script', attrs: Record<string, string>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement(tag) as HTMLLinkElement | HTMLScriptElement;
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    el.onload = () => resolve();
+    el.onerror = () => reject(new Error(`Failed to load ${attrs.href || attrs.src}`));
+    document.head.appendChild(el);
+  });
+}
 
 export function CookieNoticeComponent({ config = {} }: { config?: CookieNoticeConfig }) {
-  const {
-    theme = 'dark',
-    position = 'bottom',
-    message = DEFAULT_MESSAGE,
-    buttonText = 'Accept',
-    declineText = 'Decline',
-    policyUrl = '/privacy-policy',
-    customCSS = '',
-    apiUrl,
-  } = config;
+  const initialised = useRef(false);
 
-  const { visible, acceptAll, declineAll, acceptSelected } = useCookieConsent(apiUrl);
-  const [showDetails, setShowDetails] = useState(false);
-  const [categories, setCategories] = useState<CookieCategories>({
-    necessary: true,
-    analytics: false,
-    marketing: false,
-    preferences: false,
-  });
+  useEffect(() => {
+    if (initialised.current) return;
+    initialised.current = true;
 
-  if (!visible) return null;
+    async function boot() {
+      // Load Silktide CSS + JS
+      await loadAsset('link', { rel: 'stylesheet', href: SILKTIDE_CSS });
+      await loadAsset('script', { src: SILKTIDE_JS, async: 'true' });
 
-  const isDark = theme === 'dark';
+      if (!window.silktideConsentManager) {
+        console.warn('[KibanCMS] Silktide Consent Manager not found after load');
+        return;
+      }
 
-  const styles: Record<string, React.CSSProperties> = {
-    overlay: {
-      position: 'fixed',
-      left: 0, right: 0, zIndex: 99999,
-      ...(position === 'top' ? { top: 0 } : position === 'center' ? { top: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' } : { bottom: 0 }),
-    },
-    banner: {
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      fontSize: '14px',
-      lineHeight: '1.5',
-      padding: '20px 24px',
-      background: isDark ? '#1a1a2e' : '#ffffff',
-      color: isDark ? '#e0e0e0' : '#333333',
-      borderTop: position !== 'top' ? `1px solid ${isDark ? '#2a2a4a' : '#e5e5e5'}` : 'none',
-      borderBottom: position === 'top' ? `1px solid ${isDark ? '#2a2a4a' : '#e5e5e5'}` : 'none',
-      boxShadow: '0 -2px 16px rgba(0,0,0,0.1)',
-      ...(position === 'center' ? { borderRadius: '12px', maxWidth: '520px', width: '90%', border: `1px solid ${isDark ? '#2a2a4a' : '#e5e5e5'}` } : {}),
-    },
-    content: {
-      maxWidth: '1200px',
-      margin: '0 auto',
-    },
-    text: {
-      margin: '0 0 16px 0',
-    },
-    link: {
-      color: isDark ? '#7c8cf5' : '#4f46e5',
-      textDecoration: 'underline',
-    },
-    actions: {
-      display: 'flex',
-      gap: '10px',
-      flexWrap: 'wrap' as const,
-      alignItems: 'center',
-    },
-    btnAccept: {
-      padding: '10px 24px',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '14px',
-      fontWeight: 600,
-      cursor: 'pointer',
-      background: '#4f46e5',
-      color: '#ffffff',
-    },
-    btnDecline: {
-      padding: '10px 24px',
-      border: `1px solid ${isDark ? '#444' : '#ccc'}`,
-      borderRadius: '8px',
-      fontSize: '14px',
-      fontWeight: 500,
-      cursor: 'pointer',
-      background: 'transparent',
-      color: isDark ? '#ccc' : '#555',
-    },
-    btnCustomize: {
-      padding: '10px 16px',
-      border: 'none',
-      borderRadius: '8px',
-      fontSize: '13px',
-      cursor: 'pointer',
-      background: 'transparent',
-      color: isDark ? '#999' : '#777',
-      textDecoration: 'underline',
-    },
-    details: {
-      marginTop: '16px',
-      paddingTop: '16px',
-      borderTop: `1px solid ${isDark ? '#333' : '#eee'}`,
-      display: 'flex',
-      flexDirection: 'column' as const,
-      gap: '10px',
-    },
-    checkbox: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      fontSize: '13px',
-    },
-  };
+      // Build consent types
+      const cats = config.cookieTypes || {};
+      const consentTypes: any[] = [
+        {
+          id: 'essential',
+          label: 'Necessários',
+          description: 'Estes cookies são essenciais para o funcionamento do website.',
+          required: true,
+        },
+      ];
 
-  return (
-    <div style={styles.overlay} role="dialog" aria-label="Cookie consent" aria-modal={position === 'center'}>
-      {customCSS && <style>{customCSS}</style>}
-      <div style={styles.banner} className="cookie-notice">
-        <div style={styles.content}>
-          <p style={styles.text}>
-            {message}{' '}
-            <a href={policyUrl} style={styles.link} target="_blank" rel="noopener noreferrer">
-              Privacy Policy
-            </a>
-          </p>
+      if (cats.analytics) {
+        consentTypes.push({
+          id: 'analytics',
+          label: 'Analíticos',
+          description: 'Ajudam-nos a compreender como os visitantes interagem com o website.',
+          defaultValue: false,
+          gtag: 'analytics_storage',
+        });
+      }
 
-          {showDetails && (
-            <div style={styles.details}>
-              <label style={{ ...styles.checkbox, opacity: 0.6 }}>
-                <input type="checkbox" checked disabled />
-                Necessary (always active)
-              </label>
-              <label style={styles.checkbox}>
-                <input
-                  type="checkbox"
-                  checked={categories.analytics}
-                  onChange={e => setCategories(c => ({ ...c, analytics: e.target.checked }))}
-                />
-                Analytics
-              </label>
-              <label style={styles.checkbox}>
-                <input
-                  type="checkbox"
-                  checked={categories.marketing}
-                  onChange={e => setCategories(c => ({ ...c, marketing: e.target.checked }))}
-                />
-                Marketing
-              </label>
-              <label style={styles.checkbox}>
-                <input
-                  type="checkbox"
-                  checked={categories.preferences}
-                  onChange={e => setCategories(c => ({ ...c, preferences: e.target.checked }))}
-                />
-                Preferences
-              </label>
-            </div>
-          )}
+      if (cats.marketing) {
+        consentTypes.push({
+          id: 'marketing',
+          label: 'Marketing',
+          description: 'Utilizados para apresentar anúncios personalizados.',
+          defaultValue: false,
+          gtag: ['ad_storage', 'ad_user_data', 'ad_personalization'],
+        });
+      }
 
-          <div style={styles.actions}>
-            <button style={styles.btnAccept} onClick={showDetails ? () => acceptSelected(categories) : acceptAll}>
-              {showDetails ? 'Save Preferences' : buttonText}
-            </button>
-            <button style={styles.btnDecline} onClick={declineAll}>
-              {declineText}
-            </button>
-            {!showDetails && (
-              <button style={styles.btnCustomize} onClick={() => setShowDetails(true)}>
-                Customize
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+      if (cats.preferences) {
+        consentTypes.push({
+          id: 'preferences',
+          label: 'Preferências',
+          description: 'Permitem ao website lembrar-se de escolhas feitas pelo utilizador.',
+          defaultValue: false,
+        });
+      }
+
+      // Title + message HTML
+      const title = config.title || 'Informação sobre cookies';
+      const message = config.message || 'Ao navegar neste website podem ser colocados no seu dispositivo cookies.';
+      let descriptionHtml = `<p><strong>${title}</strong></p><p>${message}</p>`;
+      if (config.policyUrl) {
+        descriptionHtml += `<p><a href="${config.policyUrl}" target="_blank" rel="noopener">Política de Cookies</a></p>`;
+      }
+
+      // Inject CSS variable overrides
+      const overrides: string[] = [];
+      if (config.primaryColor)    overrides.push(`--primaryColor: ${config.primaryColor}`);
+      if (config.backgroundColor) overrides.push(`--backgroundColor: ${config.backgroundColor}`);
+      if (config.textColor)       overrides.push(`--textColor: ${config.textColor}`);
+
+      if (overrides.length > 0 || config.customCSS) {
+        const style = document.createElement('style');
+        let css = '';
+        if (overrides.length > 0) css += `#stcm-wrapper { ${overrides.join('; ')}; }\n`;
+        if (config.customCSS) css += config.customCSS;
+        style.textContent = css;
+        document.head.appendChild(style);
+      }
+
+      // Initialise Silktide
+      window.silktideConsentManager!.init({
+        consentTypes,
+        text: {
+          prompt: {
+            description: descriptionHtml,
+            acceptAllButtonText: config.buttonText || 'Aceitar todos',
+            rejectNonEssentialButtonText: config.declineText || 'Rejeitar não essenciais',
+            preferencesButtonText: 'Preferências',
+          },
+          preferences: {
+            title: 'Personalizar preferências',
+            description: '<p>Escolha quais cookies pretende aceitar.</p>',
+            saveButtonText: 'Guardar e fechar',
+          },
+        },
+        prompt: {
+          position: config.position || 'bottomRight',
+        },
+        icon: {
+          position: config.iconPosition || 'bottomRight',
+        },
+        backdrop: {
+          show: config.showBackdrop || false,
+        },
+        autoShow: true,
+      });
+    }
+
+    boot().catch(err => console.error('[KibanCMS] Cookie notice init error:', err));
+  }, [config]);
+
+  // Silktide renders its own DOM — no React output needed
+  return null;
 }

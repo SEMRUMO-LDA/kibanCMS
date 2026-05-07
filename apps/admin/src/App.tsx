@@ -29,6 +29,7 @@ import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
 import { WhatsAppWidgetSettings } from './pages/WhatsAppWidgetSettings';
+import { PostTourReviewsSettings } from './pages/PostTourReviewsSettings';
 import { NewsletterBrevoSettings } from './pages/NewsletterBrevoSettings';
 
 // Protected Route Wrapper — never shows a blank page.
@@ -115,6 +116,7 @@ const AppContent = () => {
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
         <Route path="addons/accessibility" element={<AccessibilitySettings />} />
         <Route path="addons/whatsapp-widget" element={<WhatsAppWidgetSettings />} />
+        <Route path="addons/post-tour-reviews" element={<PostTourReviewsSettings />} />
         <Route path="addons/newsletter" element={<NewsletterBrevoSettings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 

@@ -1,15 +1,22 @@
 /**
- * kibanCMS Cookie Notice Widget
+ * kibanCMS Cookie Notice Widget — Powered by Silktide Consent Manager
  *
- * GDPR-compliant cookie consent banner.
- * Reads configuration from the CMS and renders a customisable banner.
+ * GDPR-compliant cookie consent banner using Silktide Consent Manager (open-source, MIT).
+ * Reads configuration from the CMS admin, dynamically loads Silktide CSS + JS from CDN,
+ * initialises the banner with mapped options, and records consent to Supabase.
  *
- * Embed: <script src="https://your-cms.com/api/v1/cookie-notice/widget.js" data-api-key="YOUR_KEY"></script>
+ * Supports Google Consent Mode v2 natively via Silktide's gtag integration.
+ *
+ * Embed:
+ *   <script src="https://your-cms.com/api/v1/cookie-notice/widget.js" data-api-key="YOUR_KEY"></script>
+ *
+ * Optional attributes:
+ *   data-tenant="TENANT_ID"   — multi-tenant resolution
  */
 (function () {
   'use strict';
 
-  // ── Config from script tag ──
+  // ── Config from script tag ──────────────────────────────────────────
   var scripts = document.querySelectorAll('script[data-api-key]');
   var scriptTag = scripts[scripts.length - 1];
   if (!scriptTag) return;
@@ -21,15 +28,28 @@
   var BASE_URL = srcUrl.origin;
   var CONSENT_KEY = 'kiban_cookie_consent';
   var VISITOR_KEY = 'kiban_visitor_id';
-  // Multi-tenant: shared API host needs X-Tenant to resolve the right Supabase.
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
+
+  // Silktide CDN assets
+  var SILKTIDE_CSS = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.css';
+  var SILKTIDE_JS  = 'https://cdn.jsdelivr.net/npm/@silktide/consent-manager@latest/silktide-consent-manager.js';
+
+  // ── Helpers ──────────────────────────────────────────────────────────
 
   function setAuthHeaders(xhr) {
     xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
     if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
   }
 
-  // ── Check if already consented ──
+  function getVisitorId() {
+    var id = localStorage.getItem(VISITOR_KEY);
+    if (!id) {
+      id = 'v_' + Math.random().toString(36).substring(2, 14) + Date.now().toString(36);
+      try { localStorage.setItem(VISITOR_KEY, id); } catch (e) {}
+    }
+    return id;
+  }
+
   function getConsent() {
     try {
       var raw = localStorage.getItem(CONSENT_KEY);
@@ -42,34 +62,9 @@
     try { localStorage.setItem(CONSENT_KEY, JSON.stringify(data)); } catch (e) {}
   }
 
-  function getVisitorId() {
-    var id = localStorage.getItem(VISITOR_KEY);
-    if (!id) {
-      id = 'v_' + Math.random().toString(36).substring(2, 14) + Date.now().toString(36);
-      try { localStorage.setItem(VISITOR_KEY, id); } catch (e) {}
-    }
-    return id;
-  }
+  // ── Send consent to Supabase ────────────────────────────────────────
 
-  // Skip if already consented
-  if (getConsent()) return;
-
-  // ── Fetch config ──
-  function fetchConfig(callback) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', BASE_URL + '/api/v1/cookie-notice/config');
-    setAuthHeaders(xhr);
-    xhr.onload = function () {
-      if (xhr.status === 200) {
-        try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }
-      } else { callback(new Error('HTTP ' + xhr.status)); }
-    };
-    xhr.onerror = function () { callback(new Error('Network error')); };
-    xhr.send();
-  }
-
-  // ── Send consent to server ──
-  function sendConsent(given, categories) {
+  function sendConsentToServer(given, categories) {
     var data = {
       visitor_id: getVisitorId(),
       consent_given: given,
@@ -84,151 +79,228 @@
     xhr.send(JSON.stringify(data));
   }
 
-  // ── Render Banner ──
-  function renderBanner(config) {
+  // ── Fetch CMS config ────────────────────────────────────────────────
+
+  function fetchConfig(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', BASE_URL + '/api/v1/cookie-notice/config');
+    setAuthHeaders(xhr);
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }
+      } else { callback(new Error('HTTP ' + xhr.status)); }
+    };
+    xhr.onerror = function () { callback(new Error('Network error')); };
+    xhr.send();
+  }
+
+  // ── Load external asset ─────────────────────────────────────────────
+
+  function loadCSS(href, onLoad) {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href;
+    link.onload = onLoad || function () {};
+    link.onerror = function () { console.warn('[KibanCMS] Failed to load Silktide CSS'); };
+    document.head.appendChild(link);
+  }
+
+  function loadJS(src, onLoad) {
+    var script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = onLoad || function () {};
+    script.onerror = function () { console.warn('[KibanCMS] Failed to load Silktide JS'); };
+    document.head.appendChild(script);
+  }
+
+  // ── Map CMS config → Silktide options ───────────────────────────────
+
+  function mapPositionToSilktide(pos) {
+    switch (pos) {
+      case 'top':          return 'bottomCenter';
+      case 'bottom':       return 'bottomCenter';
+      case 'center':       return 'center';
+      case 'bottomRight':  return 'bottomRight';
+      case 'bottomLeft':   return 'bottomLeft';
+      case 'bottomCenter': return 'bottomCenter';
+      default:             return 'bottomRight';
+    }
+  }
+
+  function buildSilktideConfig(config) {
+    var cats = config.cookieTypes || {};
+
+    // Build consent types array
+    var consentTypes = [
+      {
+        id: 'essential',
+        label: 'Necessários',
+        description: 'Estes cookies são essenciais para o funcionamento do website e não podem ser desativados.',
+        required: true,
+      },
+    ];
+
+    if (cats.analytics) {
+      consentTypes.push({
+        id: 'analytics',
+        label: 'Analíticos',
+        description: 'Estes cookies ajudam-nos a compreender como os visitantes interagem com o website.',
+        defaultValue: false,
+        gtag: 'analytics_storage',
+      });
+    }
+
+    if (cats.marketing) {
+      consentTypes.push({
+        id: 'marketing',
+        label: 'Marketing',
+        description: 'Estes cookies são utilizados para apresentar anúncios personalizados.',
+        defaultValue: false,
+        gtag: ['ad_storage', 'ad_user_data', 'ad_personalization'],
+      });
+    }
+
+    if (cats.preferences) {
+      consentTypes.push({
+        id: 'preferences',
+        label: 'Preferências',
+        description: 'Estes cookies permitem ao website lembrar-se de escolhas feitas pelo utilizador.',
+        defaultValue: false,
+      });
+    }
+
+    // Build description HTML
+    var title = config.title || 'Informação sobre cookies';
+    var message = config.message || 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros.';
+    var descriptionHtml = '<p><strong>' + title + '</strong></p><p>' + message + '</p>';
+
+    if (config.policyUrl) {
+      descriptionHtml += '<p><a href="' + config.policyUrl + '" target="_blank" rel="noopener">Política de Cookies</a></p>';
+    }
+
+    // Build Silktide init options
+    var silktideOpts = {
+      consentTypes: consentTypes,
+      text: {
+        prompt: {
+          description: descriptionHtml,
+          acceptAllButtonText: config.buttonText || 'Aceitar todos',
+          acceptAllButtonAccessibleLabel: 'Aceitar todos os cookies',
+          rejectNonEssentialButtonText: config.declineText || 'Rejeitar não essenciais',
+          rejectNonEssentialButtonAccessibleLabel: 'Rejeitar todos os cookies não essenciais',
+          preferencesButtonText: 'Preferências',
+          preferencesButtonAccessibleLabel: 'Gerir preferências de cookies',
+        },
+        preferences: {
+          title: 'Personalizar preferências',
+          description: '<p>Escolha quais cookies pretende aceitar.</p>',
+          saveButtonText: 'Guardar e fechar',
+          saveButtonAccessibleLabel: 'Guardar as suas preferências de cookies',
+        },
+      },
+      prompt: {
+        position: mapPositionToSilktide(config.position || 'bottomRight'),
+      },
+      icon: {
+        position: config.iconPosition || 'bottomRight',
+      },
+      backdrop: {
+        show: config.showBackdrop !== undefined ? config.showBackdrop : false,
+      },
+      autoShow: true,
+
+      // ── Callbacks: sync consent to Supabase ──
+      onAcceptAll: function () {
+        var accepted = { necessary: true, analytics: true, marketing: true, preferences: true };
+        sendConsentToServer(true, accepted);
+      },
+      onRejectAll: function () {
+        var rejected = { necessary: true, analytics: false, marketing: false, preferences: false };
+        sendConsentToServer(false, rejected);
+      },
+    };
+
+    return silktideOpts;
+  }
+
+  // ── Inject CSS variable overrides ───────────────────────────────────
+
+  function injectColorOverrides(config) {
+    var overrides = [];
+    if (config.primaryColor)     overrides.push('--primaryColor: ' + config.primaryColor);
+    if (config.backgroundColor)  overrides.push('--backgroundColor: ' + config.backgroundColor);
+    if (config.textColor)        overrides.push('--textColor: ' + config.textColor);
+
+    if (overrides.length > 0 || config.customCSS) {
+      var style = document.createElement('style');
+      var css = '';
+      if (overrides.length > 0) {
+        css += '#stcm-wrapper { ' + overrides.join('; ') + '; }\n';
+      }
+      if (config.customCSS) {
+        css += config.customCSS;
+      }
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
+  }
+
+  // ── Initialise ──────────────────────────────────────────────────────
+
+  function initSilktide(config) {
     if (!config.enabled) return;
 
-    // Always render as centered modal
-    var overlay = document.createElement('div');
-    overlay.id = 'kiban-cookie-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99998;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:kibanOverlayIn 0.3s ease;';
-    document.body.appendChild(overlay);
+    // Inject color overrides before Silktide loads
+    injectColorOverrides(config);
 
-    var banner = document.createElement('div');
-    banner.id = 'kiban-cookie-notice';
-    banner.setAttribute('role', 'dialog');
-    banner.setAttribute('aria-label', 'Cookie consent');
+    // Load Silktide CSS
+    loadCSS(SILKTIDE_CSS);
 
-    banner.style.cssText =
-      'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);' +
-      'max-width:480px;width:calc(100% - 40px);' +
-      'z-index:99999;background:#fff;color:#2c2c2c;' +
-      'border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.15);' +
-      'padding:36px 32px 28px;' +
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
-      'animation:kibanModalIn 0.3s ease;';
-
-    var html = '';
-    html += '<style>';
-    html += '@keyframes kibanOverlayIn{from{opacity:0}to{opacity:1}}';
-    html += '@keyframes kibanModalIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.95)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}';
-    html += '#kiban-cookie-notice *{box-sizing:border-box;margin:0;padding:0;}';
-    html += '#kiban-cookie-notice button{transition:all 0.15s ease;cursor:pointer;}';
-    html += '#kiban-cookie-notice button:hover{opacity:0.85;}';
-    html += '</style>';
-
-    // Title
-    var title = config.title || 'Informação sobre cookies';
-    html += '<h2 style="font-size:18px;font-weight:600;color:#1a1a1a;margin-bottom:16px;line-height:1.3;">' + escapeHtml(title) + '</h2>';
-
-    // Message
-    var message = config.message || 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros. Estes cookies podem ser utilizados para melhorar o funcionamento do website ou para lhe oferecer uma experiência de navegação mais personalizada. Poderá aceitar ou personalizar as suas definições de cookies através dos botões disponibilizados.';
-    html += '<p style="font-size:13px;line-height:1.7;color:#555;margin-bottom:24px;">' + escapeHtml(message) + '</p>';
-
-    // Cookie categories (if granular)
-    var cats = config.cookieTypes || {};
-    var showCategories = cats.analytics || cats.marketing || cats.preferences;
-
-    if (showCategories) {
-      html += '<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:24px;">';
-      html += '<label style="font-size:12px;display:flex;align-items:center;gap:6px;color:#999;cursor:default;">' +
-        '<input type="checkbox" checked disabled style="accent-color:#2c2c2c;width:14px;height:14px;"> Necessários</label>';
-      if (cats.analytics) {
-        html += '<label style="font-size:12px;display:flex;align-items:center;gap:6px;color:#555;cursor:pointer;">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="analytics" style="accent-color:#2c2c2c;width:14px;height:14px;"> Analíticos</label>';
+    // Load Silktide JS then initialise
+    loadJS(SILKTIDE_JS, function () {
+      if (!window.silktideConsentManager) {
+        console.warn('[KibanCMS] Silktide Consent Manager not found after load');
+        return;
       }
-      if (cats.marketing) {
-        html += '<label style="font-size:12px;display:flex;align-items:center;gap:6px;color:#555;cursor:pointer;">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="marketing" style="accent-color:#2c2c2c;width:14px;height:14px;"> Marketing</label>';
-      }
-      if (cats.preferences) {
-        html += '<label style="font-size:12px;display:flex;align-items:center;gap:6px;color:#555;cursor:pointer;">' +
-          '<input type="checkbox" class="kiban-cat" data-cat="preferences" style="accent-color:#2c2c2c;width:14px;height:14px;"> Preferências</label>';
-      }
-      html += '</div>';
-    }
 
-    // Policy link
-    if (config.policyUrl) {
-      html += '<p style="font-size:12px;color:#888;margin-bottom:24px;line-height:1.5;">Caso deseje obter mais detalhes sobre a forma como utilizamos cookies, sugerimos que visite a nossa ' +
-        '<a href="' + escapeHtml(config.policyUrl) + '" target="_blank" rel="noopener" style="color:#555;text-decoration:underline;">Política de Cookies</a>.</p>';
-    }
-
-    // Buttons
-    html += '<div style="display:flex;gap:12px;justify-content:center;">';
-    html += '<button id="kiban-cookie-decline" style="padding:12px 28px;background:#fff;color:#2c2c2c;border:1.5px solid #d0d0d0;border-radius:6px;font-size:13px;font-weight:500;letter-spacing:0.01em;">' +
-      escapeHtml(config.declineText || 'Gerir cookies') + '</button>';
-    html += '<button id="kiban-cookie-accept" style="padding:12px 28px;background:#2c2c2c;color:#fff;border:1.5px solid #2c2c2c;border-radius:6px;font-size:13px;font-weight:500;letter-spacing:0.01em;">' +
-      escapeHtml(config.buttonText || 'Aceitar todos') + '</button>';
-    html += '</div>';
-
-    // Custom CSS
-    if (config.customCSS) {
-      html += '<style>' + config.customCSS + '</style>';
-    }
-
-    banner.innerHTML = html;
-    document.body.appendChild(banner);
-
-    // ── Event Handlers ──
-    function removeBanner() {
-      banner.style.opacity = '0';
-      banner.style.transition = 'opacity 0.2s ease';
-      setTimeout(function () {
-        banner.remove();
-        if (overlay) overlay.remove();
-      }, 200);
-    }
-
-    function getSelectedCategories() {
-      var selected = { necessary: true, analytics: false, marketing: false, preferences: false };
-      var checkboxes = banner.querySelectorAll('.kiban-cat');
-      checkboxes.forEach(function (cb) {
-        selected[cb.getAttribute('data-cat')] = cb.checked;
-      });
-      return selected;
-    }
-
-    banner.querySelector('#kiban-cookie-accept').addEventListener('click', function () {
-      var categories = showCategories
-        ? getSelectedCategories()
-        : { necessary: true, analytics: true, marketing: true, preferences: true };
-      sendConsent(true, categories);
-      removeBanner();
-    });
-
-    banner.querySelector('#kiban-cookie-decline').addEventListener('click', function () {
-      sendConsent(false, { necessary: true, analytics: false, marketing: false, preferences: false });
-      removeBanner();
+      var opts = buildSilktideConfig(config);
+      window.silktideConsentManager.init(opts);
     });
   }
 
-  function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  // ── Initialize ──
-  function init() {
+  function boot() {
     fetchConfig(function (err, res) {
       if (err || !res || !res.data) return;
-      renderBanner(res.data);
+      initSilktide(res.data);
     });
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 
-  // ── Public API ──
+  // ── Public API (backwards compatible) ───────────────────────────────
+
   window.KibanCookieNotice = {
     hasConsent: function () { return !!getConsent(); },
     getConsent: getConsent,
     reset: function () {
       localStorage.removeItem(CONSENT_KEY);
+      // Also reset Silktide's state if available
+      if (window.silktideConsentManager) {
+        try { window.silktideConsentManager.resetConsent(); } catch (e) {}
+      }
       location.reload();
+    },
+    // Expose Silktide instance for advanced usage
+    getSilktideInstance: function () {
+      if (window.silktideConsentManager) {
+        try { return window.silktideConsentManager.getInstance(); } catch (e) {}
+      }
+      return null;
     },
   };
 })();
