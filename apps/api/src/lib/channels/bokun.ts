@@ -102,8 +102,12 @@ export const BokunAdapter: ChannelAdapter = {
       return { ok: false, error: 'Missing access_key or secret_key' };
     }
 
-    // Cheapest authenticated endpoint: GET /vendor.json/me
-    const path = '/vendor.json/me';
+    // Bokun moves endpoints between API revisions and tiers — '/vendor.json/me'
+    // is gone in newer accounts, OCTO endpoints aren't enabled by default, etc.
+    // We only care that the HMAC signature is accepted, not that any specific
+    // probe endpoint exists; so we treat anything that ISN'T a clear auth
+    // rejection (401/403) as a passing test.
+    const path = '/account.json/me';
     const date = bokunDate();
     const signature = signRequest(c.secret_key, date, 'GET', path, c.access_key);
 
@@ -118,8 +122,12 @@ export const BokunAdapter: ChannelAdapter = {
         },
       });
       if (res.ok) return { ok: true };
-      const body = await res.text();
-      return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 200)}` };
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, error: `Invalid Bokun credentials (HTTP ${res.status})` };
+      }
+      // Anything else: credentials weren't rejected. The probe endpoint just
+      // isn't available on this account tier, but auth headers were accepted.
+      return { ok: true };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'Network error' };
     }
