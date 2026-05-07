@@ -213,6 +213,16 @@
     document.body.appendChild(btn);
     document.body.appendChild(panel);
 
+    // Register with the universal loader so widgets in the same corner stack
+    // instead of overlapping. No-op if loaded standalone (no loader present).
+    if (window.KibanWidgets && typeof window.KibanWidgets.register === 'function') {
+      window.KibanWidgets.register('accessibility', {
+        selector: '#kiban-a11y-btn',
+        corner:   position,
+        height:   44,
+      });
+    }
+
     // ── Toggle panel ──
     var isOpen = false;
     btn.addEventListener('click', function () {

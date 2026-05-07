@@ -356,6 +356,16 @@
     }
 
     document.body.appendChild(widgetEl);
+
+    // Register with the universal loader so widgets in the same corner stack
+    // instead of overlapping. No-op if loaded standalone.
+    if (window.KibanWidgets && typeof window.KibanWidgets.register === 'function') {
+      window.KibanWidgets.register('i18n', {
+        selector: '#kiban-i18n-widget',
+        corner:   pos,
+        height:   44,
+      });
+    }
   }
 
   function renderMinimalWidget() {

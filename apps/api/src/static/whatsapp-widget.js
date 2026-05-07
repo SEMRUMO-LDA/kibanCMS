@@ -229,6 +229,16 @@
     container.innerHTML = html;
     while (container.firstChild) document.body.appendChild(container.firstChild);
 
+    // Register with the universal loader so widgets in the same corner stack
+    // instead of overlapping. No-op if loaded standalone.
+    if (window.KibanWidgets && typeof window.KibanWidgets.register === 'function') {
+      window.KibanWidgets.register('whatsapp-widget', {
+        selector: '#kiban-wa-widget',
+        corner:   position,
+        height:   60,
+      });
+    }
+
     var widget = document.getElementById('kiban-wa-widget');
     var btn = document.getElementById('kiban-wa-btn');
     var popup = document.getElementById('kiban-wa-popup');

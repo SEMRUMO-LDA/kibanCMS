@@ -37,6 +37,11 @@ export const CookieNoticeAddon: AddonManifest = {
       options: ['bottomLeft', 'bottomRight'],
       defaultValue: 'bottomRight',
     },
+    showIcon: {
+      type: 'boolean',
+      label: 'Show Re-open Icon',
+      defaultValue: true,
+    },
     showBackdrop: {
       type: 'boolean',
       label: 'Show Backdrop',

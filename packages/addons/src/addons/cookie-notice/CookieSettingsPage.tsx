@@ -23,6 +23,7 @@ interface CookieConfig {
   // Silktide-specific options
   position: 'bottomRight' | 'bottomLeft' | 'bottomCenter' | 'center';
   iconPosition: 'bottomLeft' | 'bottomRight';
+  showIcon: boolean;
   showBackdrop: boolean;
   primaryColor: string;
   backgroundColor: string;
@@ -53,6 +54,7 @@ const DEFAULT_CONFIG: CookieConfig = {
   customCSS: '',
   position: 'bottomRight',
   iconPosition: 'bottomRight',
+  showIcon: true,
   showBackdrop: false,
   primaryColor: '#533BE2',
   backgroundColor: '#FFFFFF',
@@ -320,14 +322,26 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
           <div style={styles.field}>
             <label style={styles.label}>Posição do Ícone</label>
             <select
-              style={styles.select}
+              style={{ ...styles.select, opacity: config.showIcon ? 1 : 0.5 }}
               value={config.iconPosition}
               onChange={e => setConfig(c => ({ ...c, iconPosition: e.target.value as CookieConfig['iconPosition'] }))}
+              disabled={!config.showIcon}
             >
               <option value="bottomRight">Inferior Direito</option>
               <option value="bottomLeft">Inferior Esquerdo</option>
             </select>
           </div>
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.checkbox}>
+            <input
+              type="checkbox"
+              checked={config.showIcon}
+              onChange={e => setConfig(c => ({ ...c, showIcon: e.target.checked }))}
+            />
+            Mostrar ícone de cookies no site (re-abrir preferências)
+          </label>
         </div>
 
         <div style={styles.field}>

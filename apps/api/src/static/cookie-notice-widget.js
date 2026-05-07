@@ -228,24 +228,34 @@
 
   // ── Inject CSS variable overrides ───────────────────────────────────
 
-  function injectColorOverrides(config) {
+  function injectStyleOverrides(config) {
     var overrides = [];
     if (config.primaryColor)     overrides.push('--primaryColor: ' + config.primaryColor);
     if (config.backgroundColor)  overrides.push('--backgroundColor: ' + config.backgroundColor);
     if (config.textColor)        overrides.push('--textColor: ' + config.textColor);
 
-    if (overrides.length > 0 || config.customCSS) {
-      var style = document.createElement('style');
-      var css = '';
-      if (overrides.length > 0) {
-        css += '#stcm-wrapper { ' + overrides.join('; ') + '; }\n';
-      }
-      if (config.customCSS) {
-        css += config.customCSS;
-      }
-      style.textContent = css;
-      document.head.appendChild(style);
+    var style = document.createElement('style');
+    var css = '';
+    if (overrides.length > 0) {
+      css += '#stcm-wrapper { ' + overrides.join('; ') + '; }\n';
     }
+
+    // Match the floating icon to the accessibility widget (44px). Silktide
+    // ships at 60px which clashes visually when both are present.
+    css += '#stcm-icon { width: 44px !important; height: 44px !important; }\n';
+    css += '#stcm-icon svg { width: 60% !important; height: 60% !important; }\n';
+
+    // Hide icon entirely when admin opted out — Silktide has no native flag.
+    if (config.showIcon === false) {
+      css += '#stcm-icon { display: none !important; }\n';
+    }
+
+    if (config.customCSS) {
+      css += config.customCSS;
+    }
+
+    style.textContent = css;
+    document.head.appendChild(style);
   }
 
   // ── Initialise ──────────────────────────────────────────────────────
@@ -257,7 +267,7 @@
     // the DOM decides who wins between same-specificity #stcm-wrapper rules,
     // so our overrides have to be appended after the Silktide stylesheet.
     loadCSS(SILKTIDE_CSS);
-    injectColorOverrides(config);
+    injectStyleOverrides(config);
 
     // Load Silktide JS then initialise
     loadJS(SILKTIDE_JS, function () {
@@ -268,6 +278,16 @@
 
       var opts = buildSilktideConfig(config);
       window.silktideConsentManager.init(opts);
+
+      // Register with the loader so it can stack our icon alongside
+      // accessibility/whatsapp without overlap. No-op if loaded standalone.
+      if (config.showIcon !== false && window.KibanWidgets && typeof window.KibanWidgets.register === 'function') {
+        window.KibanWidgets.register('cookie-notice', {
+          selector: '#stcm-icon',
+          corner:   config.iconPosition || 'bottomRight',
+          height:   44,
+        });
+      }
     });
   }
 
