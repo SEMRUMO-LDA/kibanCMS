@@ -250,11 +250,13 @@ app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; d
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
 
 // Channel Manager.
-//   - /webhook/:provider is mounted before validateJWT so providers can POST
-//     unauthenticated; auth is done by HMAC against the stored webhook_secret.
-//   - everything else (CRUD connections, log) is admin-only.
-app.use('/api/v1/channel-manager/webhook', channelManagerRouter);
-app.use('/api/v1/channel-manager', validateJWT, channelManagerRouter);
+//   - /webhook/:provider is public (auth = HMAC against the stored webhook_secret)
+//   - everything else (CRUD connections, log, providers) is admin-only (JWT).
+// One mount, conditional auth — same pattern as /preview.
+app.use('/api/v1/channel-manager', (req, res, next) => {
+  if (req.method === 'POST' && req.path.startsWith('/webhook/')) return next();
+  return validateJWT(req as any, res, next);
+}, channelManagerRouter);
 app.use('/api/v1/affiliates', adminLimiter, validateJWT, affiliatesRouter); // Affiliates — admin-only (commission management).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
