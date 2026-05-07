@@ -325,7 +325,12 @@ channelManagerRouter.post('/connections', async (req, res) => {
   // we also return the full webhook URL with the secret already embedded —
   // the admin only has to copy one string into the provider's dashboard.
   const adapter = getAdapter(provider);
-  const baseUrl = `${req.protocol}://${req.get('host')}/api/v1/channel-manager/webhook/${provider}`;
+  // Behind Railway's proxy, req.protocol is 'http' even though the public
+  // hostname is HTTPS — providers like Bokun reject http:// webhook URLs,
+  // so trust X-Forwarded-Proto when present.
+  const fwdProto = req.headers['x-forwarded-proto'];
+  const protocol = (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(',')[0]?.trim() || req.protocol;
+  const baseUrl = `${protocol}://${req.get('host')}/api/v1/channel-manager/webhook/${provider}`;
   const webhookUrl = adapter?.webhookAuthMode === 'url-token'
     ? `${baseUrl}/${webhookSecret}`
     : baseUrl;
