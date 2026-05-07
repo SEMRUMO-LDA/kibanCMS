@@ -290,35 +290,49 @@ app.get('/api/v1/widgets/loader.js', (req, res) => {
 
 // Which widget add-ons are enabled — called by the loader to decide what to inject.
 // Returns an array of addon_id strings for add-ons that have widgets AND are enabled.
-const WIDGET_ADDON_IDS = ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'];
+//
+// Mirrors the admin's "installed/enabled" semantics in apps/admin/src/pages/Addons.tsx:
+//   - Settings-based widgets (cookie-notice, accessibility) are installed by default
+//     and only excluded when addon_configs has an explicit `enabled:false`.
+//   - Collection-based widgets (whatsapp-widget, i18n) are installed only if their
+//     defining collection exists; enabled state then comes from a collection entry
+//     (whatsapp-widget) or addon_configs (i18n).
+const SETTINGS_WIDGET_ADDON_IDS = ['cookie-notice', 'accessibility'];
 
 app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
   try {
     const { data: configs } = await supabaseImport
       .from('addon_configs')
       .select('addon_id, config')
-      .in('addon_id', WIDGET_ADDON_IDS);
+      .in('addon_id', [...SETTINGS_WIDGET_ADDON_IDS, 'i18n']);
 
-    // An add-on is "enabled" if it has a row in addon_configs AND config.enabled !== false.
-    // (No row = not installed = not enabled.)
-    const enabled = (configs || [])
-      .filter(row => row.config?.enabled !== false)
-      .map(row => row.addon_id);
+    const explicitlyDisabled = new Set(
+      (configs || [])
+        .filter(row => row.config?.enabled === false)
+        .map(row => row.addon_id)
+    );
 
-    // WhatsApp widget stores config in a collection entry, not addon_configs.
-    // Check if it's installed by looking for the collection + published config entry.
-    if (!enabled.includes('whatsapp-widget')) {
-      const { data: col } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
-      if (col) {
-        const { data: entry } = await supabaseImport
-          .from('entries')
-          .select('content')
-          .eq('collection_id', col.id)
-          .eq('slug', 'config')
-          .eq('status', 'published')
-          .maybeSingle();
-        if (entry?.content?.enabled) enabled.push('whatsapp-widget');
-      }
+    const enabled: string[] = SETTINGS_WIDGET_ADDON_IDS.filter(id => !explicitlyDisabled.has(id));
+
+    // WhatsApp widget — installed if its collection exists; enabled state lives in
+    // a published entry with slug='config'.
+    const { data: waCol } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
+    if (waCol) {
+      const { data: entry } = await supabaseImport
+        .from('entries')
+        .select('content')
+        .eq('collection_id', waCol.id)
+        .eq('slug', 'config')
+        .eq('status', 'published')
+        .maybeSingle();
+      if (entry?.content?.enabled) enabled.push('whatsapp-widget');
+    }
+
+    // i18n — installed if its config collection exists; enabled unless addon_configs
+    // explicitly disables it.
+    const { data: i18nCol } = await supabaseImport.from('collections').select('id').eq('slug', 'i18n-config').maybeSingle();
+    if (i18nCol && !explicitlyDisabled.has('i18n')) {
+      enabled.push('i18n');
     }
 
     res.setHeader('Cache-Control', 'public, max-age=60');
