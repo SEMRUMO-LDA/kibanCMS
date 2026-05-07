@@ -446,6 +446,35 @@ class ApiClient {
       notes: notes || '',
     });
   }
+
+  // ── Channel Manager ──
+  async channelListProviders() {
+    return this.request<Array<{ id: string; displayName: string }>>('GET', '/channel-manager/providers');
+  }
+
+  async channelListConnections() {
+    return this.request<any[]>('GET', '/channel-manager/connections');
+  }
+
+  async channelCreateConnection(provider: string, credentials: Record<string, any>, enabled = true) {
+    return this.request<any>('POST', '/channel-manager/connections', { provider, credentials, enabled });
+  }
+
+  async channelUpdateConnection(id: string, patch: { credentials?: any; enabled?: boolean; metadata?: any }) {
+    return this.request<any>('PUT', `/channel-manager/connections/${id}`, patch);
+  }
+
+  async channelDeleteConnection(id: string) {
+    return this.request<{ ok: boolean }>('DELETE', `/channel-manager/connections/${id}`);
+  }
+
+  async channelTestConnection(id: string) {
+    return this.request<{ ok: boolean; error?: string }>('POST', `/channel-manager/connections/${id}/test`);
+  }
+
+  async channelListLog(limit = 50) {
+    return this.request<any[]>('GET', `/channel-manager/log?limit=${limit}`);
+  }
 }
 
 export const api = new ApiClient();

@@ -31,6 +31,7 @@ import { AccessibilitySettings } from './pages/AccessibilitySettings';
 import { WhatsAppWidgetSettings } from './pages/WhatsAppWidgetSettings';
 import { PostTourReviewsSettings } from './pages/PostTourReviewsSettings';
 import { NewsletterBrevoSettings } from './pages/NewsletterBrevoSettings';
+import { ChannelManagerSettings } from './pages/ChannelManagerSettings';
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -118,6 +119,7 @@ const AppContent = () => {
         <Route path="addons/whatsapp-widget" element={<WhatsAppWidgetSettings />} />
         <Route path="addons/post-tour-reviews" element={<PostTourReviewsSettings />} />
         <Route path="addons/newsletter" element={<NewsletterBrevoSettings />} />
+        <Route path="addons/channel-manager" element={<ChannelManagerSettings />} />
         <Route path="diagnostics" element={<Diagnostics />} />
 
         {/* Placeholder for other routes */}

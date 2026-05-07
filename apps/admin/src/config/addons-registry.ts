@@ -945,6 +945,24 @@ const postTourReviews: AddonDefinition = {
 };
 
 // ============================================
+// CHANNEL MANAGER ADD-ON (inbound bookings from Bokun, FareHarbor, …)
+// ============================================
+
+const channelManager: AddonDefinition = {
+  id: 'channel-manager',
+  name: 'Channel Manager',
+  description: 'Recebe bookings de Channel Managers externos (Bokun, …) via webhook',
+  longDescription: 'Liga o KIBAN a Channel Managers existentes que tratam da distribuição multi-canal (Viator/TripAdvisor, GetYourGuide, Booking, etc.). Cada provider envia um webhook por reserva nova; o KIBAN valida HMAC, normaliza o payload e regista o booking automaticamente. Suporta hoje Bokun (recomendado para tours/experiences porque é da TripAdvisor e abre acesso ao Viator). Mais providers vão sendo adicionados como adapters pluggable.',
+  icon: 'link',
+  color: '#0ea5e9',
+  category: 'commerce',
+  version: '0.1.0',
+  author: 'kibanCMS',
+  settingsRoute: '/addons/channel-manager',
+  collections: [],
+};
+
+// ============================================
 // REGISTRY
 // ============================================
 
@@ -965,6 +983,7 @@ export const ADDONS_REGISTRY: AddonDefinition[] = [
   i18n,
   whatsappWidget,
   postTourReviews,
+  channelManager,
 ];
 
 export function getAddon(id: string): AddonDefinition | undefined {

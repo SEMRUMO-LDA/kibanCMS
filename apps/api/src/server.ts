@@ -30,6 +30,7 @@ import emailRouter from './routes/email.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
+import { channelManagerRouter } from './routes/channel-manager.js';
 import authRouter from './routes/auth.js';
 import snapshotsRouter from './routes/snapshots.js';
 import { supabase as supabaseImport } from './lib/supabase.js';
@@ -90,6 +91,14 @@ if (NODE_ENV === 'production') {
 
 // Stripe webhook needs raw body for signature verification (must be before json parser)
 app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
+
+// Channel Manager webhooks (Bokun, FareHarbor, …) — HMAC over raw body, so
+// keep the buffer untouched. Stash it on req.rawBody too for handler use.
+app.use('/api/v1/channel-manager/webhook', express.raw({
+  type: '*/*',
+  limit: '5mb',
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 
 // Body parsing (limit increased for base64 media uploads)
 app.use(express.json({ limit: '55mb' }));
@@ -239,6 +248,13 @@ app.get('/api/v1/seo/robots.txt', (req, res, next) => seoRouter(req as any, res,
 app.use('/api/v1/seo', validateAny, seoRouter);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
+
+// Channel Manager.
+//   - /webhook/:provider is mounted before validateJWT so providers can POST
+//     unauthenticated; auth is done by HMAC against the stored webhook_secret.
+//   - everything else (CRUD connections, log) is admin-only.
+app.use('/api/v1/channel-manager/webhook', channelManagerRouter);
+app.use('/api/v1/channel-manager', validateJWT, channelManagerRouter);
 app.use('/api/v1/affiliates', adminLimiter, validateJWT, affiliatesRouter); // Affiliates — admin-only (commission management).
 app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
