@@ -80,7 +80,7 @@ export const ChannelManagerSettings = () => {
   const [newProvider, setNewProvider] = useState('bokun');
   const [newCreds, setNewCreds] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [revealedSecret, setRevealedSecret] = useState<{ id: string; secret: string } | null>(null);
+  const [revealedUrl, setRevealedUrl] = useState<{ id: string; url: string } | null>(null);
 
   async function refresh() {
     setLoading(true);
@@ -108,7 +108,11 @@ export const ChannelManagerSettings = () => {
     }
     const { data, error } = await api.channelCreateConnection(newProvider, newCreds);
     if (error) { setError(error); return; }
-    if (data?.webhook_secret) setRevealedSecret({ id: data.id, secret: data.webhook_secret });
+    // Server returns webhook_url with the secret embedded for url-token
+    // providers (Bokun); for HMAC providers it returns the bare URL plus
+    // webhook_secret to paste in a separate signing-secret field.
+    const url = data?.webhook_url || data?.webhook_secret || '';
+    if (url) setRevealedUrl({ id: data.id, url });
     setNewCreds({});
     setShowNewForm(false);
     refresh();
@@ -150,13 +154,20 @@ export const ChannelManagerSettings = () => {
         </div>
       )}
 
-      {revealedSecret && (
+      {revealedUrl && (
         <div style={{ ...styles.alert, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', marginBottom: 16 }}>
-          <strong>⚠️ Webhook secret gerado — copia AGORA, só vai ser mostrado desta vez.</strong>
-          <div style={{ ...styles.webhookBox, marginTop: 8, background: '#fff' }}>{revealedSecret.secret}</div>
+          <strong>⚠️ Webhook URL — copia AGORA, o token só é mostrado desta vez.</strong>
+          <div style={{ ...styles.webhookBox, marginTop: 8, background: '#fff' }}>{revealedUrl.url}</div>
           <p style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
-            Cola este valor no painel do provider (campo "Webhook signing secret" ou equivalente). Será usado para validar HMAC dos webhooks recebidos.
-            <button style={{ ...styles.btnGhost, marginLeft: 8 }} onClick={() => setRevealedSecret(null)}>Já copiei</button>
+            Cola este URL completo no painel do provider (Bokun → Settings → Connections → Push notifications → campo "Url"). O token no fim autentica o pedido.
+            <button
+              style={{ ...styles.btnGhost, marginLeft: 8 }}
+              onClick={() => navigator.clipboard.writeText(revealedUrl.url)}
+            >Copiar</button>
+            <button
+              style={{ ...styles.btnGhost, marginLeft: 8 }}
+              onClick={() => setRevealedUrl(null)}
+            >Já copiei</button>
           </p>
         </div>
       )}
@@ -212,7 +223,10 @@ export const ChannelManagerSettings = () => {
             </thead>
             <tbody>
               {connections.map(c => {
-                const webhookUrl = `${window.location.origin}/api/v1/channel-manager/webhook/${c.provider}`;
+                // After creation the full URL with token was shown once and is
+                // not retrievable later; show only the public part here. To
+                // re-issue the token, delete and recreate the connection.
+                const webhookUrl = `${window.location.origin}/api/v1/channel-manager/webhook/${c.provider}/<TOKEN>`;
                 return (
                   <tr key={c.id}>
                     <td style={styles.td}>

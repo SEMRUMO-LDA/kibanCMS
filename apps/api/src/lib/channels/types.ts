@@ -34,19 +34,38 @@ export interface WebhookEvent {
   booking?: NormalizedBooking;    // present for create/update
 }
 
+/**
+ * How a provider authenticates inbound webhooks.
+ *
+ *  - 'url-token':  the webhook_secret is part of the URL path. The provider
+ *                  has no signing capability, so we rely on URL secrecy.
+ *                  The server compares the URL token to the stored secret
+ *                  with timingSafeEqual before parsing the body. Bokun's
+ *                  Push notifications work this way.
+ *  - 'hmac':       provider signs the body and sends a signature header.
+ *                  The adapter's verifyWebhook does HMAC + parse.
+ *                  FareHarbor / Cloudbeds work this way.
+ */
+export type WebhookAuthMode = 'url-token' | 'hmac';
+
 export interface ChannelAdapter {
   readonly id: string;            // 'bokun', 'fareharbor', ...
   readonly displayName: string;
+  readonly webhookAuthMode: WebhookAuthMode;
 
   /** Probe credentials by hitting a low-cost endpoint. */
   validateCredentials(creds: ChannelCredentials): Promise<{ ok: boolean; error?: string }>;
 
   /**
-   * Verify that an inbound webhook actually came from the provider.
-   * Returns the parsed event on success, or null if the signature is
-   * invalid (caller should respond 401 and not process).
+   * Parse an inbound webhook body into the normalized event shape.
+   *
+   * For 'hmac' adapters, this method MUST also verify the signature using
+   * the provided secret and return null on mismatch.
+   *
+   * For 'url-token' adapters, the route handler has already validated the
+   * URL token; this method only needs to JSON.parse and normalize.
    */
-  verifyWebhook(args: {
+  parseWebhook(args: {
     rawBody: string;
     headers: Record<string, string | string[] | undefined>;
     secret: string;

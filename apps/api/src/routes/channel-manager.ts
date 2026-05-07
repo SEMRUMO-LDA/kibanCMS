@@ -70,11 +70,13 @@ function redactConnection(row: any) {
   };
 }
 
-// ── Webhook (public, HMAC-verified) ──────────────────────────────────
-// IMPORTANT: this route needs the raw body for signature verification.
-// Server.ts mounts it BEFORE express.json() to keep the body untouched.
+// ── Webhook (public) ─────────────────────────────────────────────────
+// Two paths supported:
+//   /webhook/:provider/:token  — url-token auth (Bokun Push notifications)
+//   /webhook/:provider         — hmac auth (FareHarbor, Cloudbeds, …)
+// Both need raw body, mounted before express.json() in server.ts.
 
-channelManagerRouter.post('/webhook/:provider', async (req: Request, res: Response) => {
+async function handleWebhook(req: Request, res: Response, urlToken: string | null) {
   const provider = req.params.provider;
   const adapter = getAdapter(provider);
   if (!adapter) {
@@ -98,13 +100,24 @@ channelManagerRouter.post('/webhook/:provider', async (req: Request, res: Respon
     return res.status(401).json({ error: { message: 'Webhook rejected' } });
   }
 
-  const event = adapter.verifyWebhook({
+  // Path 1: url-token auth — compare URL-supplied token to stored secret.
+  if (adapter.webhookAuthMode === 'url-token') {
+    if (!urlToken) return res.status(401).json({ error: { message: 'Missing token' } });
+    const expected = Buffer.from(conn.webhook_secret);
+    const provided = Buffer.from(urlToken);
+    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
+      return res.status(401).json({ error: { message: 'Invalid token' } });
+    }
+  }
+  // Path 2: hmac auth — adapter handles signature verification inside parseWebhook.
+
+  const event = adapter.parseWebhook({
     rawBody,
     headers: req.headers as any,
     secret: conn.webhook_secret,
   });
   if (!event) {
-    return res.status(401).json({ error: { message: 'Signature mismatch' } });
+    return res.status(401).json({ error: { message: 'Webhook payload rejected' } });
   }
 
   // Idempotency: log row uniqueness covers (provider, external_id, event_type).
@@ -176,7 +189,12 @@ channelManagerRouter.post('/webhook/:provider', async (req: Request, res: Respon
     entry_id: entryId,
     error: processError,
   });
-});
+}
+
+channelManagerRouter.post('/webhook/:provider/:token',
+  (req, res) => handleWebhook(req, res, req.params.token));
+channelManagerRouter.post('/webhook/:provider',
+  (req, res) => handleWebhook(req, res, null));
 
 async function upsertBookingEntry(provider: string, b: NormalizedBooking): Promise<string | null> {
   const colId = await getBookingsCollectionId();
@@ -303,9 +321,21 @@ channelManagerRouter.post('/connections', async (req, res) => {
     .select('*')
     .single();
   if (error) return res.status(500).json({ error: { message: error.message } });
-  // Return the raw webhook secret ONCE on creation — admin needs to copy it
-  // into the provider's dashboard. Subsequent reads return a redacted form.
-  res.json({ data: { ...redactConnection(data), webhook_secret: webhookSecret } });
+  // Return the raw webhook secret ONCE on creation. For url-token providers
+  // we also return the full webhook URL with the secret already embedded —
+  // the admin only has to copy one string into the provider's dashboard.
+  const adapter = getAdapter(provider);
+  const baseUrl = `${req.protocol}://${req.get('host')}/api/v1/channel-manager/webhook/${provider}`;
+  const webhookUrl = adapter?.webhookAuthMode === 'url-token'
+    ? `${baseUrl}/${webhookSecret}`
+    : baseUrl;
+  res.json({
+    data: {
+      ...redactConnection(data),
+      webhook_secret: webhookSecret,
+      webhook_url: webhookUrl,
+    },
+  });
 });
 
 channelManagerRouter.put('/connections/:id', async (req, res) => {

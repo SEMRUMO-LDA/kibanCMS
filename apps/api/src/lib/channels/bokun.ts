@@ -20,6 +20,7 @@ import type {
   ChannelAdapter,
   ChannelCredentials,
   NormalizedBooking,
+  WebhookAuthMode,
   WebhookEvent,
 } from './types.js';
 
@@ -46,11 +47,6 @@ function bokunDate(): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} `
        + `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
-}
-
-function timingSafeEq(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 /**
@@ -95,6 +91,10 @@ function normalizeBokunBooking(payload: any): NormalizedBooking | undefined {
 export const BokunAdapter: ChannelAdapter = {
   id: 'bokun',
   displayName: 'Bokun',
+  // Bokun's "Push notifications" feature (Settings → Connections → Push
+  // notifications) does not sign payloads. We embed the webhook secret in
+  // the URL path and validate it server-side before parsing.
+  webhookAuthMode: 'url-token' as WebhookAuthMode,
 
   async validateCredentials(creds: ChannelCredentials) {
     const c = creds as BokunCredentials;
@@ -125,15 +125,8 @@ export const BokunAdapter: ChannelAdapter = {
     }
   },
 
-  verifyWebhook({ rawBody, headers, secret }): WebhookEvent | null {
-    if (!secret || !rawBody) return null;
-
-    const headerSig = headers['x-bokun-signature'];
-    const provided = Array.isArray(headerSig) ? headerSig[0] : headerSig;
-    if (!provided) return null;
-
-    const expected = crypto.createHmac('sha1', secret).update(rawBody).digest('base64');
-    if (!timingSafeEq(provided, expected)) return null;
+  parseWebhook({ rawBody }): WebhookEvent | null {
+    if (!rawBody) return null;
 
     let payload: any;
     try {
@@ -142,12 +135,30 @@ export const BokunAdapter: ChannelAdapter = {
       return null;
     }
 
-    // Bokun event types arrive in `eventType` or `notification.type`.
-    const eventType = payload.eventType || payload.notification?.type || 'booking.created';
+    // Bokun's Push notifications use a `triggerType` (e.g. "BOOKING_CONFIRMED",
+    // "PRODUCT_UPDATED"). The body shape varies; older docs use `eventType`.
+    const rawType = payload.triggerType || payload.eventType || payload.notification?.type;
+    const eventType = mapBokunTrigger(rawType);
+
     const booking = normalizeBokunBooking(payload);
-    const externalId = booking?.external_id || String(payload.booking?.confirmationCode || payload.id || '');
+    const externalId = booking?.external_id
+                     || String(payload.booking?.confirmationCode
+                            || payload.confirmationCode
+                            || payload.bookingId
+                            || payload.id
+                            || '');
     if (!externalId) return null;
 
     return { event_type: eventType, external_id: externalId, booking };
   },
 };
+
+function mapBokunTrigger(raw: string | undefined): string {
+  if (!raw) return 'booking.created';
+  const t = String(raw).toUpperCase();
+  if (t.includes('CANCEL')) return 'booking.cancelled';
+  if (t.includes('UPDATE')) return 'booking.updated';
+  if (t.includes('CONFIRM') || t.includes('CREATE') || t.includes('BOOKING'))
+    return 'booking.created';
+  return raw.toLowerCase();
+}
