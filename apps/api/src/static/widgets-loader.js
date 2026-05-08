@@ -142,18 +142,23 @@
     var style = document.createElement('style');
     style.id = 'kiban-cluster-styles';
     style.textContent = [
+      // iOS-style materialDark: a dark translucent base reads on both
+      // light and dark host backgrounds without us having to sniff
+      // luminance. Light glass on a white hero loses all contrast — that
+      // was the bug. Tint mixes against this same dark base so brand
+      // colours never wash out the icon either.
       '.kiban-glass {',
-      '  background: rgba(255, 255, 255, 0.14);',
-      '  -webkit-backdrop-filter: blur(24px) saturate(1.6);',
-      '  backdrop-filter: blur(24px) saturate(1.6);',
-      '  border: 1px solid rgba(255, 255, 255, 0.22);',
-      '  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);',
+      '  background: rgba(20, 20, 22, 0.55);',
+      '  -webkit-backdrop-filter: blur(22px) saturate(1.7);',
+      '  backdrop-filter: blur(22px) saturate(1.7);',
+      '  border: 1px solid rgba(255, 255, 255, 0.14);',
+      '  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);',
       '}',
       '@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {',
-      '  .kiban-glass { background: rgba(20, 20, 20, 0.85); }',
+      '  .kiban-glass { background: rgba(20, 20, 22, 0.92); }',
       '}',
       ':root:not([data-kiban-no-tint]) .kiban-glass {',
-      '  background: color-mix(in srgb, var(--kiban-widget-tint, transparent) 14%, rgba(255, 255, 255, 0.14));',
+      '  background: color-mix(in srgb, var(--kiban-widget-tint, transparent) 22%, rgba(20, 20, 22, 0.55));',
       '}',
       '.kiban-cluster-trigger, .kiban-cluster-item {',
       '  position: fixed;',
@@ -172,7 +177,7 @@
       '.kiban-cluster-trigger svg, .kiban-cluster-item svg, .kiban-cluster-item img {',
       '  width: 22px; height: 22px;',
       '  pointer-events: none;',
-      '  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.35));',
+      '  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.5));',
       '}',
       '.kiban-cluster-item svg, .kiban-cluster-item img { width: 22px; height: 22px; }',
       '.kiban-cluster-item svg path, .kiban-cluster-item svg circle, .kiban-cluster-item svg line {',

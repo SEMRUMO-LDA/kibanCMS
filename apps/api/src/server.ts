@@ -342,6 +342,31 @@ app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
   }
 });
 
+// ── Widget Cluster Config ──────────────────────────────────────────
+// Persists which widgets the loader should collapse into the floating
+// cluster, plus an optional accent colour that gets piped into the
+// `--kiban-widget-tint` CSS variable. Read public (loader needs it),
+// written by the admin UI directly via Supabase.
+const DEFAULT_CLUSTER_CONFIG = {
+  accentColor: null as string | null,
+  includedWidgets: ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'],
+};
+
+app.get('/api/v1/widgets/cluster-config', validateApiKey, async (_req, res) => {
+  try {
+    const { data } = await supabaseImport
+      .from('addon_configs')
+      .select('config')
+      .eq('addon_id', 'widget-cluster')
+      .maybeSingle();
+    const cfg = { ...DEFAULT_CLUSTER_CONFIG, ...(data?.config || {}) };
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json({ data: cfg, timestamp: new Date().toISOString() });
+  } catch {
+    res.json({ data: DEFAULT_CLUSTER_CONFIG, timestamp: new Date().toISOString() });
+  }
+});
+
 // Cookie Notice widget — public static JS file (no auth)
 app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
