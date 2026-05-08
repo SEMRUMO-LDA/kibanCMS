@@ -447,6 +447,16 @@ class ApiClient {
     });
   }
 
+  async reconcileAffiliates() {
+    return this.request<{
+      orders_scanned: number;
+      bookings_scanned: number;
+      accruals_created: number;
+      already_had_accrual: number;
+      skipped_no_affiliate: number;
+    }>('POST', '/affiliates/reconcile');
+  }
+
   // ── Channel Manager ──
   async channelListProviders() {
     return this.request<Array<{ id: string; displayName: string }>>('GET', '/channel-manager/providers');

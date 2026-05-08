@@ -7,7 +7,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { Handshake, Plus, RefreshCw, FileText, Eye, Download, AlertCircle } from 'lucide-react';
+import { Handshake, Plus, RefreshCw, FileText, Eye, Download, AlertCircle, GitMerge } from 'lucide-react';
 import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
@@ -154,6 +154,7 @@ export const AffiliatesManager = () => {
   // re-sync that calls api.updateCollection with the new field defs.
   const [needsCouponSync, setNeedsCouponSync] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,6 +220,24 @@ export const AffiliatesManager = () => {
     }
   };
 
+  const handleReconcile = async () => {
+    setReconciling(true);
+    try {
+      const { data, error } = await api.reconcileAffiliates();
+      if (error || !data) throw new Error(error || 'No data');
+      const msg = `Verificadas ${data.orders_scanned} encomendas + ${data.bookings_scanned} bookings · `
+        + `criadas ${data.accruals_created} comissões`
+        + (data.already_had_accrual ? ` · ${data.already_had_accrual} já existiam` : '')
+        + (data.skipped_no_affiliate ? ` · ${data.skipped_no_affiliate} sem afiliado` : '');
+      toast.show(msg, data.accruals_created > 0 ? 'success' : 'info');
+      await load();
+    } catch (err: any) {
+      toast.show(`Reconciliação falhou: ${err.message}`, 'error');
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   const handleSyncCoupons = async () => {
     const couponsAddon = getAddon('coupons');
     const couponsCol = couponsAddon?.collections.find(c => c.slug === 'coupons');
@@ -254,6 +273,10 @@ export const AffiliatesManager = () => {
           <Btn onClick={load} disabled={loading}>
             <RefreshCw style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             Atualizar
+          </Btn>
+          <Btn onClick={handleReconcile} disabled={needsInstall || reconciling} title="Procurar encomendas confirmadas com cupão de afiliado e criar comissões em falta">
+            <GitMerge style={{ animation: reconciling ? 'spin 1s linear infinite' : 'none' }} />
+            {reconciling ? 'A reconciliar…' : 'Reconciliar'}
           </Btn>
           <Btn onClick={() => navigate('/affiliates/report')} disabled={needsInstall}>
             <FileText />

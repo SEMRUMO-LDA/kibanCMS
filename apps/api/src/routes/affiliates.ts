@@ -15,7 +15,7 @@ import { Router, type Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import { recordPayout } from '../lib/affiliates.js';
+import { accrueCommission, recordPayout } from '../lib/affiliates.js';
 
 const router: Router = Router();
 
@@ -230,6 +230,165 @@ router.get('/report', async (req: AuthRequest, res: Response) => {
   } catch (err: any) {
     logger.error('GET /affiliates/report failed', { error: err.message });
     res.status(500).json({ error: { message: 'Failed to build report', status: 500 } });
+  }
+});
+
+// ============================================
+// POST /api/v1/affiliates/reconcile
+// ============================================
+// Walk every confirmed order/booking that used a coupon and call
+// accrueCommission. accrueCommission has its own (orderId|bookingId,
+// type=accrual) idempotency guard, so re-running this is always safe —
+// existing accruals get logged-and-skipped, missing ones get filled in.
+// Useful when an affiliate is linked to a coupon AFTER orders using
+// that coupon have already been confirmed (the original accrual
+// returned null because affiliate_id was empty at the time).
+router.post('/reconcile', async (req: AuthRequest, res: Response) => {
+  try {
+    const ledgerColId = await getCollectionId('commission-ledger');
+    if (!ledgerColId) {
+      return res.status(404).json({ error: { message: 'Affiliates add-on not installed', status: 404 } });
+    }
+
+    const ordersColId = await getCollectionId('orders');
+    const bookingsColId = await getCollectionId('bookings');
+
+    let ordersScanned = 0;
+    let bookingsScanned = 0;
+    let accrualsCreated = 0;
+    let alreadyHadAccrual = 0;
+    let skipped = 0;
+
+    // Helper — re-run accrueCommission and tell whether it created a new
+    // ledger row or hit the idempotency guard. We compare ledger size
+    // before/after as a signal because accrueCommission returns the same
+    // shape (an id) for both "created" and "already existed".
+    async function tryAccrue(args: Parameters<typeof accrueCommission>[0]): Promise<'created' | 'exists' | 'skipped'> {
+      const idKey = args.orderId || args.bookingId;
+      if (idKey) {
+        const { data: pre } = await supabase
+          .from('entries')
+          .select('id')
+          .eq('collection_id', ledgerColId)
+          .filter('content->>order_id', 'eq', args.orderId || '')
+          .filter('content->>booking_id', 'eq', args.bookingId || '')
+          .filter('content->>type', 'eq', 'accrual')
+          .limit(1);
+        if (pre && pre.length > 0) return 'exists';
+      }
+      const result = await accrueCommission(args);
+      return result ? 'created' : 'skipped';
+    }
+
+    // ── Orders flow ──
+    if (ordersColId) {
+      const { data: orders } = await supabase
+        .from('entries')
+        .select('id, content')
+        .eq('collection_id', ordersColId)
+        .filter('content->>status', 'eq', 'confirmed');
+
+      for (const orderRow of orders || []) {
+        ordersScanned++;
+        const c = orderRow.content as Record<string, any>;
+        const code = (c.coupon_code || '').toString().trim();
+        if (!code) continue;
+
+        // Lookup coupon by code (case-insensitive)
+        const upper = code.toUpperCase();
+        const couponsColId = await getCollectionId('coupons');
+        if (!couponsColId) break;
+        const { data: cps } = await supabase
+          .from('entries')
+          .select('id, content')
+          .eq('collection_id', couponsColId)
+          .filter('content->>code', 'eq', upper)
+          .limit(1);
+        const coupon = (cps && cps.length > 0)
+          ? cps[0]
+          : (await supabase
+              .from('entries')
+              .select('id, content')
+              .eq('collection_id', couponsColId)
+              .filter('content->>code', 'eq', code)
+              .limit(1)).data?.[0];
+        if (!coupon || !(coupon.content as any).affiliate_id) { skipped++; continue; }
+
+        const outcome = await tryAccrue({
+          couponId: coupon.id,
+          couponCode: code,
+          orderId: orderRow.id,
+          orderTotalCents: Number(c.total) || Number(c.amount_total) || 0,
+          currency: c.currency || 'eur',
+          stripeSessionId: c.stripe_session_id || '',
+          stripePaymentIntent: c.stripe_payment_intent || '',
+        });
+        if (outcome === 'created') accrualsCreated++;
+        else if (outcome === 'exists') alreadyHadAccrual++;
+        else skipped++;
+      }
+    }
+
+    // ── Legacy bookings flow ──
+    if (bookingsColId) {
+      const { data: bookings } = await supabase
+        .from('entries')
+        .select('id, content')
+        .eq('collection_id', bookingsColId)
+        .filter('content->>booking_status', 'eq', 'confirmed');
+
+      for (const bk of bookings || []) {
+        bookingsScanned++;
+        const c = bk.content as Record<string, any>;
+        const code = (c.coupon_code || '').toString().trim();
+        if (!code) continue;
+
+        const upper = code.toUpperCase();
+        const couponsColId = await getCollectionId('coupons');
+        if (!couponsColId) break;
+        const { data: cps } = await supabase
+          .from('entries')
+          .select('id, content')
+          .eq('collection_id', couponsColId)
+          .filter('content->>code', 'eq', upper)
+          .limit(1);
+        const coupon = (cps && cps.length > 0)
+          ? cps[0]
+          : (await supabase
+              .from('entries')
+              .select('id, content')
+              .eq('collection_id', couponsColId)
+              .filter('content->>code', 'eq', code)
+              .limit(1)).data?.[0];
+        if (!coupon || !(coupon.content as any).affiliate_id) { skipped++; continue; }
+
+        const outcome = await tryAccrue({
+          couponId: coupon.id,
+          couponCode: code,
+          bookingId: bk.id,
+          orderTotalCents: Number(c.amount_total_cents) || Number(c.total_cents) || 0,
+          currency: c.currency || 'eur',
+          stripeSessionId: c.stripe_session_id || '',
+          stripePaymentIntent: c.stripe_payment_intent || '',
+        });
+        if (outcome === 'created') accrualsCreated++;
+        else if (outcome === 'exists') alreadyHadAccrual++;
+        else skipped++;
+      }
+    }
+
+    res.json({
+      data: {
+        orders_scanned: ordersScanned,
+        bookings_scanned: bookingsScanned,
+        accruals_created: accrualsCreated,
+        already_had_accrual: alreadyHadAccrual,
+        skipped_no_affiliate: skipped,
+      },
+    });
+  } catch (err: any) {
+    logger.error('POST /affiliates/reconcile failed', { error: err.message });
+    res.status(500).json({ error: { message: 'Reconcile failed', status: 500 } });
   }
 });
 
