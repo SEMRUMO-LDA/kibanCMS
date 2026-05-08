@@ -1,13 +1,13 @@
 /**
  * Unified Settings Page — WordPress-style tabs
- * Merges: General (Site Settings) + API + Media + Permalinks + Privacy + Email
+ * Merges: General (Site Settings) + API + Media + Permalinks + Email
  */
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import {
-  Globe, Key, Image as ImageIcon, Link2, Shield, Mail,
+  Globe, Key, Image as ImageIcon, Link2, Mail,
   Copy, Check, Save, Loader, CheckCircle,
   Plus, Trash2, X,
 } from 'lucide-react';
@@ -149,7 +149,6 @@ const TABS = [
   { id: 'api', label: 'API', icon: Key },
   { id: 'media', label: 'Media', icon: ImageIcon },
   { id: 'permalinks', label: 'Permalinks', icon: Link2 },
-  { id: 'privacy', label: 'Privacy', icon: Shield },
   { id: 'email', label: 'Email', icon: Mail },
 ];
 
@@ -165,8 +164,6 @@ interface SiteSettings {
   max_upload_mb: string; allowed_types: string; thumbnail_width: string; thumbnail_height: string;
   // Permalinks
   entry_url_pattern: string; collection_url_pattern: string;
-  // Privacy
-  privacy_policy_url: string; data_retention_days: string; cookie_consent: string; gdpr_contact: string;
   // Email (Resend — multi-tenant)
   resend_api_key: string; default_from_email: string; default_from_name: string; default_reply_to: string;
   notification_emails: string;
@@ -182,7 +179,6 @@ const DEFAULTS: SiteSettings = {
   custom_head_code: '', custom_footer_code: '', maintenance_mode: 'false', robots_txt: 'User-agent: *\nAllow: /',
   max_upload_mb: '50', allowed_types: 'image/*,video/*,audio/*,.pdf', thumbnail_width: '300', thumbnail_height: '300',
   entry_url_pattern: '/{collection}/{slug}', collection_url_pattern: '/{slug}',
-  privacy_policy_url: '', data_retention_days: '365', cookie_consent: 'false', gdpr_contact: '',
   resend_api_key: '', default_from_email: '', default_from_name: '', default_reply_to: '',
   notification_emails: '',
 };
@@ -524,19 +520,6 @@ export const Settings = () => {
           <Grid>
             <Field $full><label>Entry URL Pattern</label><input value={settings.entry_url_pattern} onChange={e => update('entry_url_pattern', e.target.value)} /><p className="help">Variables: {'{collection}'}, {'{slug}'}, {'{id}'}</p></Field>
             <Field $full><label>Collection URL Pattern</label><input value={settings.collection_url_pattern} onChange={e => update('collection_url_pattern', e.target.value)} /><p className="help">Variables: {'{slug}'}</p></Field>
-          </Grid>
-        </Section>
-      )}
-
-      {/* ── PRIVACY ── */}
-      {activeTab === 'privacy' && (
-        <Section>
-          <h2>Privacy & GDPR</h2>
-          <Grid>
-            <Field $full><label>Privacy Policy URL</label><input value={settings.privacy_policy_url} onChange={e => update('privacy_policy_url', e.target.value)} placeholder="https://example.com/privacy" /></Field>
-            <Field><label>Data Retention (days)</label><input type="number" value={settings.data_retention_days} onChange={e => update('data_retention_days', e.target.value)} /><p className="help">How long to keep form submissions and logs</p></Field>
-            <Field><label>Cookie Consent</label><select value={settings.cookie_consent} onChange={e => update('cookie_consent', e.target.value)}><option value="false">Disabled</option><option value="true">Enabled</option></select></Field>
-            <Field $full><label>GDPR Contact Email</label><input value={settings.gdpr_contact} onChange={e => update('gdpr_contact', e.target.value)} placeholder="dpo@example.com" /><p className="help">Data Protection Officer or privacy contact</p></Field>
           </Grid>
         </Section>
       )}
