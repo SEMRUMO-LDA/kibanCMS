@@ -83,8 +83,55 @@
     document.head.appendChild(script);
   }
 
+  // Selectors of every widget we know how to clusterise. Used by the
+  // pre-hide stylesheet below (we don't want the floating button to flash
+  // for ~1s before the cluster forms), and by the arrange logic to know
+  // what to reveal again when a widget ends up standalone.
+  var KNOWN_WIDGET_SELECTORS = {
+    'cookie-notice':   '#stcm-icon',
+    'accessibility':   '#kiban-a11y-btn',
+    'whatsapp-widget': '#kiban-whatsapp-btn',
+    'i18n':            '#kiban-i18n-widget',
+  };
+
+  // Inject `visibility: hidden` for every known widget root *before* any
+  // widget script runs. The widgets append their button to <body> right
+  // after their config fetch resolves, which can be ~300ms; the cluster
+  // doesn't form until both clusterables register, which can be 2–3s if
+  // Silktide is slow. Without pre-hide, the standalone button paints for
+  // a moment and then snaps into the cluster — a noisy flash. Hiding via
+  // visibility (not display:none) keeps layout stable so the move-to-stash
+  // step doesn't reflow.
+  function injectPreHide() {
+    if (document.getElementById('kiban-pre-hide')) return;
+    var style = document.createElement('style');
+    style.id = 'kiban-pre-hide';
+    var selectors = Object.keys(KNOWN_WIDGET_SELECTORS).map(function (k) {
+      return KNOWN_WIDGET_SELECTORS[k];
+    }).join(', ');
+    style.textContent = selectors
+      + ' { visibility: hidden !important; pointer-events: none !important; }';
+    (document.head || document.documentElement).appendChild(style);
+  }
+  injectPreHide();
+
+  // Tracks how many widgets we expect to register so arrangeStack can
+  // hold off revealing standalone widgets until everyone has reported in
+  // (otherwise a fast-registering one shows alone for ~1s, then snaps
+  // into the cluster when a slow-registering one finally arrives — the
+  // user-visible flash). Falls back to revealing after a short timeout
+  // so a single misbehaving widget can't keep the others hidden forever.
+  var expectedRegistrations = 0;
+  var bootTime = Date.now();
+  var REVEAL_TIMEOUT_MS = 1500;
+  function arrangeReady() {
+    return Object.keys(stackItems).length >= expectedRegistrations
+        || Date.now() - bootTime >= REVEAL_TIMEOUT_MS;
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
+    bootTime = Date.now();
     // Kick the cluster config fetch first so its accent colour lands on
     // :root before any widget renders. The script-tag fetches don't wait
     // for it — we don't want a missing config to block the page either.
@@ -94,6 +141,7 @@
     fetchEnabledWidgets(function (err, res) {
       if (err || !res || !res.data) return;
       var enabledAddons = res.data;
+      expectedRegistrations = enabledAddons.length;
       enabledAddons.forEach(function (addonId) {
         var widgetPath = WIDGET_MAP[addonId];
         if (widgetPath) injectWidget(widgetPath);
@@ -566,6 +614,15 @@
         return clusterables.indexOf(id) === -1;
       });
 
+      // Reveal rules counter-act the kiban-pre-hide stylesheet — every
+      // widget that ends up standalone (or as the sole occupant of its
+      // corner) needs visibility:visible so it actually appears. Skipped
+      // until arrangeReady() so a fast-registering widget doesn't flash
+      // visible and then snap into the cluster when a slow one joins.
+      var revealStandalone = arrangeReady()
+        ? ' visibility: visible !important; pointer-events: auto !important;'
+        : '';
+
       if (clusterables.length >= CLUSTER_THRESHOLD) {
         // Cluster mode — originals get yanked into the off-screen stash
         // by ensureCluster itself, no per-element hiding rules needed.
@@ -577,7 +634,8 @@
           var item = stackItems[id];
           restoreFromStash(item.selector);
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
-               + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
+               + hProp + ': ' + STACK_EDGE + 'px !important;'
+               + revealStandalone + ' }\n';
           offset += item.height + STACK_GAP;
         });
       } else {
@@ -589,7 +647,8 @@
           var item = stackItems[id];
           restoreFromStash(item.selector);
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
-               + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
+               + hProp + ': ' + STACK_EDGE + 'px !important;'
+               + revealStandalone + ' }\n';
           offset += item.height + STACK_GAP;
         });
       }
