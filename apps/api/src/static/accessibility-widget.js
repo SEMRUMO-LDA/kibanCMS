@@ -220,6 +220,20 @@
         selector: '#kiban-a11y-btn',
         corner:   position,
         height:   44,
+        cluster: {
+          label: 'Accessibility',
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" '
+              + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+              + 'stroke-linejoin="round" aria-hidden="true">'
+              + '<circle cx="12" cy="12" r="10"/>'
+              + '<circle cx="12" cy="6.8" r="1.2" fill="currentColor" stroke="none"/>'
+              + '<path d="M6.5 10.5 H17.5"/><path d="M12 9 V14"/>'
+              + '<path d="M12 14 L9 19"/><path d="M12 14 L15 19"/></svg>',
+          onActivate: function () {
+            var el = document.querySelector('#kiban-a11y-btn');
+            if (el) el.click();
+          },
+        },
       });
     }
 

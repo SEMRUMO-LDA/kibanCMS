@@ -291,6 +291,32 @@
           selector: '#stcm-icon',
           corner:   config.iconPosition || 'bottomRight',
           height:   44,
+          cluster: {
+            label: 'Cookies',
+            // Crisp inline cookie glyph — Silktide's icon is fine but renders
+            // as a yellow PNG in some builds, which clashes with our white
+            // fill rule. Ship our own so the cluster is consistent.
+            icon: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" '
+                + 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+                + 'stroke-linejoin="round" aria-hidden="true">'
+                + '<path d="M21.5 12.5a9 9 0 1 1-9.9-9.4 4 4 0 0 0 5.4 5.4 4 4 0 0 0 4.5 4z" fill="currentColor" fill-opacity="0.18"/>'
+                + '<circle cx="9" cy="10" r="1" fill="currentColor"/>'
+                + '<circle cx="14" cy="14" r="1" fill="currentColor"/>'
+                + '<circle cx="9.5" cy="15.5" r="0.8" fill="currentColor"/></svg>',
+            onActivate: function () {
+              // Silktide's icon click reopens the consent banner. Prefer
+              // its public API when available so we don't depend on an
+              // event listener firing on a hidden element.
+              if (window.silktideConsentManager && typeof window.silktideConsentManager.openCookieIcon === 'function') {
+                window.silktideConsentManager.openCookieIcon();
+              } else if (window.silktideConsentManager && typeof window.silktideConsentManager.show === 'function') {
+                window.silktideConsentManager.show();
+              } else {
+                var el = document.querySelector('#stcm-icon');
+                if (el) el.click();
+              }
+            },
+          },
         });
       }
     });
