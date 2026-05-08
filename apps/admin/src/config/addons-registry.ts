@@ -671,6 +671,24 @@ const accessibility: AddonDefinition = {
 };
 
 // ============================================
+// WIDGET CLUSTER (orchestrates floating widgets)
+// ============================================
+
+const widgetCluster: AddonDefinition = {
+  id: 'widget-cluster',
+  name: 'Widget Cluster',
+  description: 'Collapse cookie, language, accessibility and WhatsApp into a single liquid-glass trigger',
+  longDescription: 'Frontend "FAB cluster" that hides individual floating widgets behind one trigger to keep the corner clean. Pick which widgets join the cluster and an optional accent colour — the loader applies it as a CSS variable so the glass picks up brand tone without losing icon contrast.',
+  icon: 'sliders-horizontal',
+  color: '#0f172a',
+  category: 'tools',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [],
+  settingsRoute: '/addons/widget-cluster',
+};
+
+// ============================================
 // COUPONS ADD-ON (discount codes — depends on Bookings)
 // ============================================
 
@@ -969,6 +987,7 @@ const channelManager: AddonDefinition = {
 export const ADDONS_REGISTRY: AddonDefinition[] = [
   cookieNotice,
   accessibility,
+  widgetCluster,
   newsletter,
   seo,
   forms,

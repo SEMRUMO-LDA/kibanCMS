@@ -28,6 +28,7 @@ import { TrashManager } from './pages/TrashManager';
 import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
+import { WidgetClusterSettings } from './pages/WidgetClusterSettings';
 import { WhatsAppWidgetSettings } from './pages/WhatsAppWidgetSettings';
 import { PostTourReviewsSettings } from './pages/PostTourReviewsSettings';
 import { NewsletterBrevoSettings } from './pages/NewsletterBrevoSettings';
@@ -116,6 +117,7 @@ const AppContent = () => {
         <Route path="settings" element={<Settings />} />
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />
         <Route path="addons/accessibility" element={<AccessibilitySettings />} />
+        <Route path="addons/widget-cluster" element={<WidgetClusterSettings />} />
         <Route path="addons/whatsapp-widget" element={<WhatsAppWidgetSettings />} />
         <Route path="addons/post-tour-reviews" element={<PostTourReviewsSettings />} />
         <Route path="addons/newsletter" element={<NewsletterBrevoSettings />} />

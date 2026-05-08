@@ -55,6 +55,24 @@
     xhr.send();
   }
 
+  // Cluster customisation written by the admin (accent colour + which
+  // widgets join the cluster). Fetched in parallel with /widgets/enabled
+  // so the first arrangeStack pass has the right inclusion list and we
+  // don't render with one config and then re-render with another.
+  function fetchClusterConfig(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', BASE_URL + '/api/v1/widgets/cluster-config');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }
+      } else { callback(new Error('HTTP ' + xhr.status)); }
+    };
+    xhr.onerror = function () { callback(new Error('Network error')); };
+    xhr.send();
+  }
+
   // ── Inject widget script ────────────────────────────────────────────
   function injectWidget(widgetPath) {
     var script = document.createElement('script');
@@ -67,18 +85,46 @@
 
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
+    // Kick the cluster config fetch first so its accent colour lands on
+    // :root before any widget renders. The script-tag fetches don't wait
+    // for it — we don't want a missing config to block the page either.
+    fetchClusterConfig(function (err, res) {
+      if (!err && res && res.data) applyClusterConfig(res.data);
+    });
     fetchEnabledWidgets(function (err, res) {
       if (err || !res || !res.data) return;
-
-      var enabledAddons = res.data; // array of addon_id strings
-
+      var enabledAddons = res.data;
       enabledAddons.forEach(function (addonId) {
         var widgetPath = WIDGET_MAP[addonId];
-        if (widgetPath) {
-          injectWidget(widgetPath);
-        }
+        if (widgetPath) injectWidget(widgetPath);
       });
     });
+  }
+
+  // Cluster config — populated by fetchClusterConfig. The defaults match
+  // the admin's defaults so a tenant that never opens the customisation
+  // page gets the same behaviour as one with an explicit save.
+  var clusterConfig = {
+    accentColor: null,
+    includedWidgets: ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'],
+  };
+  function applyClusterConfig(cfg) {
+    if (cfg && typeof cfg === 'object') {
+      if (typeof cfg.accentColor !== 'undefined') clusterConfig.accentColor = cfg.accentColor;
+      if (Array.isArray(cfg.includedWidgets))    clusterConfig.includedWidgets = cfg.includedWidgets;
+    }
+    var root = document.documentElement;
+    if (clusterConfig.accentColor) {
+      root.style.setProperty('--kiban-widget-tint', clusterConfig.accentColor);
+    } else {
+      root.style.removeProperty('--kiban-widget-tint');
+    }
+    // Re-arrange in case the inclusion list changed widgets that were
+    // already registered when the config arrived.
+    if (Object.keys(stackItems).length > 0) {
+      clearTimeout(stackTimer);
+      stackTimer = setTimeout(arrangeStack, 50);
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -115,10 +161,12 @@
   var CLUSTER_THRESHOLD = 2; // ≥N clusterable widgets in a corner ⇒ collapse
   // Lower index = closer to the trigger / corner edge.
   var STACK_ORDER = ['accessibility', 'cookie-notice', 'whatsapp-widget', 'i18n'];
-  // Widgets that don't fit the simple "icon → opens panel" pattern stay
-  // standalone (i18n's pill expands in-place; building a sub-menu for it
-  // inside the cluster doubles the language-switching logic).
-  var CLUSTER_EXEMPT = ['i18n'];
+  // i18n's pill expands in-place — it doesn't fit the simple "icon →
+  // opens panel" cluster contract, so we never put it inside the cluster
+  // even when the admin marks it as included. The admin checkbox still
+  // controls whether it's *visible* (left here intentionally so a future
+  // version can drop this exemption when we ship a sub-menu).
+  var CLUSTER_KIND_EXEMPT = ['i18n'];
 
   var stackItems = {};
   var clusters = {};   // per-corner: { trigger, panel, open }
@@ -383,11 +431,16 @@
       var vProp = corner.charAt(0) === 'b' ? 'bottom' : 'top';
       var hProp = corner.charAt(1) === 'l' ? 'left' : 'right';
 
+      // A widget joins the cluster when (a) the admin included it AND
+      // (b) it isn't in the kind-exempt list (i18n today). Anything else
+      // stays standalone in its corner.
+      var includedSet = clusterConfig.includedWidgets || [];
       var clusterables = ids.filter(function (id) {
-        return CLUSTER_EXEMPT.indexOf(id) === -1;
+        return includedSet.indexOf(id) !== -1
+            && CLUSTER_KIND_EXEMPT.indexOf(id) === -1;
       });
       var exempt = ids.filter(function (id) {
-        return CLUSTER_EXEMPT.indexOf(id) !== -1;
+        return clusterables.indexOf(id) === -1;
       });
 
       if (clusterables.length >= CLUSTER_THRESHOLD) {
