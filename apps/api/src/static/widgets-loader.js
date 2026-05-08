@@ -219,8 +219,14 @@
       ':root:not([data-kiban-no-tint]) .kiban-glass {',
       '  background: color-mix(in srgb, var(--kiban-widget-tint, transparent) 22%, rgba(20, 20, 22, 0.55));',
       '}',
-      '.kiban-cluster-trigger, .kiban-cluster-item {',
+      // Trigger is fixed to the corner. Items inside the panel are
+      // statically positioned so they actually participate in the
+      // panel's flex layout — `position: fixed` removes elements from
+      // normal flow and was making the proxies pile on top of each
+      // other instead of stacking in a clean column.
+      '.kiban-cluster-trigger {',
       '  position: fixed;',
+      '  z-index: 2147483600;',
       '  width: 44px; height: 44px;',
       '  border-radius: 50%;',
       '  display: flex; align-items: center; justify-content: center;',
@@ -229,7 +235,16 @@
       '  padding: 0;',
       '  transition: transform 0.18s ease, opacity 0.2s ease;',
       '}',
-      '.kiban-cluster-trigger { z-index: 2147483600; }',
+      '.kiban-cluster-item {',
+      '  flex: 0 0 44px;',
+      '  width: 44px; height: 44px;',
+      '  border-radius: 50%;',
+      '  display: flex; align-items: center; justify-content: center;',
+      '  cursor: pointer;',
+      '  color: #fff;',
+      '  padding: 0;',
+      '  transition: transform 0.18s ease, opacity 0.2s ease;',
+      '}',
       '.kiban-cluster-trigger:hover { transform: scale(1.06); }',
       '.kiban-cluster-trigger:active { transform: scale(0.94); }',
       '.kiban-cluster-trigger[aria-expanded="true"] { transform: rotate(180deg); }',
