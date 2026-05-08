@@ -348,6 +348,42 @@
     c.trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
+  // Off-screen container for clusterised widgets' original elements. Trying
+  // to display:none / visibility:hidden them in place fought a losing
+  // battle against widget-injected inline styles (Silktide re-asserts its
+  // cssText, the a11y widget builds its button with !important inline rules
+  // for position/z-index, etc.). Yanking the element out of normal flow and
+  // pushing it 99999px off-screen sidesteps all of that — JS .click() still
+  // fires and any panel the widget opens uses position:fixed so it lands at
+  // the right viewport coordinates regardless of where its trigger lives.
+  function getStash() {
+    var stash = document.getElementById('kiban-cluster-stash');
+    if (!stash) {
+      stash = document.createElement('div');
+      stash.id = 'kiban-cluster-stash';
+      stash.setAttribute('aria-hidden', 'true');
+      stash.style.cssText =
+        'position:absolute;left:-99999px;top:-99999px;width:0;height:0;'
+        + 'overflow:hidden;pointer-events:none;';
+      document.body.appendChild(stash);
+    }
+    return stash;
+  }
+
+  // Mapping of selector → original parent so destroyCluster can put each
+  // element back where the widget originally appended it.
+  var stashedFrom = {};
+
+  function restoreFromStash(selector) {
+    var stash = document.getElementById('kiban-cluster-stash');
+    if (!stash) return;
+    var el = stash.querySelector(selector);
+    if (!el) return;
+    var parent = stashedFrom[selector] || document.body;
+    parent.appendChild(el);
+    delete stashedFrom[selector];
+  }
+
   function ensureCluster(corner, ids) {
     ensureClusterStyles();
     var c = clusters[corner];
@@ -380,11 +416,23 @@
 
     positionCluster(corner, c);
 
+    var stash = getStash();
+
     // Re-render proxy items each pass — cheap, and handles widgets that
     // register or de-register dynamically.
     c.panel.innerHTML = '';
     ids.forEach(function (id, idx) {
       var item = stackItems[id];
+      // Move the original element into the off-screen stash so it can't
+      // peek through behind the cluster trigger or steal pointer events.
+      var original = document.querySelector(item.selector);
+      if (original && original.parentNode !== stash) {
+        if (!stashedFrom[item.selector]) {
+          stashedFrom[item.selector] = original.parentNode || document.body;
+        }
+        stash.appendChild(original);
+      }
+
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'kiban-cluster-item kiban-glass';
@@ -401,7 +449,6 @@
       });
       c.panel.appendChild(btn);
     });
-
   }
 
   function destroyCluster(corner) {
@@ -444,39 +491,27 @@
       });
 
       if (clusterables.length >= CLUSTER_THRESHOLD) {
+        // Cluster mode — originals get yanked into the off-screen stash
+        // by ensureCluster itself, no per-element hiding rules needed.
         ensureCluster(corner, clusterables);
-        clusterables.forEach(function (id) {
-          var item = stackItems[id];
-          css += item.selector + ' { display: none !important; }\n';
-          // Belt-and-braces — also set inline display so we don't rely on
-          // CSS specificity beating the widget's own inline style. Some
-          // widgets re-assert their cssText after registration and would
-          // otherwise reappear over the cluster trigger.
-          var el = document.querySelector(item.selector);
-          if (el) {
-            el.style.setProperty('display', 'none', 'important');
-            el.setAttribute('aria-hidden', 'true');
-          }
-        });
         // Stack exempt widgets above the cluster trigger so the trigger
         // always sits closest to the corner.
         var offset = STACK_EDGE + 44 + STACK_GAP;
         exempt.forEach(function (id) {
           var item = stackItems[id];
-          var el = document.querySelector(item.selector);
-          if (el) { el.style.removeProperty('display'); el.removeAttribute('aria-hidden'); }
+          restoreFromStash(item.selector);
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
                + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
           offset += item.height + STACK_GAP;
         });
       } else {
-        // No cluster — stack everything individually (≤1 clusterable).
+        // No cluster — restore any previously-stashed originals and stack
+        // them individually.
         destroyCluster(corner);
         var offset = STACK_EDGE;
         ids.forEach(function (id) {
           var item = stackItems[id];
-          var el = document.querySelector(item.selector);
-          if (el) { el.style.removeProperty('display'); el.removeAttribute('aria-hidden'); }
+          restoreFromStash(item.selector);
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
                + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
           offset += item.height + STACK_GAP;
