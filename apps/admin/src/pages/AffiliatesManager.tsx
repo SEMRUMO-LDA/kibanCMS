@@ -109,6 +109,18 @@ const InstallBanner = styled.div`
   p { margin: 0 auto ${spacing[4]}; max-width: 480px; color: #78350f; font-size: ${typography.fontSize.sm}; line-height: 1.55; }
 `;
 
+const SyncCallout = styled.div`
+  display: flex; align-items: center; gap: ${spacing[3]};
+  padding: ${spacing[3]} ${spacing[4]};
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: ${borders.radius.lg};
+  margin-bottom: ${spacing[4]};
+  svg.info { width: 20px; height: 20px; color: #1d4ed8; flex-shrink: 0; }
+  .text { flex: 1; font-size: ${typography.fontSize.sm}; color: #1e3a8a; line-height: 1.5; }
+  .text strong { font-weight: 600; }
+`;
+
 interface AffiliateRow {
   id: string;
   name: string;
@@ -135,6 +147,13 @@ export const AffiliatesManager = () => {
   // broken page.
   const [needsInstall, setNeedsInstall] = useState(false);
   const [installing, setInstalling] = useState(false);
+  // Tenants that installed the Coupons add-on before we promoted the
+  // affiliate_id field to a 'reference' picker still have it stored as
+  // 'text' in the DB, so the EntryEdit shows a free-form input instead
+  // of the dropdown. Detect the stale schema and offer a one-click
+  // re-sync that calls api.updateCollection with the new field defs.
+  const [needsCouponSync, setNeedsCouponSync] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,6 +168,17 @@ export const AffiliatesManager = () => {
       return;
     }
     setNeedsInstall(false);
+
+    // Probe coupons schema for the stale-field case. Don't probe if the
+    // tenant doesn't have Coupons at all (no point asking them to sync).
+    const coupons = await api.getCollection('coupons');
+    if (coupons.data && Array.isArray((coupons.data as any).fields)) {
+      const aff = (coupons.data as any).fields.find((f: any) => f.name === 'affiliate_id');
+      setNeedsCouponSync(!!aff && aff.type !== 'reference');
+    } else {
+      setNeedsCouponSync(false);
+    }
+
     const { data, error } = await api.getAffiliates();
     if (error) {
       toast.show(`Erro: ${error}`, 'error');
@@ -189,6 +219,30 @@ export const AffiliatesManager = () => {
     }
   };
 
+  const handleSyncCoupons = async () => {
+    const couponsAddon = getAddon('coupons');
+    const couponsCol = couponsAddon?.collections.find(c => c.slug === 'coupons');
+    if (!couponsCol) {
+      toast.show('Definição da coleção Coupons não encontrada', 'error');
+      return;
+    }
+    setSyncing(true);
+    try {
+      const { error } = await api.updateCollection('coupons', {
+        name: couponsCol.name,
+        description: couponsCol.description,
+        fields: couponsCol.fields,
+      });
+      if (error) throw new Error(error);
+      toast.show('Schema dos cupões actualizado', 'success');
+      await load();
+    } catch (err: any) {
+      toast.show(`Falha a sincronizar: ${err.message}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <Container>
       <Header>
@@ -226,6 +280,20 @@ export const AffiliatesManager = () => {
           </Btn>
         </InstallBanner>
       ) : (
+      <>
+      {needsCouponSync && (
+        <SyncCallout>
+          <AlertCircle className="info" />
+          <div className="text">
+            O schema da coleção <strong>coupons</strong> está em versão antiga e o campo <strong>affiliate_id</strong> ainda
+            é texto livre. Sincroniza para passar a usar o seletor de afiliado.
+          </div>
+          <Btn $variant="primary" onClick={handleSyncCoupons} disabled={syncing}>
+            <Download style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
+            {syncing ? 'A sincronizar…' : 'Sincronizar schema'}
+          </Btn>
+        </SyncCallout>
+      )}
       <TableWrap>
         {rows.length === 0 && !loading ? (
           <Empty>
@@ -275,6 +343,7 @@ export const AffiliatesManager = () => {
           </Table>
         )}
       </TableWrap>
+      </>
       )}
     </Container>
   );
