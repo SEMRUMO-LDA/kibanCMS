@@ -18,6 +18,9 @@ export interface AddonFieldDef {
   /** Min/max items for list-based field types (e.g. media_caption_list). */
   minItems?: number;
   maxItems?: number;
+  /** Slug of the target collection — used by `type: 'reference'` to power
+   *  the entry picker dropdown. */
+  referenceCollection?: string;
 }
 
 export interface AddonCollection {
@@ -733,7 +736,7 @@ const coupons: AddonDefinition = {
         { id: 'stackable', name: 'stackable', label: 'Stackable', type: 'boolean', helpText: 'Allow combining with other coupons (default: false)' },
         { id: 'stripe_coupon_id', name: 'stripe_coupon_id', label: 'Stripe Coupon ID', type: 'text', helpText: 'Auto-linked to Stripe coupon. Read-only.' },
         { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Inactive coupons are always rejected' },
-        { id: 'affiliate_id', name: 'affiliate_id', label: 'Affiliate ID', type: 'text', helpText: 'Optional. Entry ID from the Affiliates collection — when set, every confirmed redemption accrues commission to the linked affiliate. Requires the Affiliates add-on.' },
+        { id: 'affiliate_id', name: 'affiliate_id', label: 'Affiliate', type: 'reference', referenceCollection: 'affiliates', helpText: 'Optional. Pick the affiliate that earns commission on every confirmed redemption of this coupon. Requires the Affiliates add-on installed.' },
       ],
     },
     {
