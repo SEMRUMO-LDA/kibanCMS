@@ -7,10 +7,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { Handshake, Plus, RefreshCw, FileText, Eye } from 'lucide-react';
+import { Handshake, Plus, RefreshCw, FileText, Eye, Download, AlertCircle } from 'lucide-react';
 import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
+import { getAddon } from '../config/addons-registry';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -97,6 +98,17 @@ const Empty = styled.div`
   p { margin: 0 0 ${spacing[4]}; font-size: ${typography.fontSize.sm}; }
 `;
 
+const InstallBanner = styled.div`
+  padding: ${spacing[10]};
+  text-align: center;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: ${borders.radius.xl};
+  svg.warn { width: 40px; height: 40px; color: #b45309; margin-bottom: ${spacing[3]}; }
+  h3 { margin: 0 0 ${spacing[2]}; color: #78350f; font-size: ${typography.fontSize.lg}; }
+  p { margin: 0 auto ${spacing[4]}; max-width: 480px; color: #78350f; font-size: ${typography.fontSize.sm}; line-height: 1.55; }
+`;
+
 interface AffiliateRow {
   id: string;
   name: string;
@@ -116,9 +128,27 @@ export const AffiliatesManager = () => {
   const toast = useToast();
   const [rows, setRows] = useState<AffiliateRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // The Affiliates add-on stores its data in two custom collections
+  // (affiliates + commission-ledger). If either is missing the new-entry
+  // editor will hard-fail with "Collection not found" — detect that up
+  // front and render an install CTA instead of pushing the user into a
+  // broken page.
+  const [needsInstall, setNeedsInstall] = useState(false);
+  const [installing, setInstalling] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    // Probe collection existence first — getAffiliates returns [] for both
+    // "no rows" and "collection missing", so we can't distinguish from the
+    // list endpoint alone.
+    const aff = await api.getCollection('affiliates');
+    const ledger = await api.getCollection('commission-ledger');
+    if (aff.error || ledger.error || !aff.data || !ledger.data) {
+      setNeedsInstall(true);
+      setLoading(false);
+      return;
+    }
+    setNeedsInstall(false);
     const { data, error } = await api.getAffiliates();
     if (error) {
       toast.show(`Erro: ${error}`, 'error');
@@ -130,6 +160,34 @@ export const AffiliatesManager = () => {
   }, [toast]);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleInstall = async () => {
+    const addon = getAddon('affiliates');
+    if (!addon) {
+      toast.show('Definição do add-on não encontrada', 'error');
+      return;
+    }
+    setInstalling(true);
+    try {
+      for (const col of addon.collections) {
+        const { error } = await api.createCollection({
+          name: col.name, slug: col.slug, description: col.description,
+          type: col.type, fields: col.fields,
+        });
+        // Already-exists is fine — the other collection might still be
+        // missing, so don't bail on the loop.
+        if (error && !error.toLowerCase().includes('already exists')) {
+          throw new Error(error);
+        }
+      }
+      toast.show('Add-on instalado', 'success');
+      await load();
+    } catch (err: any) {
+      toast.show(`Falha ao instalar: ${err.message}`, 'error');
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   return (
     <Container>
@@ -143,17 +201,31 @@ export const AffiliatesManager = () => {
             <RefreshCw style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
             Atualizar
           </Btn>
-          <Btn onClick={() => navigate('/affiliates/report')}>
+          <Btn onClick={() => navigate('/affiliates/report')} disabled={needsInstall}>
             <FileText />
             Relatório mensal
           </Btn>
-          <Btn $variant="primary" onClick={() => navigate('/content/affiliates/new')}>
+          <Btn $variant="primary" onClick={() => navigate('/content/affiliates/new')} disabled={needsInstall}>
             <Plus />
             Novo afiliado
           </Btn>
         </HeaderActions>
       </Header>
 
+      {needsInstall ? (
+        <InstallBanner>
+          <AlertCircle className="warn" />
+          <h3>Add-on por instalar neste tenant</h3>
+          <p>
+            Os Afiliados precisam das coleções <strong>affiliates</strong> e <strong>commission-ledger</strong>,
+            que ainda não existem aqui. Clica para criá-las agora — depois podes registar o primeiro afiliado.
+          </p>
+          <Btn $variant="primary" onClick={handleInstall} disabled={installing}>
+            <Download style={{ animation: installing ? 'spin 1s linear infinite' : 'none' }} />
+            {installing ? 'A instalar…' : 'Instalar add-on'}
+          </Btn>
+        </InstallBanner>
+      ) : (
       <TableWrap>
         {rows.length === 0 && !loading ? (
           <Empty>
@@ -203,6 +275,7 @@ export const AffiliatesManager = () => {
           </Table>
         )}
       </TableWrap>
+      )}
     </Container>
   );
 };
