@@ -225,11 +225,39 @@ export const AffiliatesManager = () => {
     try {
       const { data, error } = await api.reconcileAffiliates();
       if (error || !data) throw new Error(error || 'No data');
-      const msg = `Verificadas ${data.orders_scanned} encomendas + ${data.bookings_scanned} bookings · `
-        + `criadas ${data.accruals_created} comissões`
-        + (data.already_had_accrual ? ` · ${data.already_had_accrual} já existiam` : '')
-        + (data.skipped_no_affiliate ? ` · ${data.skipped_no_affiliate} sem afiliado` : '');
-      toast.show(msg, data.accruals_created > 0 ? 'success' : 'info');
+
+      // Surface the most actionable reason in the toast so the user knows
+      // what to fix, then dump the full breakdown to the console for
+      // deep-debugging.
+      console.log('[KibanCMS] Affiliate reconcile result:', data);
+
+      if (data.accruals_created > 0) {
+        toast.show(`Criadas ${data.accruals_created} comissões em falta`, 'success');
+      } else if (data.already_had_accrual > 0 && data.skipped_no_affiliate_link === 0) {
+        toast.show(`Tudo já estava em dia (${data.already_had_accrual} comissões existentes)`, 'info');
+      } else if (data.skipped_no_affiliate_link > 0) {
+        toast.show(
+          `${data.skipped_no_affiliate_link} encomenda(s)/booking(s) com cupão mas sem afiliado ligado — abre o cupão e seleciona o afiliado`,
+          'warning'
+        );
+      } else if (data.skipped_coupon_not_found > 0) {
+        toast.show(
+          `${data.skipped_coupon_not_found} encomenda(s) referem um cupão que não existe (apagado?)`,
+          'warning'
+        );
+      } else if (data.skipped_no_amount > 0) {
+        toast.show(
+          `${data.skipped_no_amount} encomenda(s) com cupão+afiliado mas total=0 — verifica se a venda tem montante`,
+          'warning'
+        );
+      } else if ((data.orders_scanned + data.bookings_scanned) === 0) {
+        toast.show('Nenhuma encomenda nem booking confirmado encontrado neste tenant', 'info');
+      } else {
+        toast.show(
+          `Encontradas ${data.orders_scanned} encomendas + ${data.bookings_scanned} bookings, mas nenhum precisa de acumulação. Vê a consola para detalhes.`,
+          'info'
+        );
+      }
       await load();
     } catch (err: any) {
       toast.show(`Reconciliação falhou: ${err.message}`, 'error');

@@ -252,20 +252,43 @@ router.post('/reconcile', async (req: AuthRequest, res: Response) => {
 
     const ordersColId = await getCollectionId('orders');
     const bookingsColId = await getCollectionId('bookings');
+    const couponsColId = await getCollectionId('coupons');
 
-    let ordersScanned = 0;
-    let bookingsScanned = 0;
-    let accrualsCreated = 0;
-    let alreadyHadAccrual = 0;
-    let skipped = 0;
+    type Outcome = 'created' | 'exists' | 'skipped_no_coupon_code'
+                 | 'skipped_coupon_not_found' | 'skipped_no_affiliate_link'
+                 | 'skipped_no_amount' | 'skipped_accrue_returned_null';
+    interface Detail {
+      kind: 'order' | 'booking';
+      id: string;
+      coupon_code?: string;
+      coupon_id?: string;
+      affiliate_id?: string;
+      total_cents?: number;
+      outcome: Outcome;
+    }
+    const details: Detail[] = [];
 
-    // Helper — re-run accrueCommission and tell whether it created a new
-    // ledger row or hit the idempotency guard. We compare ledger size
-    // before/after as a signal because accrueCommission returns the same
-    // shape (an id) for both "created" and "already existed".
-    async function tryAccrue(args: Parameters<typeof accrueCommission>[0]): Promise<'created' | 'exists' | 'skipped'> {
-      const idKey = args.orderId || args.bookingId;
-      if (idKey) {
+    async function findCouponByCode(code: string) {
+      if (!couponsColId) return null;
+      const upper = code.toUpperCase();
+      const { data: cps } = await supabase
+        .from('entries')
+        .select('id, content')
+        .eq('collection_id', couponsColId)
+        .filter('content->>code', 'eq', upper)
+        .limit(1);
+      if (cps && cps.length > 0) return cps[0];
+      const { data: alt } = await supabase
+        .from('entries')
+        .select('id, content')
+        .eq('collection_id', couponsColId)
+        .filter('content->>code', 'eq', code)
+        .limit(1);
+      return (alt && alt.length > 0) ? alt[0] : null;
+    }
+
+    async function tryAccrue(args: Parameters<typeof accrueCommission>[0]): Promise<'created' | 'exists' | 'skipped_accrue_returned_null'> {
+      if (args.orderId || args.bookingId) {
         const { data: pre } = await supabase
           .from('entries')
           .select('id')
@@ -277,7 +300,7 @@ router.post('/reconcile', async (req: AuthRequest, res: Response) => {
         if (pre && pre.length > 0) return 'exists';
       }
       const result = await accrueCommission(args);
-      return result ? 'created' : 'skipped';
+      return result ? 'created' : 'skipped_accrue_returned_null';
     }
 
     // ── Orders flow ──
@@ -289,43 +312,39 @@ router.post('/reconcile', async (req: AuthRequest, res: Response) => {
         .filter('content->>status', 'eq', 'confirmed');
 
       for (const orderRow of orders || []) {
-        ordersScanned++;
         const c = orderRow.content as Record<string, any>;
         const code = (c.coupon_code || '').toString().trim();
-        if (!code) continue;
+        if (!code) {
+          details.push({ kind: 'order', id: orderRow.id, outcome: 'skipped_no_coupon_code' });
+          continue;
+        }
 
-        // Lookup coupon by code (case-insensitive)
-        const upper = code.toUpperCase();
-        const couponsColId = await getCollectionId('coupons');
-        if (!couponsColId) break;
-        const { data: cps } = await supabase
-          .from('entries')
-          .select('id, content')
-          .eq('collection_id', couponsColId)
-          .filter('content->>code', 'eq', upper)
-          .limit(1);
-        const coupon = (cps && cps.length > 0)
-          ? cps[0]
-          : (await supabase
-              .from('entries')
-              .select('id, content')
-              .eq('collection_id', couponsColId)
-              .filter('content->>code', 'eq', code)
-              .limit(1)).data?.[0];
-        if (!coupon || !(coupon.content as any).affiliate_id) { skipped++; continue; }
+        const coupon = await findCouponByCode(code);
+        if (!coupon) {
+          details.push({ kind: 'order', id: orderRow.id, coupon_code: code, outcome: 'skipped_coupon_not_found' });
+          continue;
+        }
+        const affiliateId = (coupon.content as any).affiliate_id;
+        if (!affiliateId) {
+          details.push({ kind: 'order', id: orderRow.id, coupon_code: code, coupon_id: coupon.id, outcome: 'skipped_no_affiliate_link' });
+          continue;
+        }
+        const totalCents = Number(c.total) || Number(c.amount_total) || 0;
+        if (totalCents <= 0) {
+          details.push({ kind: 'order', id: orderRow.id, coupon_code: code, coupon_id: coupon.id, affiliate_id: affiliateId, total_cents: totalCents, outcome: 'skipped_no_amount' });
+          continue;
+        }
 
         const outcome = await tryAccrue({
           couponId: coupon.id,
           couponCode: code,
           orderId: orderRow.id,
-          orderTotalCents: Number(c.total) || Number(c.amount_total) || 0,
+          orderTotalCents: totalCents,
           currency: c.currency || 'eur',
           stripeSessionId: c.stripe_session_id || '',
           stripePaymentIntent: c.stripe_payment_intent || '',
         });
-        if (outcome === 'created') accrualsCreated++;
-        else if (outcome === 'exists') alreadyHadAccrual++;
-        else skipped++;
+        details.push({ kind: 'order', id: orderRow.id, coupon_code: code, coupon_id: coupon.id, affiliate_id: affiliateId, total_cents: totalCents, outcome });
       }
     }
 
@@ -338,52 +357,61 @@ router.post('/reconcile', async (req: AuthRequest, res: Response) => {
         .filter('content->>booking_status', 'eq', 'confirmed');
 
       for (const bk of bookings || []) {
-        bookingsScanned++;
         const c = bk.content as Record<string, any>;
         const code = (c.coupon_code || '').toString().trim();
-        if (!code) continue;
+        if (!code) {
+          details.push({ kind: 'booking', id: bk.id, outcome: 'skipped_no_coupon_code' });
+          continue;
+        }
 
-        const upper = code.toUpperCase();
-        const couponsColId = await getCollectionId('coupons');
-        if (!couponsColId) break;
-        const { data: cps } = await supabase
-          .from('entries')
-          .select('id, content')
-          .eq('collection_id', couponsColId)
-          .filter('content->>code', 'eq', upper)
-          .limit(1);
-        const coupon = (cps && cps.length > 0)
-          ? cps[0]
-          : (await supabase
-              .from('entries')
-              .select('id, content')
-              .eq('collection_id', couponsColId)
-              .filter('content->>code', 'eq', code)
-              .limit(1)).data?.[0];
-        if (!coupon || !(coupon.content as any).affiliate_id) { skipped++; continue; }
+        const coupon = await findCouponByCode(code);
+        if (!coupon) {
+          details.push({ kind: 'booking', id: bk.id, coupon_code: code, outcome: 'skipped_coupon_not_found' });
+          continue;
+        }
+        const affiliateId = (coupon.content as any).affiliate_id;
+        if (!affiliateId) {
+          details.push({ kind: 'booking', id: bk.id, coupon_code: code, coupon_id: coupon.id, outcome: 'skipped_no_affiliate_link' });
+          continue;
+        }
+        const totalCents = Number(c.amount_total_cents) || Number(c.total_cents) || Number(c.amount) || 0;
+        if (totalCents <= 0) {
+          details.push({ kind: 'booking', id: bk.id, coupon_code: code, coupon_id: coupon.id, affiliate_id: affiliateId, total_cents: totalCents, outcome: 'skipped_no_amount' });
+          continue;
+        }
 
         const outcome = await tryAccrue({
           couponId: coupon.id,
           couponCode: code,
           bookingId: bk.id,
-          orderTotalCents: Number(c.amount_total_cents) || Number(c.total_cents) || 0,
+          orderTotalCents: totalCents,
           currency: c.currency || 'eur',
           stripeSessionId: c.stripe_session_id || '',
           stripePaymentIntent: c.stripe_payment_intent || '',
         });
-        if (outcome === 'created') accrualsCreated++;
-        else if (outcome === 'exists') alreadyHadAccrual++;
-        else skipped++;
+        details.push({ kind: 'booking', id: bk.id, coupon_code: code, coupon_id: coupon.id, affiliate_id: affiliateId, total_cents: totalCents, outcome });
       }
     }
 
+    // Tally outcomes for the toast / quick scan.
+    const summary = details.reduce((acc, d) => {
+      acc[d.outcome] = (acc[d.outcome] || 0) + 1;
+      return acc;
+    }, {} as Record<Outcome, number>);
+
     res.json({
       data: {
-        orders_scanned: ordersScanned,
-        bookings_scanned: bookingsScanned,
-        accruals_created: accrualsCreated,
-        already_had_accrual: alreadyHadAccrual,
-        skipped_no_affiliate: skipped,
+        orders_scanned: details.filter(d => d.kind === 'order').length,
+        bookings_scanned: details.filter(d => d.kind === 'booking').length,
+        accruals_created: summary.created || 0,
+        already_had_accrual: summary.exists || 0,
+        skipped_no_coupon_code: summary.skipped_no_coupon_code || 0,
+        skipped_coupon_not_found: summary.skipped_coupon_not_found || 0,
+        skipped_no_affiliate_link: summary.skipped_no_affiliate_link || 0,
+        skipped_no_amount: summary.skipped_no_amount || 0,
+        skipped_accrue_returned_null: summary.skipped_accrue_returned_null || 0,
+        // Cap details at 50 so we don't blow up the response on huge datasets.
+        details: details.slice(0, 50),
       },
     });
   } catch (err: any) {

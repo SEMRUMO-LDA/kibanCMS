@@ -453,7 +453,20 @@ class ApiClient {
       bookings_scanned: number;
       accruals_created: number;
       already_had_accrual: number;
-      skipped_no_affiliate: number;
+      skipped_no_coupon_code: number;
+      skipped_coupon_not_found: number;
+      skipped_no_affiliate_link: number;
+      skipped_no_amount: number;
+      skipped_accrue_returned_null: number;
+      details: Array<{
+        kind: 'order' | 'booking';
+        id: string;
+        coupon_code?: string;
+        coupon_id?: string;
+        affiliate_id?: string;
+        total_cents?: number;
+        outcome: string;
+      }>;
     }>('POST', '/affiliates/reconcile');
   }
 
