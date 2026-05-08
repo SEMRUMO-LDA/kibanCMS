@@ -99,6 +99,17 @@
         if (widgetPath) injectWidget(widgetPath);
       });
     });
+    // Some widgets register late (Silktide pulls its bundle from a CDN,
+    // which can take 1–3s on slow networks). The 200ms register debounce
+    // would still arrange after each registration, but adding a few
+    // additional sweeps gives us a deterministic settle if anything
+    // mutates the DOM out of band — e.g. Silktide re-rendering its icon
+    // when the consent banner closes. Cheap and idempotent.
+    [1500, 3500, 6000].forEach(function (delay) {
+      setTimeout(function () {
+        if (Object.keys(stackItems).length > 0) arrangeStack();
+      }, delay);
+    });
   }
 
   // Cluster config — populated by fetchClusterConfig. The defaults match
@@ -373,15 +384,69 @@
   // Mapping of selector → original parent so destroyCluster can put each
   // element back where the widget originally appended it.
   var stashedFrom = {};
+  var stashedSelectors = {}; // selector → true while clustered
+
+  function stashElement(selector) {
+    var stash = getStash();
+    // Use querySelectorAll — Silktide and other widgets sometimes recreate
+    // their floating element (e.g. when the consent banner reopens),
+    // leaving the old one in the stash and a fresh one in the body. We
+    // need to grab everything that matches.
+    var matches = document.querySelectorAll(selector);
+    var moved = 0;
+    matches.forEach(function (el) {
+      if (el.parentNode === stash) return;
+      if (!stashedFrom[selector]) {
+        stashedFrom[selector] = el.parentNode || document.body;
+      }
+      // Belt-and-braces inline styles in case some upstream code clones
+      // this element back out of the stash and into the page; the styles
+      // travel with the element and keep it invisible/non-interactive.
+      el.style.setProperty('position', 'absolute', 'important');
+      el.style.setProperty('left', '-99999px', 'important');
+      el.style.setProperty('top', '-99999px', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.setAttribute('aria-hidden', 'true');
+      stash.appendChild(el);
+      moved++;
+    });
+    if (moved > 0) stashedSelectors[selector] = true;
+  }
 
   function restoreFromStash(selector) {
     var stash = document.getElementById('kiban-cluster-stash');
+    delete stashedSelectors[selector];
     if (!stash) return;
-    var el = stash.querySelector(selector);
-    if (!el) return;
+    var els = stash.querySelectorAll(selector);
+    if (!els.length) return;
     var parent = stashedFrom[selector] || document.body;
-    parent.appendChild(el);
+    els.forEach(function (el) {
+      el.style.removeProperty('position');
+      el.style.removeProperty('left');
+      el.style.removeProperty('top');
+      el.style.removeProperty('pointer-events');
+      el.removeAttribute('aria-hidden');
+      parent.appendChild(el);
+    });
     delete stashedFrom[selector];
+  }
+
+  // MutationObserver to catch escapees — when the body gains a new node
+  // matching a selector that's currently meant to be in the stash (e.g.
+  // Silktide re-instantiating #stcm-icon), drag it back in immediately.
+  var bodyObserver = null;
+  function ensureBodyObserver() {
+    if (bodyObserver || !window.MutationObserver) return;
+    bodyObserver = new MutationObserver(function () {
+      // stashElement is idempotent: it walks every match and only moves
+      // ones that aren't already inside the stash. Cheaper than trying to
+      // detect "is there an escapee" first (querySelector returns the
+      // already-stashed copy, which masks the new one).
+      Object.keys(stashedSelectors).forEach(function (sel) {
+        stashElement(sel);
+      });
+    });
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   function ensureCluster(corner, ids) {
@@ -415,23 +480,19 @@
     }
 
     positionCluster(corner, c);
-
-    var stash = getStash();
+    ensureBodyObserver();
 
     // Re-render proxy items each pass — cheap, and handles widgets that
     // register or de-register dynamically.
     c.panel.innerHTML = '';
     ids.forEach(function (id, idx) {
       var item = stackItems[id];
-      // Move the original element into the off-screen stash so it can't
-      // peek through behind the cluster trigger or steal pointer events.
-      var original = document.querySelector(item.selector);
-      if (original && original.parentNode !== stash) {
-        if (!stashedFrom[item.selector]) {
-          stashedFrom[item.selector] = original.parentNode || document.body;
-        }
-        stash.appendChild(original);
-      }
+      // Move the original element(s) into the off-screen stash so they
+      // can't peek through behind the cluster trigger or steal pointer
+      // events. stashElement handles duplicate matches (Silktide can
+      // recreate its icon) and keeps the body-observer subscription up to
+      // date so future re-creations also get hauled back.
+      stashElement(item.selector);
 
       var btn = document.createElement('button');
       btn.type = 'button';
