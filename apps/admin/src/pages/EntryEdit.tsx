@@ -13,7 +13,7 @@ import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
-import { ArrowLeft, Loader, Clock, Eye, Share2 } from 'lucide-react';
+import { ArrowLeft, Loader, Clock, Eye, Share2, Copy } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { LivePreview } from '../components/LivePreview';
@@ -72,6 +72,22 @@ const Subtitle = styled.p`
   font-size: ${typography.fontSize.base};
   color: ${colors.gray[600]};
   margin: 0;
+  display: inline-flex; align-items: center; gap: ${spacing[2]};
+`;
+
+const IdChip = styled.button`
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px;
+  background: ${colors.gray[100]};
+  border: 1px solid ${colors.gray[200]};
+  border-radius: ${borders.radius.md};
+  font-family: ${typography.fontFamily.mono};
+  font-size: 12px;
+  color: ${colors.gray[700]};
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  &:hover { background: ${colors.gray[200]}; color: ${colors.gray[900]}; }
+  svg { width: 12px; height: 12px; }
 `;
 
 // Compact action row inside the PublishBox — same look as the box's own
@@ -368,7 +384,24 @@ export function EntryEdit() {
           {isEditMode ? 'Edit Entry' : 'Create New Entry'}
         </Title>
         <Subtitle>
-          {collection.name} • {isEditMode ? `Editing ${entry?.id}` : 'New entry'}
+          <span>{collection.name}{isEditMode ? ' • Editing' : ' • New entry'}</span>
+          {isEditMode && entry?.id && (
+            <IdChip
+              type="button"
+              title="Copy entry ID"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(entry.id);
+                  toast.success('Entry ID copied');
+                } catch {
+                  prompt('Copy this entry ID:', entry.id);
+                }
+              }}
+            >
+              {entry.id}
+              <Copy />
+            </IdChip>
+          )}
         </Subtitle>
       </PageHeader>
 
