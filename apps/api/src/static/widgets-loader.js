@@ -627,9 +627,14 @@
         // Cluster mode — originals get yanked into the off-screen stash
         // by ensureCluster itself, no per-element hiding rules needed.
         ensureCluster(corner, clusterables);
-        // Stack exempt widgets above the cluster trigger so the trigger
-        // always sits closest to the corner.
-        var offset = STACK_EDGE + 44 + STACK_GAP;
+        // Stack exempt widgets ABOVE the panel's fully-expanded extent
+        // (not just above the trigger) so opening the cluster doesn't
+        // collide with them. Trade-off: when collapsed there's a visible
+        // gap between trigger and the first exempt — but the alternative
+        // is having the expanded proxies overwrite the exempt visually.
+        var panelHeight = clusterables.length * 44
+                        + Math.max(0, clusterables.length - 1) * STACK_GAP;
+        var offset = STACK_EDGE + 44 + STACK_GAP + panelHeight + STACK_GAP;
         exempt.forEach(function (id) {
           var item = stackItems[id];
           restoreFromStash(item.selector);
