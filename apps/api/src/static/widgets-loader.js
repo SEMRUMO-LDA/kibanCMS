@@ -420,6 +420,15 @@
     c.open = open;
     c.panel.setAttribute('data-open', open ? 'true' : 'false');
     c.trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // Drive the exempt-shift CSS rule. Per-corner attribute so multiple
+    // clusters don't fight each other if a tenant ever ends up with both
+    // bottom-left and bottom-right collapsed columns.
+    var attr = 'data-kiban-cluster-' + corner + '-open';
+    if (open) {
+      document.body.setAttribute(attr, 'true');
+    } else {
+      document.body.removeAttribute(attr);
+    }
   }
 
   // Off-screen container for clusterised widgets' original elements. Trying
@@ -627,21 +636,30 @@
         // Cluster mode — originals get yanked into the off-screen stash
         // by ensureCluster itself, no per-element hiding rules needed.
         ensureCluster(corner, clusterables);
-        // Stack exempt widgets ABOVE the panel's fully-expanded extent
-        // (not just above the trigger) so opening the cluster doesn't
-        // collide with them. Trade-off: when collapsed there's a visible
-        // gap between trigger and the first exempt — but the alternative
-        // is having the expanded proxies overwrite the exempt visually.
+        // Exempt widgets shift up when the cluster opens so the proxies
+        // never overlap them, and shift back down to hug the trigger when
+        // it closes (no awkward empty space). Two rules per exempt: a
+        // base bottom right above the trigger, and an over-ride keyed to
+        // body[data-kiban-cluster-{corner}-open] for the open state.
         var panelHeight = clusterables.length * 44
                         + Math.max(0, clusterables.length - 1) * STACK_GAP;
-        var offset = STACK_EDGE + 44 + STACK_GAP + panelHeight + STACK_GAP;
+        var closedBase = STACK_EDGE + 44 + STACK_GAP;
+        var openBase = closedBase + panelHeight + STACK_GAP;
+        var idx = 0;
         exempt.forEach(function (id) {
           var item = stackItems[id];
           restoreFromStash(item.selector);
-          css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
+          var closedOffset = closedBase + idx * (item.height + STACK_GAP);
+          var openOffset   = openBase   + idx * (item.height + STACK_GAP);
+          css += item.selector + ' { '
+               + vProp + ': ' + closedOffset + 'px !important; '
                + hProp + ': ' + STACK_EDGE + 'px !important;'
+               + ' transition: ' + vProp + ' 0.25s cubic-bezier(0.2, 0.9, 0.2, 1);'
                + revealStandalone + ' }\n';
-          offset += item.height + STACK_GAP;
+          css += 'body[data-kiban-cluster-' + corner + '-open="true"] '
+               + item.selector + ' { '
+               + vProp + ': ' + openOffset + 'px !important; }\n';
+          idx++;
         });
       } else {
         // No cluster — restore any previously-stashed originals and stack
