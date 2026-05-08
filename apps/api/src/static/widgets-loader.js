@@ -393,13 +393,25 @@
       if (clusterables.length >= CLUSTER_THRESHOLD) {
         ensureCluster(corner, clusterables);
         clusterables.forEach(function (id) {
-          css += stackItems[id].selector + ' { display: none !important; }\n';
+          var item = stackItems[id];
+          css += item.selector + ' { display: none !important; }\n';
+          // Belt-and-braces — also set inline display so we don't rely on
+          // CSS specificity beating the widget's own inline style. Some
+          // widgets re-assert their cssText after registration and would
+          // otherwise reappear over the cluster trigger.
+          var el = document.querySelector(item.selector);
+          if (el) {
+            el.style.setProperty('display', 'none', 'important');
+            el.setAttribute('aria-hidden', 'true');
+          }
         });
         // Stack exempt widgets above the cluster trigger so the trigger
         // always sits closest to the corner.
         var offset = STACK_EDGE + 44 + STACK_GAP;
         exempt.forEach(function (id) {
           var item = stackItems[id];
+          var el = document.querySelector(item.selector);
+          if (el) { el.style.removeProperty('display'); el.removeAttribute('aria-hidden'); }
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
                + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
           offset += item.height + STACK_GAP;
@@ -410,6 +422,8 @@
         var offset = STACK_EDGE;
         ids.forEach(function (id) {
           var item = stackItems[id];
+          var el = document.querySelector(item.selector);
+          if (el) { el.style.removeProperty('display'); el.removeAttribute('aria-hidden'); }
           css += item.selector + ' { ' + vProp + ': ' + offset + 'px !important; '
                + hProp + ': ' + STACK_EDGE + 'px !important; }\n';
           offset += item.height + STACK_GAP;
