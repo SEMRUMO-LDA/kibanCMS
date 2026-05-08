@@ -180,9 +180,10 @@
       '  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.5));',
       '}',
       '.kiban-cluster-item svg, .kiban-cluster-item img { width: 22px; height: 22px; }',
-      '.kiban-cluster-item svg path, .kiban-cluster-item svg circle, .kiban-cluster-item svg line {',
-      '  fill: currentColor; stroke: currentColor;',
-      '}',
+      // Don't override the SVG's own fill/stroke — each glyph declares
+      // currentColor on the right elements, and forcing fill:currentColor
+      // on every path/circle/line turned outline icons (a11y, sliders) into
+      // featureless white blobs.
       '.kiban-cluster-panel {',
       '  position: fixed;',
       '  display: flex; flex-direction: column; gap: ' + STACK_GAP + 'px;',
