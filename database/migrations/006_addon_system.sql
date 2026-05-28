@@ -75,3 +75,6 @@ WITH CHECK (
 INSERT INTO addon_registry (addon_id, status)
 VALUES ('cookie-notice', '{"installed": true, "enabled": true}'::jsonb)
 ON CONFLICT (addon_id) DO NOTHING;
+
+-- Notificar o PostgREST para recarregar o schema cache, prevenindo o erro PGRST205
+NOTIFY pgrst, 'reload schema';
