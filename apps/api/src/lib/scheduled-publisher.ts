@@ -32,7 +32,6 @@ async function publishDueEntriesForCurrentTenant(): Promise<number> {
     .select('id, title, slug, collection_id')
     .eq('status', 'scheduled')
     .lte('published_at', nowIso)
-    .is('deleted_at', null) // don't accidentally publish entries in trash
     .limit(200);
 
   if (selectErr) {
@@ -108,11 +107,7 @@ const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 async function processCurrentTenant(): Promise<void> {
   await publishDueEntriesForCurrentTenant();
-
-  // Run trash auto-empty at most once per hour per tenant
-  if (Date.now() - lastTrashSweepAt > TRASH_SWEEP_INTERVAL_MS) {
-    await emptyExpiredTrashForCurrentTenant();
-  }
+  // Trash auto-empty disabled — deleted_at column not yet in database
 }
 
 async function processAllTenants(): Promise<void> {
