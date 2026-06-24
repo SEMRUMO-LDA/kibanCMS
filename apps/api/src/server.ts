@@ -122,19 +122,6 @@ const limiter = rateLimit({
 // Apply rate limiting to API routes only
 app.use('/api/v1', limiter);
 
-// Health check endpoint (no auth required) - MUST BE BEFORE TENANT MIDDLEWARE
-app.get('/health', (req, res) => {
-  const ctx = tenantStore.getStore();
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'KibanCMS Unified Server',
-    version: '1.5.0',
-    mode: NODE_ENV,
-    tenant: ctx?.tenant?.id || 'default',
-  });
-});
-
 // Request ID — unique ID for every request (tracing)
 app.use(requestIdMiddleware);
 
@@ -184,6 +171,19 @@ const adminLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Health check endpoint (no auth required)
+app.get('/health', (req, res) => {
+  const ctx = tenantStore.getStore();
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'KibanCMS Unified Server',
+    version: '1.5.0',
+    mode: NODE_ENV,
+    tenant: ctx?.tenant?.id || 'default',
+  });
 });
 
 // Tenant config endpoint — frontend fetches Supabase credentials from here

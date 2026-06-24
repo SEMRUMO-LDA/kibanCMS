@@ -10,13 +10,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/admin/package.json ./apps/admin/
-COPY apps/example/package.json ./apps/example/
 COPY packages/types/package.json ./packages/types/
-COPY packages/addons/package.json ./packages/addons/
-COPY packages/core/package.json ./packages/core/
-COPY packages/media/package.json ./packages/media/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/kiban-client/package.json ./packages/kiban-client/
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
@@ -28,7 +22,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
 COPY apps/admin/ ./apps/admin/
-COPY packages/ ./packages/
+COPY packages/types/ ./packages/types/
+COPY packages/addons/src/ ./packages/addons/src/
 
 WORKDIR /app/apps/admin
 
@@ -44,7 +39,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY apps/api/ ./apps/api/
-COPY packages/ ./packages/
+COPY packages/types/ ./packages/types/
 
 WORKDIR /app/apps/api
 RUN pnpm build:api
@@ -65,15 +60,7 @@ COPY --from=admin-builder /app/apps/admin/dist ./apps/admin/dist
 
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/api/package.json ./apps/api/
-COPY apps/admin/package.json ./apps/admin/
-COPY apps/example/package.json ./apps/example/
 COPY packages/types/package.json ./packages/types/
-COPY packages/addons/package.json ./packages/addons/
-COPY packages/core/package.json ./packages/core/
-COPY packages/media/package.json ./packages/media/
-COPY packages/ui/package.json ./packages/ui/
-COPY packages/kiban-client/package.json ./packages/kiban-client/
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
