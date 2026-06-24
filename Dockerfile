@@ -65,7 +65,15 @@ COPY --from=admin-builder /app/apps/admin/dist ./apps/admin/dist
 
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/admin/package.json ./apps/admin/
+COPY apps/example/package.json ./apps/example/
 COPY packages/types/package.json ./packages/types/
+COPY packages/addons/package.json ./packages/addons/
+COPY packages/core/package.json ./packages/core/
+COPY packages/media/package.json ./packages/media/
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/kiban-client/package.json ./packages/kiban-client/
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
