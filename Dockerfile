@@ -66,6 +66,8 @@ COPY packages/types/package.json ./packages/types/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 ENV NODE_ENV=production
+ENV PORT=5001
+EXPOSE 5001
 
 
 
