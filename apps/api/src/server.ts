@@ -125,6 +125,17 @@ app.use('/api/v1', limiter);
 // Request ID — unique ID for every request (tracing)
 app.use(requestIdMiddleware);
 
+// Health check endpoint (no auth required) - Must be BEFORE tenantMiddleware!
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'KibanCMS Unified Server',
+    version: '1.5.0',
+    mode: NODE_ENV,
+  });
+});
+
 // Tenant resolution — sets up per-request Supabase clients
 app.use(tenantMiddleware);
 
@@ -173,18 +184,6 @@ const adminLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Health check endpoint (no auth required)
-app.get('/health', (req, res) => {
-  const ctx = tenantStore.getStore();
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'KibanCMS Unified Server',
-    version: '1.5.0',
-    mode: NODE_ENV,
-    tenant: ctx?.tenant?.id || 'default',
-  });
-});
 
 // Tenant config endpoint — frontend fetches Supabase credentials from here
 app.get('/api/v1/config', (req, res) => {
@@ -540,7 +539,7 @@ process.on('SIGINT', () => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT as number, '0.0.0.0', () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║                                                           ║
