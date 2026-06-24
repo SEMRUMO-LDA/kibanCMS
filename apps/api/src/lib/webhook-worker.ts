@@ -133,11 +133,8 @@ async function deliverWebhook(delivery: WebhookDelivery, webhook: Webhook): Prom
   }
 }
 
-import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
-import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
-
 /**
- * Process pending webhook deliveries for the current tenant
+ * Process pending webhook deliveries
  */
 export async function processWebhookQueue() {
   try {
@@ -200,35 +197,6 @@ export async function processWebhookQueue() {
   }
 }
 
-async function processAllTenants() {
-  const tenants = getAllTenants();
-
-  if (tenants.length === 0) {
-    const def = getDefaultTenant();
-    if (!def) return;
-    try {
-      const clients = getOrCreateClients(def);
-      await tenantStore.run({ tenant: def, ...clients }, async () => {
-        await processWebhookQueue();
-      });
-    } catch (err: any) {
-      console.error('Webhook worker: default tenant failed', err.message);
-    }
-    return;
-  }
-
-  for (const tenant of tenants) {
-    try {
-      const clients = getOrCreateClients(tenant);
-      await tenantStore.run({ tenant, ...clients }, async () => {
-        await processWebhookQueue();
-      });
-    } catch (err: any) {
-      console.error(`Webhook worker: tenant ${tenant.id} failed`, err.message);
-    }
-  }
-}
-
 /**
  * Start webhook worker (poll every 5 seconds)
  */
@@ -236,12 +204,10 @@ export function startWebhookWorker(intervalMs: number = 5000) {
   console.log('🔄 Starting webhook worker...');
 
   // Process immediately
-  processAllTenants().catch(err => console.error(err));
+  processWebhookQueue();
 
   // Then poll at interval
-  const interval = setInterval(() => {
-    processAllTenants().catch(err => console.error(err));
-  }, intervalMs);
+  const interval = setInterval(processWebhookQueue, intervalMs);
 
   return () => {
     console.log('⏹️  Stopping webhook worker...');
