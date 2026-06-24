@@ -67,7 +67,7 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts
 
 ENV NODE_ENV=production
 
-EXPOSE 5001
+
 
 
 
