@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../lib/logger.js';
 import { audit } from '../lib/audit.js';
+import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
 
 const router: Router = Router();
 
@@ -22,18 +23,22 @@ const isAdmin = (role: string | undefined): boolean => {
  */
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const { data: collections, error } = await supabase
-      .from('collections')
-      .select('id, name, slug, description, type, icon, created_at, updated_at')
-      .not('slug', 'in', `(${SYSTEM_COLLECTIONS.join(',')})`)
-      .order('name', { ascending: true });
+    const { data: result, fromCache } = await withFallbackCache('collections:list', async () => {
+      const { data: collections, error } = await supabase
+        .from('collections')
+        .select('id, name, slug, description, type, icon, created_at, updated_at')
+        .not('slug', 'in', `(${SYSTEM_COLLECTIONS.join(',')})`)
+        .order('name', { ascending: true });
 
-    if (error) throw error;
+      if (error) throw error;
+      return collections || [];
+    });
 
     res.json({
-      data: collections || [],
+      data: result,
       meta: {
-        count: collections?.length || 0,
+        count: result.length,
+        ...(fromCache ? { cached: true } : {}),
       },
       timestamp: new Date().toISOString(),
     });
@@ -193,6 +198,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 
     audit(req, 'create', 'collection', collection.id, { name, slug });
 
+    // Invalidate collections cache
+    invalidateCachePattern('collections:*').catch(() => {});
+
     res.status(201).json({
       data: collection,
       timestamp: new Date().toISOString(),
@@ -335,6 +343,9 @@ router.put('/:slug', async (req: AuthRequest, res: Response) => {
 
     audit(req, 'update', 'collection', collection.id, { slug, fields: Object.keys(updateData) });
 
+    // Invalidate collections cache
+    invalidateCachePattern('collections:*').catch(() => {});
+
     res.json({
       data: collection,
       timestamp: new Date().toISOString(),
@@ -419,6 +430,9 @@ router.delete('/:slug', async (req: AuthRequest, res: Response) => {
     if (error) throw error;
 
     audit(req, 'delete', 'collection', existing.id, { slug });
+
+    // Invalidate collections cache
+    invalidateCachePattern('collections:*').catch(() => {});
 
     res.json({
       data: { id: existing.id, slug },

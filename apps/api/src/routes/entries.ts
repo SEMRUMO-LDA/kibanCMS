@@ -6,6 +6,7 @@ import { audit } from '../lib/audit.js';
 import { LRUCache } from '../lib/lru-cache.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { autoTranslateEntryToAllLanguages } from './i18n.js';
+import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -202,65 +203,73 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    let query = supabase
-      .from('entries')
-      .select(ENTRY_SELECT, { count: 'exact' })
-      .eq('collection_id', collection.id);
-
-    // Only apply soft-delete filter on tenants that ran migration 004
-    if (await hasSoftDelete()) {
-      query = query.is('deleted_at', null);
-    }
-
-    if (status && typeof status === 'string') {
-      query = query.eq('status', status);
-    }
-
-    if (search && typeof search === 'string') {
-      const escaped = escapeIlike(search);
-      query = query.or(`title.ilike.%${escaped}%,excerpt.ilike.%${escaped}%`);
-    }
-
-    if (tags && typeof tags === 'string') {
-      const tagList = tags.split(',').map(t => t.trim());
-      query = query.overlaps('tags', tagList);
-    }
-
-    const allowedSortFields = ['created_at', 'updated_at', 'published_at', 'title', 'status'];
-    const sortField = allowedSortFields.includes(sort as string) ? (sort as string) : 'created_at';
-    query = query.order(sortField, { ascending: order === 'asc' });
-
     const limitNum = Math.min(parseInt(limit as string, 10) || 100, 500);
     const offsetNum = parseInt(offset as string, 10) || 0;
-    query = query.range(offsetNum, offsetNum + limitNum - 1);
-
-    const { data: entries, error, count } = await query;
-
-    if (error) throw error;
-
-    // i18n: overlay translations if ?lang= is provided
     const lang = req.query.lang as string | undefined;
-    let responseData = entries || [];
-    if (lang && responseData.length > 0) {
-      responseData = responseData.map((entry: any) => {
-        const translations = entry.meta?.translations?.[lang];
-        if (translations) {
-          return {
-            ...entry,
-            title: translations._title || entry.title,
-            content: { ...(entry.content || {}), ...translations },
-            meta: { ...(entry.meta || {}), _served_lang: lang },
-          };
-        }
-        return { ...entry, meta: { ...(entry.meta || {}), _served_lang: entry.meta?.i18n?.source_lang || null } };
-      });
-    }
+
+    // Build a stable cache key from query params
+    const cacheKey = `entries:${collectionSlug}:list:s=${status || ''}:q=${search || ''}:t=${tags || ''}:l=${limitNum}:o=${offsetNum}:sort=${sort}:ord=${order}:lang=${lang || ''}`;
+
+    const { data: result, fromCache } = await withFallbackCache(cacheKey, async () => {
+      let query = supabase
+        .from('entries')
+        .select(ENTRY_SELECT, { count: 'exact' })
+        .eq('collection_id', collection.id);
+
+      // Only apply soft-delete filter on tenants that ran migration 004
+      if (await hasSoftDelete()) {
+        query = query.is('deleted_at', null);
+      }
+
+      if (status && typeof status === 'string') {
+        query = query.eq('status', status);
+      }
+
+      if (search && typeof search === 'string') {
+        const escaped = escapeIlike(search);
+        query = query.or(`title.ilike.%${escaped}%,excerpt.ilike.%${escaped}%`);
+      }
+
+      if (tags && typeof tags === 'string') {
+        const tagList = tags.split(',').map(t => t.trim());
+        query = query.overlaps('tags', tagList);
+      }
+
+      const allowedSortFields = ['created_at', 'updated_at', 'published_at', 'title', 'status'];
+      const sortField = allowedSortFields.includes(sort as string) ? (sort as string) : 'created_at';
+      query = query.order(sortField, { ascending: order === 'asc' });
+
+      query = query.range(offsetNum, offsetNum + limitNum - 1);
+
+      const { data: entries, error, count } = await query;
+      if (error) throw error;
+
+      // i18n: overlay translations if ?lang= is provided
+      let responseData = entries || [];
+      if (lang && responseData.length > 0) {
+        responseData = responseData.map((entry: any) => {
+          const translations = entry.meta?.translations?.[lang];
+          if (translations) {
+            return {
+              ...entry,
+              title: translations._title || entry.title,
+              content: { ...(entry.content || {}), ...translations },
+              meta: { ...(entry.meta || {}), _served_lang: lang },
+            };
+          }
+          return { ...entry, meta: { ...(entry.meta || {}), _served_lang: entry.meta?.i18n?.source_lang || null } };
+        });
+      }
+
+      return { data: responseData, count: count || 0 };
+    });
 
     res.json({
-      data: responseData,
+      data: result.data,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
-        pagination: { limit: limitNum, offset: offsetNum, total: count || 0 },
+        pagination: { limit: limitNum, offset: offsetNum, total: result.count },
+        ...(fromCache ? { cached: true } : {}),
       },
       timestamp: new Date().toISOString(),
     });
@@ -287,43 +296,54 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    let slugQuery = supabase
-      .from('entries')
-      .select(ENTRY_SELECT)
-      .eq('collection_id', collection.id)
-      .eq('slug', entrySlug);
+    const lang = req.query.lang as string | undefined;
+    const cacheKey = `entries:${collectionSlug}:slug:${entrySlug}:lang=${lang || ''}`;
 
-    if (await hasSoftDelete()) {
-      slugQuery = slugQuery.is('deleted_at', null);
-    }
+    const { data: responseEntry, fromCache } = await withFallbackCache(cacheKey, async () => {
+      let slugQuery = supabase
+        .from('entries')
+        .select(ENTRY_SELECT)
+        .eq('collection_id', collection.id)
+        .eq('slug', entrySlug);
 
-    const { data: entry, error } = await slugQuery.single();
+      if (await hasSoftDelete()) {
+        slugQuery = slugQuery.is('deleted_at', null);
+      }
 
-    if (error || !entry) {
+      const { data: entry, error } = await slugQuery.single();
+
+      if (error || !entry) {
+        throw new Error('ENTRY_NOT_FOUND');
+      }
+
+      // i18n: overlay translations if ?lang= is provided
+      let processed = entry as any;
+      if (lang && processed.meta?.translations?.[lang]) {
+        const translations = processed.meta.translations[lang];
+        processed = {
+          ...processed,
+          title: translations._title || processed.title,
+          content: { ...(processed.content || {}), ...translations },
+          meta: { ...(processed.meta || {}), _served_lang: lang },
+        };
+      }
+      return processed;
+    });
+
+    res.json({
+      data: responseEntry,
+      meta: {
+        collection: { id: collection.id, name: collection.name, slug: collection.slug },
+        ...(fromCache ? { cached: true } : {}),
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    if (error.message === 'ENTRY_NOT_FOUND') {
       return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });
     }
-
-    // i18n: overlay translations if ?lang= is provided
-    let responseEntry = entry as any;
-    const lang = req.query.lang as string | undefined;
-    if (lang && responseEntry.meta?.translations?.[lang]) {
-      const translations = responseEntry.meta.translations[lang];
-      responseEntry = {
-        ...responseEntry,
-        title: translations._title || responseEntry.title,
-        content: { ...(responseEntry.content || {}), ...translations },
-        meta: { ...(responseEntry.meta || {}), _served_lang: lang },
-      };
-    }
-
-    res.json({
-      data: responseEntry,
-      meta: { collection: { id: collection.id, name: collection.name, slug: collection.slug } },
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error: any) {
     logger.error('Error fetching entry', { error: error.message });
     res.status(500).json({
       error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
@@ -428,6 +448,9 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
     }
 
     audit(req, 'create', 'entry', entry.id, { title: entry.title, collection: collection.slug });
+
+    // Invalidate entries cache for this collection
+    invalidateCachePattern(`entries:${collectionSlug}:*`).catch(() => {});
 
     // Auto-translate when i18n config has auto_translate=true. Fire-and-forget
     // so the response stays fast; the i18n helper swallows its own errors.
@@ -583,6 +606,9 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     }
 
     audit(req, 'update', 'entry', entry.id, { title: entry.title, collection: collection.slug, fields: Object.keys(updateData) });
+
+    // Invalidate entries cache for this collection
+    invalidateCachePattern(`entries:${collectionSlug}:*`).catch(() => {});
 
     // Auto-translate refresh when content changed and entry is published.
     // The helper hashes content and skips if nothing changed (cheap no-op).
@@ -790,6 +816,9 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
         .eq('id', existing.id);
       if (error) throw error;
     }
+
+    // Invalidate entries cache for this collection
+    invalidateCachePattern(`entries:${collectionSlug}:*`).catch(() => {});
 
     audit(req, 'delete', 'entry', existing.id, {
       title: existing.title,

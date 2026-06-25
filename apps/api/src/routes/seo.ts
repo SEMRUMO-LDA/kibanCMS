@@ -11,6 +11,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
+import { withFallbackCache } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -37,100 +38,91 @@ function emptyConfig() {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    // Tenant cache — avoid the per-render DB hit.
     const tenantId = (req as any).tenantId || 'default';
     const cached = cache.get(tenantId);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
       return res.json({ data: cached.data, timestamp: new Date().toISOString() });
     }
 
-    const { data: col } = await supabase
-      .from('collections')
-      .select('id')
-      .eq('slug', 'seo-settings')
-      .single();
+    const { data: seoData, fromCache: fromRedis } = await withFallbackCache(`seo:settings`, async () => {
+      const { data: col } = await supabase
+        .from('collections')
+        .select('id')
+        .eq('slug', 'seo-settings')
+        .single();
 
-    if (!col) {
-      return res.json({ data: emptyConfig(), timestamp: new Date().toISOString() });
-    }
+      if (!col) return emptyConfig();
 
-    // Prefer slug "global" (canonical), fall back to first published entry.
-    const { data: preferred } = await supabase
-      .from('entries')
-      .select('content')
-      .eq('collection_id', col.id)
-      .eq('slug', 'global')
-      .eq('status', 'published')
-      .maybeSingle();
-
-    let entry = preferred;
-    if (!entry?.content) {
-      const { data: fallback } = await supabase
+      // Prefer slug "global" (canonical), fall back to first published entry.
+      const { data: preferred } = await supabase
         .from('entries')
         .select('content')
         .eq('collection_id', col.id)
+        .eq('slug', 'global')
         .eq('status', 'published')
-        .order('created_at', { ascending: true })
-        .limit(1)
         .maybeSingle();
-      entry = fallback;
-    }
 
-    if (!entry?.content) {
-      const empty = emptyConfig();
-      cache.set(tenantId, { data: empty, fetchedAt: Date.now() });
-      return res.json({ data: empty, timestamp: new Date().toISOString() });
-    }
+      let entry = preferred;
+      if (!entry?.content) {
+        const { data: fallback } = await supabase
+          .from('entries')
+          .select('content')
+          .eq('collection_id', col.id)
+          .eq('status', 'published')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        entry = fallback;
+      }
 
-    const c = entry.content as Record<string, any>;
+      if (!entry?.content) return emptyConfig();
 
-    // Normalise into a flat shape the frontend can consume directly.
-    // Empty strings are returned as undefined so frontends can short-circuit
-    // rendering with truthy checks.
-    const clean = (v: any) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+      const c = entry.content as Record<string, any>;
+      const clean = (v: any) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
-    const data = {
-      enabled: true,
-      meta: {
-        title: clean(c.meta_title),
-        description: clean(c.meta_description),
-        favicon_url: clean(c.favicon_url),
-        canonical_url: clean(c.canonical_url),
-      },
-      og: {
-        title: clean(c.og_title),
-        description: clean(c.og_description),
-        image: clean(c.og_image),
-        type: clean(c.og_type),
-      },
-      twitter: {
-        card: clean(c.twitter_card),
-        handle: clean(c.twitter_handle),
-      },
-      analytics: {
-        google_analytics: clean(c.google_analytics),
-        google_tag_manager: clean(c.google_tag_manager),
-        facebook_pixel: clean(c.facebook_pixel),
-      },
-      indexing: {
-        robots_txt: clean(c.robots_txt),
-        noindex_default: c.noindex_default === true || c.noindex_default === 'true',
-        sitemap_url: clean(c.sitemap_url),
-        hreflang: clean(c.hreflang),
-      },
-      verifications: {
-        google: clean(c.google_site_verification),
-        bing: clean(c.bing_site_verification),
-        pinterest: clean(c.pinterest_verification),
-      },
-      structured_data: clean(c.structured_data) || '',
-      custom_head_code: clean(c.custom_head_code) || '',
-      custom_body_code: clean(c.custom_body_code) || '',
-    };
+      return {
+        enabled: true,
+        meta: {
+          title: clean(c.meta_title),
+          description: clean(c.meta_description),
+          favicon_url: clean(c.favicon_url),
+          canonical_url: clean(c.canonical_url),
+        },
+        og: {
+          title: clean(c.og_title),
+          description: clean(c.og_description),
+          image: clean(c.og_image),
+          type: clean(c.og_type),
+        },
+        twitter: {
+          card: clean(c.twitter_card),
+          handle: clean(c.twitter_handle),
+        },
+        analytics: {
+          google_analytics: clean(c.google_analytics),
+          google_tag_manager: clean(c.google_tag_manager),
+          facebook_pixel: clean(c.facebook_pixel),
+        },
+        indexing: {
+          robots_txt: clean(c.robots_txt),
+          noindex_default: c.noindex_default === true || c.noindex_default === 'true',
+          sitemap_url: clean(c.sitemap_url),
+          hreflang: clean(c.hreflang),
+        },
+        verifications: {
+          google: clean(c.google_site_verification),
+          bing: clean(c.bing_site_verification),
+          pinterest: clean(c.pinterest_verification),
+        },
+        structured_data: clean(c.structured_data) || '',
+        custom_head_code: clean(c.custom_head_code) || '',
+        custom_body_code: clean(c.custom_body_code) || '',
+      };
+    });
 
-    cache.set(tenantId, { data, fetchedAt: Date.now() });
+    cache.set(tenantId, { data: seoData, fetchedAt: Date.now() });
 
-    res.json({ data, timestamp: new Date().toISOString() });
+    res.json({ data: seoData, timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching SEO settings', { error: error.message });
     res.status(500).json({
