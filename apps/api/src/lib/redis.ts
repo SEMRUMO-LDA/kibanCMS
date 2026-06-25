@@ -35,7 +35,7 @@ if (REDIS_URL) {
       logger.info('Redis connected — fallback cache active');
     });
 
-    redis.on('error', (err) => {
+    redis.on('error', (err: Error) => {
       redisReady = false;
       // Don't spam logs — one line is enough
       logger.warn('Redis error (fallback cache disabled)', { error: err.message });
