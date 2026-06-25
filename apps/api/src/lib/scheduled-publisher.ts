@@ -107,7 +107,12 @@ const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 async function processCurrentTenant(): Promise<void> {
   await publishDueEntriesForCurrentTenant();
-  // Trash auto-empty disabled — deleted_at column not yet in database
+
+  // Run trash auto-empty at most once per hour per tenant
+  if (Date.now() - lastTrashSweepAt > TRASH_SWEEP_INTERVAL_MS) {
+    await emptyExpiredTrashForCurrentTenant();
+    lastTrashSweepAt = Date.now();
+  }
 }
 
 async function processAllTenants(): Promise<void> {
