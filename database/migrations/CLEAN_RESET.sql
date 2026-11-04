@@ -7,7 +7,8 @@
 --   3. Recria tudo limpo com RLS correto (SECURITY DEFINER)
 --   4. Cria api_keys, webhooks, entry_revisions
 --   5. Configura triggers e funcoes
---   6. Define o primeiro user como super_admin
+--   6. Cria as tabelas dos add-ons (addon_registry, addon_configs)
+--   7. Define o primeiro user como super_admin
 --
 -- INSTRUCOES:
 --   1. Abre o Supabase SQL Editor
@@ -592,14 +593,78 @@ CREATE TRIGGER entries_webhook_trigger
     FOR EACH ROW EXECUTE FUNCTION trigger_webhooks_on_entry_change();
 
 -- ============================
--- STEP 12: GRANTS
+-- STEP 12: ADD-ONS (registo + configuracoes)
+-- ============================
+-- O STEP 1 apaga addon_registry e addon_configs; sem as recriar, o admin
+-- falha ao guardar os cookies e os outros add-ons (PGRST205). Mesmo
+-- esquema que a migracao 006_addon_system.sql.
+
+CREATE TABLE addon_registry (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    addon_id TEXT NOT NULL UNIQUE,
+    status JSONB NOT NULL DEFAULT '{"installed": true, "enabled": false}',
+    config JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE TABLE addon_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    addon_id TEXT NOT NULL REFERENCES addon_registry(addon_id) ON DELETE CASCADE,
+    config JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+    UNIQUE(addon_id)
+);
+
+ALTER TABLE addon_registry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE addon_configs  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can manage addon registry"
+ON addon_registry FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM profiles
+          WHERE profiles.id = auth.uid()
+            AND profiles.role::text IN ('super_admin', 'admin'))
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles
+          WHERE profiles.id = auth.uid()
+            AND profiles.role::text IN ('super_admin', 'admin'))
+);
+
+CREATE POLICY "Admins can manage addon configs"
+ON addon_configs FOR ALL TO authenticated
+USING (
+  EXISTS (SELECT 1 FROM profiles
+          WHERE profiles.id = auth.uid()
+            AND profiles.role::text IN ('super_admin', 'admin'))
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles
+          WHERE profiles.id = auth.uid()
+            AND profiles.role::text IN ('super_admin', 'admin'))
+);
+
+-- addon_configs.addon_id aponta para addon_registry (FK): regista-se de
+-- antemao cada add-on que guarda configuracao em addon_configs.
+INSERT INTO addon_registry (addon_id, status)
+SELECT addon_id, '{"installed": true, "enabled": true}'::jsonb
+FROM (VALUES
+    ('cookie-notice'), ('accessibility'), ('widget-cluster'), ('i18n'),
+    ('whatsapp-widget'), ('newsletter'), ('affiliates'),
+    ('post-tour-reviews'), ('channel-manager')
+) AS a(addon_id);
+
+-- ============================
+-- STEP 13: GRANTS
 -- ============================
 
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON api_keys TO authenticated;
 
 -- ============================
--- STEP 13: SETUP FIRST USER AS SUPER_ADMIN
+-- STEP 14: SETUP FIRST USER AS SUPER_ADMIN
 -- ============================
 
 DO $$
@@ -630,14 +695,18 @@ BEGIN
         RAISE NOTICE '========================================';
         RAISE NOTICE '   User: %', v_user_email;
         RAISE NOTICE '   Role: super_admin';
-        RAISE NOTICE '   Tabelas: 8 (core v1.0)';
-        RAISE NOTICE '   Policies: 24 RLS';
+        RAISE NOTICE '   Tabelas: 9 core v1.0 + 2 add-ons';
+        RAISE NOTICE '   Policies: 27 RLS';
         RAISE NOTICE '   Tabelas v2 removidas';
         RAISE NOTICE '';
         RAISE NOTICE '   Proximo passo: abre o kibanCMS e faz onboarding';
         RAISE NOTICE '========================================';
     END IF;
 END $$;
+
+-- O PostgREST guarda o esquema em cache: sem isto, as tabelas acabadas de
+-- criar podem dar PGRST205 ate ao proximo recarregamento.
+NOTIFY pgrst, 'reload schema';
 
 -- ============================
 -- VERIFICACAO (corre separadamente)
