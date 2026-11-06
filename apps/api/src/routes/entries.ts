@@ -8,6 +8,7 @@ import { tenantStore } from '../middleware/tenant.js';
 import { autoTranslateEntryToAllLanguages } from './i18n.js';
 import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { allowCollectionRead } from '../lib/private-collections.js';
 
 const router: Router = Router();
 
@@ -151,7 +152,7 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
 
     const { data: entry, error } = await supabase
       .from('entries')
-      .select(ENTRY_SELECT)
+      .select(`${ENTRY_SELECT}, collection_id`)
       .eq('id', id)
       .single();
 
@@ -167,6 +168,9 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
       .select('id, name, slug')
       .eq('id', (entry as any).collection_id)
       .single();
+
+    // Private collections (leads, bookings, secrets…) are not readable with a public API key
+    if (collection && !(await allowCollectionRead(req, res, collection.slug))) return;
 
     res.json({
       data: entry,
@@ -202,6 +206,9 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
         error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
     }
+
+    // Private collections (leads, bookings, secrets…) are not readable with a public API key
+    if (!(await allowCollectionRead(req, res, collection.slug))) return;
 
     const limitNum = Math.min(parseInt(limit as string, 10) || 100, 500);
     const offsetNum = parseInt(offset as string, 10) || 0;
@@ -295,6 +302,9 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
         error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
       });
     }
+
+    // Private collections (leads, bookings, secrets…) are not readable with a public API key
+    if (!(await allowCollectionRead(req, res, collection.slug))) return;
 
     const lang = req.query.lang as string | undefined;
     const cacheKey = `entries:${collectionSlug}:slug:${entrySlug}:lang=${lang || ''}`;

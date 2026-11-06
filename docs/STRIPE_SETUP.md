@@ -37,7 +37,7 @@ O CMS nunca toca em dados de cartao. Zero complexidade PCI.
 
 **Porque e seguro guardar a sk_ na DB:**
 - A API usa **service role key** para ler a DB (bypassa RLS)
-- A collection `stripe-config` tem RLS — users normais nao a veem
+- A collection `stripe-config` e privada: a API recusa (403) leituras com API keys que nao sejam de um admin/editor (`apps/api/src/lib/private-collections.ts`). Nota: a API usa o cliente service-role, por isso o RLS nao se aplica aos pedidos feitos pela API
 - O endpoint `/payments/config` so retorna a **publishable key** (publica)
 - A secret key nunca aparece em nenhuma resposta da API
 

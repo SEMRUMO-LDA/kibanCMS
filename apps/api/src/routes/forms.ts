@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { sendFormNotification, sendFormAutoReply } from '../lib/email.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { canReadPrivateData, sendPrivateDataForbidden } from '../lib/private-collections.js';
 
 const router: Router = Router();
 
@@ -269,7 +270,7 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
 /**
  * GET /api/v1/forms/submissions
  *
- * List form submissions (admin only, JWT auth).
+ * List form submissions (API key of an admin or editor only).
  * Convenience wrapper — same data as GET /api/v1/entries/form-submissions
  * but with form-specific filters.
  *
@@ -286,6 +287,10 @@ router.get('/submissions', async (req: AuthRequest, res: Response) => {
         error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
       });
     }
+
+    // Leads are personal data: the public (viewer) key used by frontends to
+    // submit forms must not be able to list them.
+    if (!(await canReadPrivateData(req))) return sendPrivateDataForbidden(res);
 
     const { form_name, is_read, limit = '50', offset = '0' } = req.query;
 

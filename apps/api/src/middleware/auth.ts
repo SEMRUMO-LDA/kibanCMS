@@ -5,6 +5,8 @@ import { logger } from '../lib/logger.js';
 export interface AuthRequest extends Request {
   profileId?: string;
   user?: any;
+  /** How the request authenticated: API key (frontends) or JWT (admin UI). */
+  authMethod?: 'api_key' | 'jwt';
 }
 
 /**
@@ -92,6 +94,7 @@ export async function validateApiKey(
 
     // Attach profile ID to request
     req.profileId = keyRecord.profile_id;
+    req.authMethod = 'api_key';
 
     next();
   } catch (error) {
@@ -148,6 +151,7 @@ export async function validateJWT(
     // Attach user to request
     req.user = data.user;
     req.profileId = data.user.id;
+    req.authMethod = 'jwt';
 
     next();
   } catch (error) {

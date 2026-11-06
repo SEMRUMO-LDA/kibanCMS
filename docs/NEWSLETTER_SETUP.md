@@ -243,7 +243,7 @@ Subscritores cancelados (unsubscribe) ficam com `is_active: false` no content.
 Ainda nao ha export nativo. Opcoes atuais:
 
 1. **Manual** — Ver no admin, copiar emails
-2. **API** — Fazer GET `/api/v1/entries/newsletter-subscribers?status=published&limit=500` e processar
+2. **API** — Fazer GET `/api/v1/entries/newsletter-subscribers?status=published&limit=500` e processar. Usa a API key de um **admin ou editor**: `newsletter-subscribers` e uma collection privada e as keys de viewer/author (as que os sites usam) recebem 403
 3. **Supabase direto** — Query SQL no Supabase Dashboard
 
 ```bash
