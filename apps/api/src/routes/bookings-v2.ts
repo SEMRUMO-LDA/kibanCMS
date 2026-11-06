@@ -20,6 +20,7 @@ import { sendBookingConfirmation } from '../lib/email.js';
 import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon } from '../lib/coupons.js';
 import { tenantStore } from '../middleware/tenant.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { canReadPrivateData, sendPrivateDataForbidden } from '../lib/private-collections.js';
 
 const router: Router = Router();
 
@@ -1039,6 +1040,9 @@ router.post('/:bookingId/cancel', async (req: AuthRequest, res: Response) => {
 
 router.get('/list', async (req: AuthRequest, res: Response) => {
   try {
+    // Bookings hold customer personal data: not readable with a public API key
+    if (!(await canReadPrivateData(req))) return sendPrivateDataForbidden(res);
+
     const {
       status: statusFilter,
       resource,
@@ -1090,8 +1094,10 @@ router.get('/list', async (req: AuthRequest, res: Response) => {
 // GET /v2/stats
 // ============================================
 
-router.get('/stats', async (_req: AuthRequest, res: Response) => {
+router.get('/stats', async (req: AuthRequest, res: Response) => {
   try {
+    if (!(await canReadPrivateData(req))) return sendPrivateDataForbidden(res);
+
     const bookingsColId = await getCollectionId('bookings');
     if (!bookingsColId) {
       return res.json({
