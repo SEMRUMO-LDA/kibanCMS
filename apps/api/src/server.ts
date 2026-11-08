@@ -290,9 +290,15 @@ app.use('/api/v1/preview', (req, res, next) => {
 // Trash — admin-only soft-delete management
 app.use('/api/v1/trash', validateJWT, trashRouter);
 // SEO settings — public to API-key holders so frontends can render meta tags.
-// robots.txt is fully public (search engines don't auth).
-app.get('/api/v1/seo/robots.txt', (req, res, next) => seoRouter(req as any, res, next));
-app.use('/api/v1/seo', validateAny, seoRouter);
+// robots.txt, sitemap.xml and llms.txt are fully public: search engines and AI
+// crawlers don't authenticate, and they only contain published content.
+// (The old app.get('/api/v1/seo/robots.txt', … seoRouter) never matched — the
+// router saw the full path — so robots.txt returned 401 since April.)
+const PUBLIC_SEO_PATHS = new Set(['/robots.txt', '/sitemap.xml', '/llms.txt']);
+app.use('/api/v1/seo', (req, res, next) => {
+  if (req.method === 'GET' && PUBLIC_SEO_PATHS.has(req.path)) return next();
+  return validateAny(req as any, res, next);
+}, seoRouter);
 app.use('/api/v1/tours', validateAny, toursRouter); // Tours — rich catalog; delegates booking/checkout to Bookings v2.
 app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /validate endpoint (JWT or API Key).
 

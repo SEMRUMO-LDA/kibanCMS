@@ -9,10 +9,11 @@ import styled, { keyframes } from 'styled-components';
 import {
   Globe, Key, Image as ImageIcon, Link2, Mail,
   Copy, Check, Save, Loader, CheckCircle,
-  Plus, Trash2, X, Activity,
+  Plus, Trash2, X, Activity, Sparkles,
 } from 'lucide-react';
 import { SiteHealthPanel } from '../components/settings/SiteHealthPanel';
 import { ConnectSitePanel } from '../components/settings/ConnectSitePanel';
+import { AiPerformancePanel } from '../components/settings/AiPerformancePanel';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -150,6 +151,7 @@ const TABS = [
   { id: 'general', label: 'General', icon: Globe },
   { id: 'api', label: 'API', icon: Key },
   { id: 'health', label: 'Health', icon: Activity },
+  { id: 'ai', label: 'AI & Performance', icon: Sparkles },
   { id: 'media', label: 'Media', icon: ImageIcon },
   { id: 'permalinks', label: 'Permalinks', icon: Link2 },
   { id: 'email', label: 'Email', icon: Mail },
@@ -171,6 +173,10 @@ interface SiteSettings {
   resend_api_key: string; default_from_email: string; default_from_name: string; default_reply_to: string;
   notification_emails: string;
   turnstile_secret_key: string;
+  // AI & Performance
+  ai_search_bots: string;
+  ai_training_bots: string;
+  business_type: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -186,6 +192,9 @@ const DEFAULTS: SiteSettings = {
   resend_api_key: '', default_from_email: '', default_from_name: '', default_reply_to: '',
   notification_emails: '',
   turnstile_secret_key: '',
+  ai_search_bots: 'allow',
+  ai_training_bots: 'allow',
+  business_type: 'Organization',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -436,6 +445,16 @@ export const Settings = () => {
       )}
 
       {/* ── API ── */}
+      {/* ── AI & PERFORMANCE ── */}
+      {activeTab === 'ai' && (
+        <AiPerformancePanel
+          locale={locale}
+          siteUrl={settings.site_url}
+          values={{ ai_search_bots: settings.ai_search_bots, ai_training_bots: settings.ai_training_bots, business_type: settings.business_type }}
+          onChange={(key, value) => update(key, value)}
+        />
+      )}
+
       {/* ── HEALTH ── */}
       {activeTab === 'health' && (
         <SiteHealthPanel locale={locale} onNavigateTab={switchTab} />

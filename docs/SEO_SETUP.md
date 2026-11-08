@@ -252,8 +252,8 @@ Ficam de fora as collections privadas (leads, reservas, encomendas…) e as de c
 e as entradas com `noindex`. Para escolher so algumas collections, preenche
 **Sitemap Collections** nas definicoes de SEO (ex.: `blog, tours`).
 
-Endpoints (API key do site + `X-Tenant`): `GET /api/v1/seo/sitemap.xml` (XML) e
-`GET /api/v1/seo/sitemap` (JSON). Em Next.js:
+Endpoints (com `X-Tenant`): `GET /api/v1/seo/sitemap.xml` (XML, público) e
+`GET /api/v1/seo/sitemap` (JSON, com API key). Em Next.js:
 
 ```ts
 // app/sitemap.ts

@@ -147,7 +147,9 @@ export async function getOptimizedImage(
   const timer = setTimeout(() => controller.abort(), 15_000);
   let original: Buffer;
   try {
-    const res = await fetch(src.url, { signal: controller.signal });
+    const res = await fetch(src.url, { signal: controller.signal }).catch((err: any) => {
+      throw new ImageError(502, `Original image not reachable (${err?.name === 'AbortError' ? 'timeout' : 'network error'})`);
+    });
     if (!res.ok) throw new ImageError(res.status === 404 ? 404 : 502, `Original image not available (${res.status})`);
     const len = Number(res.headers.get('content-length') || 0);
     if (len > MAX_SOURCE_BYTES) throw new ImageError(413, 'Original image too large');

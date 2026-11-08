@@ -25,6 +25,7 @@
 | [Coupons](ADDON_COUPONS.md) | Discount codes for bookings and checkout |
 | [Newsletter Addon](NEWSLETTER_SETUP.md) | Email subscriptions from any frontend |
 | [SEO & Analytics](SEO_SETUP.md) | SEO, Open Graph, analytics, structured data |
+| [Performance & AI search](AI_PERFORMANCE.md) | Optimised images, AI crawler policy, llms.txt, automatic JSON-LD |
 | [Redirects Manager](REDIRECTS_SETUP.md) | 301/302 redirects for SEO and migrations |
 
 ## Checking a client
