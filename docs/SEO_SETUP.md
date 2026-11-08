@@ -241,6 +241,42 @@ export default async function RootLayout({ children }) {
 
 ---
 
+## Sitemap gerado automaticamente
+
+O CMS gera o sitemap a partir das entradas **publicadas**, usando:
+- **Settings → General → URL do site** (obrigatorio, ex.: `https://www.marsolve.pt`)
+- **Settings → Permalinks**: `entry_url_pattern` (default `/{collection}/{slug}`) e
+  `collection_url_pattern` (default `/{slug}`, pagina de cada collection)
+
+Ficam de fora as collections privadas (leads, reservas, encomendas…) e as de configuracao,
+e as entradas com `noindex`. Para escolher so algumas collections, preenche
+**Sitemap Collections** nas definicoes de SEO (ex.: `blog, tours`).
+
+Endpoints (API key do site + `X-Tenant`): `GET /api/v1/seo/sitemap.xml` (XML) e
+`GET /api/v1/seo/sitemap` (JSON). Em Next.js:
+
+```ts
+// app/sitemap.ts
+import type { MetadataRoute } from 'next';
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_KIBAN_API_URL}/api/v1/seo/sitemap`, {
+    headers: {
+      Authorization: `Bearer ${process.env.KIBAN_API_KEY}`,
+      'X-Tenant': process.env.KIBAN_TENANT!,
+    },
+    next: { revalidate: 600 },
+  });
+  if (!res.ok) return [];
+  const { data } = await res.json();
+  return data.map((u: { url: string; lastModified: string }) => ({ url: u.url, lastModified: u.lastModified }));
+}
+```
+
+No `robots.txt` do site aponta para `https://<site>/sitemap.xml`.
+
+---
+
 ## Structured Data — exemplos
 
 ### Empresa local (Local Business)

@@ -40,6 +40,7 @@ const FEATURE_NAMES: Record<string, { pt: string; en: string }> = {
   role_protection: { pt: 'Proteção de papéis', en: 'Role protection' },
   cookie_consents: { pt: 'Registo de consentimentos de cookies', en: 'Cookie consent log' },
   media_bucket: { pt: 'Bucket de imagens', en: 'Image bucket' },
+  translation_cache: { pt: 'Cache de traduções', en: 'Translation cache' },
 };
 
 function fmtDate(iso: string | null | undefined, pt: boolean): string | null {

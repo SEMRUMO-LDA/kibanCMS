@@ -41,6 +41,34 @@ Settings → Email → **Enviar email de teste**. Se responder `NO_API_KEY`, fal
 
 ---
 
+## Anti-spam
+
+**Honeypot (sempre ativo):** acrescenta ao formulario um campo escondido chamado `_hp` e
+envia-o no body. Pessoas nao o veem; bots que preenchem tudo sim. Submissoes com `_hp`
+preenchido recebem uma resposta normal de sucesso, mas nada e guardado nem enviado.
+
+```html
+<input type="text" name="_hp" tabindex="-1" autocomplete="off"
+       style="position:absolute;left:-9999px" aria-hidden="true">
+```
+
+**Cloudflare Turnstile (opcional, por cliente):**
+1. Cria um widget em Cloudflare → Turnstile (gratis) para o dominio do site
+2. Cola a **secret key** em **Settings → Email → Anti-spam** no CMS
+3. No site, usa a **site key** no widget e envia o token como `turnstile_token`
+   (ou `cf-turnstile-response`) no body de `/forms/submit` e `/newsletter/subscribe`
+
+Com a secret key preenchida, pedidos sem token valido recebem `400 CAPTCHA_FAILED`.
+Se a Cloudflare estiver em baixo, os pedidos passam (os formularios nao ficam parados).
+
+## Leads
+
+Cada submissao entra com **Lead Status = New**. No CMS podes muda-lo para Contacted, Won,
+Lost ou Spam e acrescentar **Internal Notes**. O estado aparece ao lado do titulo na lista.
+**Export CSV** exporta todas as submissoes que correspondem aos filtros (abre bem no Excel).
+
+---
+
 ## (Opcional) Webhook para Make.com
 
 Os passos abaixo so sao precisos se quiseres, alem do email, enviar cada lead para

@@ -13,6 +13,7 @@ const fullSchema = {
   schema_version: EXPECTED_SCHEMA_VERSION,
   snapshots: true, coupon_limits: true, trash: true, addons: true, channel_manager: true,
   api_key_rpc: true, role_protection: true, cookie_consents: true, media_bucket: true,
+  translation_cache: true,
 };
 
 describe('evaluateSchema', () => {
