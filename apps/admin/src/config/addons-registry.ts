@@ -15,6 +15,8 @@ export interface AddonFieldDef {
   maxLength?: number;
   /** Predefined options for select / multiselect fields. */
   options?: Array<{ label: string; value: string }>;
+  /** Initial value for new entries (e.g. true for an "Active" checkbox). */
+  defaultValue?: unknown;
   /** Min/max items for list-based field types (e.g. media_caption_list). */
   minItems?: number;
   maxItems?: number;
@@ -195,7 +197,7 @@ const forms: AddonDefinition = {
         { id: 'notification_emails', name: 'notification_emails', label: 'Notification Emails', type: 'text', required: true, helpText: 'Comma-separated emails to receive notifications' },
         { id: 'email_subject_template', name: 'email_subject_template', label: 'Email Subject', type: 'text', placeholder: 'New {form_name} from {name}', helpText: 'Variables: {form_name}, {name}, {email}, {subject}' },
         { id: 'webhook_url', name: 'webhook_url', label: 'Webhook URL', type: 'url', helpText: 'External webhook for email dispatch (Resend, Zapier, Make, etc.)' },
-        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', helpText: 'Enable/disable notifications for this form' },
+        { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean', defaultValue: true, helpText: 'Enable/disable notifications for this form. When off, no email or webhook is sent' },
         { id: 'auto_reply', name: 'auto_reply', label: 'Auto-reply Message', type: 'textarea', helpText: 'Optional message sent to the person who submitted the form' },
       ],
     },

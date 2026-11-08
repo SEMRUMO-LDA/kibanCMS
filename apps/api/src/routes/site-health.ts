@@ -17,6 +17,7 @@ import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { PRIVATE_COLLECTIONS } from './entries.js';
+import { normalizeFormName } from './forms.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -219,10 +220,40 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
     safe('forms', async () => {
       const forms = await latestEntryDate('form-submissions');
+      // Per-form configs that silently stop notifications: "Active" off, or
+      // left as draft (only published configs are read).
+      const configs: Array<{ form: string; active: boolean; published: boolean }> = [];
+      const cfgColId = await getCollectionId('forms-config');
+      if (cfgColId) {
+        const { data } = await supabase.from('entries').select('status, content').eq('collection_id', cfgColId).limit(100);
+        for (const e of data || []) {
+          const c = (e.content as Record<string, any>) || {};
+          configs.push({ form: String(c.form_name || '?'), active: c.is_active !== false, published: e.status === 'published' });
+        }
+      }
+      const disabled = configs.filter(c => c.published && !c.active).map(c => c.form);
+      const drafts = configs.filter(c => !c.published).map(c => c.form);
+
+      // Form names the site actually sends that no published config matches
+      // (they fall back to the global recipients in Settings → Email).
+      const unmatched: string[] = [];
+      const subColId = await getCollectionId('form-submissions');
+      if (subColId) {
+        const { data: subs } = await supabase
+          .from('entries').select('content').eq('collection_id', subColId)
+          .order('created_at', { ascending: false }).limit(200);
+        const known = new Set(configs.filter(c => c.published).map(c => normalizeFormName(c.form)));
+        const seen = new Set<string>();
+        for (const s of subs || []) {
+          const name = String((s.content as any)?.form_name || '');
+          const key = normalizeFormName(name);
+          if (key && !known.has(key) && !seen.has(key)) { seen.add(key); unmatched.push(name); }
+        }
+      }
       return {
         id: 'forms',
-        status: 'info',
-        facts: { installed: forms.exists, lastSubmissionAt: forms.latest },
+        status: disabled.length || drafts.length || unmatched.length ? 'warn' : 'info',
+        facts: { installed: forms.exists, lastSubmissionAt: forms.latest, disabled, drafts, unmatched },
       };
     }),
 

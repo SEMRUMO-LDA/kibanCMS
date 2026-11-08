@@ -227,6 +227,11 @@ export function EntryEditor({
     const initializedData: EntryData = { ...initialData };
     fields.forEach(field => {
       if (!(field.id in initializedData)) {
+        // Explicit default from the field definition wins (e.g. "Active" = true)
+        if ((field as any).defaultValue !== undefined) {
+          initializedData[field.id] = (field as any).defaultValue;
+          return;
+        }
         // Set default values based on field type
         switch (field.type) {
           case 'boolean':

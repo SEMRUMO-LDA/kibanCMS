@@ -28,6 +28,8 @@ export interface FieldDefinition {
   placeholder?: string;
   helpText?: string;
   options?: Array<{ label: string; value: string }>; // For select fields
+  /** Initial value for NEW entries (e.g. true for an "Active" checkbox). */
+  defaultValue?: unknown;
   min?: number; // For number fields
   max?: number; // For number fields
   step?: number; // For number fields

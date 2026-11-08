@@ -36,3 +36,17 @@ describe('turnstile', () => {
     assert.equal(await verifyTurnstile('', 'secret'), 'missing');
   });
 });
+
+import { normalizeFormName } from '../routes/forms.js';
+
+describe('normalizeFormName (Forms Config matching)', () => {
+  it('ignores case and surrounding/duplicate spaces', () => {
+    assert.equal(normalizeFormName('  Contacto  do Site '), 'contacto do site');
+    assert.equal(normalizeFormName('contacto do site'), normalizeFormName('CONTACTO DO SITE'));
+  });
+
+  it('does not merge different names', () => {
+    assert.notEqual(normalizeFormName('contacto'), normalizeFormName('contacto do site'));
+    assert.equal(normalizeFormName(undefined), '');
+  });
+});

@@ -13,6 +13,11 @@ const router: Router = Router();
  * 2. Auto-reply to visitor via Resend
  * 3. Webhook to external service (Make.com, Zapier, etc.)
  */
+/** Case/space-insensitive key used to match a submission to its Forms Config. */
+export function normalizeFormName(name: unknown): string {
+  return String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 async function fireFormNotifications(
   formName: string,
   content: Record<string, any>,
@@ -31,17 +36,28 @@ async function fireFormNotifications(
   let autoReply: string | null = null;
 
   if (configCollection) {
-    const { data: formConfig } = await supabase
+    // Match form_name ignoring case and surrounding spaces ("Contacto do site"
+    // vs "contacto do site"): an exact match silently fell back to the global
+    // recipients, and with none set no email was sent at all.
+    const { data: configs } = await supabase
       .from('entries')
       .select('content')
       .eq('collection_id', configCollection.id)
       .eq('status', 'published')
-      .filter('content->>form_name', 'eq', formName)
-      .single();
+      .limit(200);
+    const wanted = normalizeFormName(formName);
+    const formConfig = (configs || []).find(e => normalizeFormName((e.content as any)?.form_name) === wanted) || null;
+    if (!formConfig) {
+      logger.info('No Forms Config matches this form_name — using global recipients', { form: formName });
+    }
 
     if (formConfig?.content) {
       const cfg = formConfig.content as Record<string, any>;
-      if (cfg.is_active === false) return;
+      if (cfg.is_active === false) {
+        // Used to be completely silent — the #1 reason "form emails don't arrive"
+        logger.warn('Form notifications skipped: "Active" is off in Forms Config', { form: formName });
+        return;
+      }
       webhookUrl = cfg.webhook_url || null;
       notificationEmails = cfg.notification_emails || null;
       emailSubjectTemplate = cfg.email_subject_template || null;

@@ -764,6 +764,21 @@ BEGIN
     END LOOP;
 END $$;
 
+-- Forms Config "Active" checkbox: default ON for new configs. It used to
+-- start unticked, which silently disabled every email for that form.
+UPDATE collections
+   SET fields = (
+       SELECT jsonb_agg(
+                CASE WHEN f->>'id' = 'is_active' AND NOT (f ? 'defaultValue')
+                     THEN f || '{"defaultValue": true}'::jsonb ELSE f END
+                ORDER BY ord)
+         FROM jsonb_array_elements(fields) WITH ORDINALITY AS t(f, ord)
+   )
+ WHERE slug = 'forms-config'
+   AND jsonb_typeof(fields) = 'array'
+   AND EXISTS (SELECT 1 FROM jsonb_array_elements(fields) f
+                WHERE f->>'id' = 'is_active' AND NOT (f ? 'defaultValue'));
+
 -- -------------------------------------------------------------
 -- 4. Schema status → version 10
 -- -------------------------------------------------------------

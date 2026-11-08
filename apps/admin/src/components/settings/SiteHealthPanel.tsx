@@ -189,7 +189,34 @@ export function describeCheck(c: Check, locale: 'pt' | 'en'): Described {
       const title = L('Formulários', 'Forms');
       if (!f.installed) return { title, message: L('Add-on Forms não instalado.', 'Forms add-on not installed.') };
       const last = fmtDate(f.lastSubmissionAt, pt) || L('ainda nenhum', 'none yet');
-      return { title, message: L(`Último formulário recebido: ${last}.`, `Last form received: ${last}.`) };
+      const message = L(`Último formulário recebido: ${last}.`, `Last form received: ${last}.`);
+      const disabled = (f.disabled as string[]) || [];
+      const drafts = (f.drafts as string[]) || [];
+      const unmatched = (f.unmatched as string[]) || [];
+      if (disabled.length || drafts.length || unmatched.length) {
+        const parts: string[] = [];
+        if (unmatched.length) parts.push(L(
+          `O site envia formulários sem configuração correspondente: ${unmatched.map(n => `"${n}"`).join(', ')}. Usam os emails de Settings → Email (Notification Email(s) / Contact Email); se estiverem vazios, não sai email.`,
+          `The site sends forms with no matching config: ${unmatched.map(n => `"${n}"`).join(', ')}. They use the Settings → Email recipients; if empty, no email is sent.`,
+        ));
+        if (disabled.length) parts.push(L(
+          `Notificações desligadas ("Active" desmarcado) em: ${disabled.join(', ')} — estes formulários não enviam email nem webhook.`,
+          `Notifications off ("Active" unticked) for: ${disabled.join(', ')} — these forms send no email or webhook.`,
+        ));
+        if (drafts.length) parts.push(L(
+          `Configuração em rascunho (ignorada) em: ${drafts.join(', ')}.`,
+          `Config left as draft (ignored) for: ${drafts.join(', ')}.`,
+        ));
+        return {
+          title,
+          message: `${message} ${parts.join(' ')}`,
+          action: L(
+            'Conteúdo → Forms Config: o campo form_name tem de ser igual ao nome que o site envia; marca "Active" e publica.',
+            'Content → Forms Config: form_name must match the name the site sends; tick "Active" and publish.',
+          ),
+        };
+      }
+      return { title, message };
     }
 
     case 'domain': {
