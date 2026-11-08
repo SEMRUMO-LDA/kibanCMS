@@ -23,12 +23,13 @@ Este comando automatiza a maior parte do setup. Abaixo esta o processo completo.
 5. Guarda a **database password**
 6. Espera o projecto ficar pronto
 
-### Passo 2: Criar Storage Bucket (manual)
+### Passo 2: Desligar registos publicos (manual)
 
-1. No Supabase dashboard → **Storage**
-2. **New Bucket** → nome: `media`
-3. Toggle **Public** ON
-4. Save
+1. No Supabase dashboard → **Authentication → Sign In / Providers → Email**
+2. Desliga **Allow new users to sign up**
+
+Os utilizadores do cliente entram por convite (Users → Convidar). O bucket
+`media` ja nao precisa de ser criado a mao: o schema cria-o.
 
 ### Passo 3: Correr o Setup Automatico
 
@@ -47,18 +48,18 @@ O script pede:
 - **Website origin** — URL do site do cliente (ex: `https://be-lunes.pt`)
 
 O script faz automaticamente:
-1. Cria o user admin via Supabase Auth API
-2. Promove a super_admin via PostgREST
+1. Aplica o schema (se tiver `psql` ou Supabase CLI) e para no primeiro erro
+2. Cria o user admin via Supabase Auth API (o primeiro user fica super_admin)
 3. Gera ficheiro de config em `clients/clientname.json`
 
 ### Passo 4: Correr Schema SQL
 
-Se o script nao conseguiu correr o SQL automaticamente (precisa de `psql` ou Supabase CLI):
+Se o script nao conseguiu correr o SQL automaticamente (precisa de `psql` ou Supabase CLI),
+no Supabase SQL Editor do novo projecto corre **dois ficheiros, por esta ordem**:
 
-1. Abre o Supabase SQL Editor do novo projecto
-2. Cola o conteudo de `database/migrations/CLEAN_RESET.sql`
-3. Clica **Run**
-4. Verifica que mostra "Database limpa e reconstruida"
+1. `database/migrations/CLEAN_RESET.sql` — schema base (so em projectos novos: apaga tudo)
+2. `database/UPGRADE_TENANT.sql` — migrations 002–009 numa transacao; termina com uma
+   checklist em que tudo deve aparecer `true`
 
 ### Passo 5: Adicionar ao Railway
 
@@ -79,10 +80,13 @@ Se o script nao conseguiu correr o SQL automaticamente (precisa de `psql` ou Sup
 
 ### Passo 6: Testar
 
-1. Abre `kiban.pt/login`
+1. Abre `https://<cliente>.kiban.pt/login` (no dominio do cliente, para entrar no tenant certo)
 2. Login com o email/password do novo cliente
-3. Verifica que entra num dashboard limpo (0 collections)
-4. Completa o onboarding
+3. Completa o onboarding
+4. **Settings → Saude**: tem de estar tudo verde ou cinzento. Cada linha vermelha
+   ou amarela diz o que falta (ex.: `RESEND_API_KEY`, destinatarios de email)
+5. **Settings → API → Ligar o meu site**: gera a key, copia as variaveis para a Vercel
+   e usa **Testar ligacao**
 
 ---
 
@@ -90,12 +94,13 @@ Se o script nao conseguiu correr o SQL automaticamente (precisa de `psql` ou Sup
 
 | O que | Quem faz | Tempo |
 |-------|----------|-------|
-| Criar Supabase + bucket media | Tu (manual) | 2 min |
+| Criar Supabase + desligar registos | Tu (manual) | 2 min |
 | `pnpm new-client` | Script (automatico) | 1 min |
-| Colar CLEAN_RESET.sql | Tu (se script nao conseguiu) | 1 min |
+| Colar CLEAN_RESET.sql + UPGRADE_TENANT.sql | Tu (se script nao conseguiu) | 2 min |
 | Merge TENANTS no Railway | Tu (copiar JSON) | 1 min |
-| Testar login | Tu | 30 seg |
-| **Total** | | **~5 min** |
+| Login + Settings → Saude | Tu | 1 min |
+| Ligar o site (Vercel) | Tu / dev do site | 3 min |
+| **Total** | | **~10 min** |
 
 ---
 
@@ -107,8 +112,12 @@ clients/
   solfil.json         # Config gerada pelo script
 scripts/
   new-client.sh       # Script de setup
-database/migrations/
-  CLEAN_RESET.sql     # Schema completo (source of truth)
+database/
+  UPGRADE_TENANT.sql  # Migrations 002–009 num so ficheiro (gerado)
+  migrations/
+    CLEAN_RESET.sql   # Schema base (so projectos novos)
+    002…009_*.sql     # Migrations idempotentes (ver migrations/README.md)
+  seeds/              # Dados especificos de um cliente — nao correr noutros
 ```
 
 ---

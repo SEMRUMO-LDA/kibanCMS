@@ -5,8 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
-import { X, Clock, RotateCcw, Eye, Loader, ChevronRight } from 'lucide-react';
+import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
+import { X, Clock, RotateCcw, Eye, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { VisualDiff } from './VisualDiff';
 
@@ -218,7 +218,7 @@ interface RevisionHistoryProps {
   onClose: () => void;
 }
 
-export function RevisionHistory({ entryId, currentVersion, onRestore, onClose }: RevisionHistoryProps) {
+export function RevisionHistory({ entryId, onRestore, onClose }: RevisionHistoryProps) {
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRevision, setSelectedRevision] = useState<Revision | null>(null);

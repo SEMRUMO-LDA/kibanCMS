@@ -14,9 +14,7 @@
     "apps/*"
   ],
   "scripts": {
-    "setup": "bash setup.sh",
     "new-client": "bash scripts/new-client.sh",
-    "setup:windows": "powershell -ExecutionPolicy Bypass -File setup.ps1",
     "dev": "turbo dev",
     "dev:admin": "cd apps/admin && pnpm dev",
     "dev:api": "cd apps/api && pnpm dev",
@@ -26,12 +24,13 @@
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "clean": "turbo clean && rm -rf node_modules",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "turbo build --filter=@kiban/* && changeset publish",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",

@@ -5,21 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit -p tsconfig.app.json && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.3",
-    "@tiptap/extension-image": "^3.22.0",
-    "@tiptap/extension-link": "^3.22.0",
-    "@tiptap/extension-placeholder": "^3.22.0",
-    "@tiptap/react": "^3.22.0",
-    "@tiptap/starter-kit": "^3.22.0",
+    "@tiptap/extension-image": "^3.33.0",
+    "@tiptap/extension-link": "^3.33.0",
+    "@tiptap/extension-placeholder": "^3.33.0",
+    "@tiptap/react": "^3.33.0",
+    "@tiptap/starter-kit": "^3.33.0",
     "lucide-react": "^0.323.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.22.0",
-    "styled-components": "^6.1.8"
+    "styled-components": "^6.6.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.55",

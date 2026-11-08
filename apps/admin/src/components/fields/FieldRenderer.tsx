@@ -19,7 +19,6 @@ import { FixedSlotsField } from './FixedSlotsField';
 import { DateSlotsField } from './DateSlotsField';
 import { MultiSelectField } from './MultiSelectField';
 import { MediaCaptionListField } from './MediaCaptionListField';
-import { ColorField } from './ColorField';
 
 export interface FieldDefinition {
   id: string;

@@ -97,7 +97,7 @@ export const WidgetClusterSettings = () => {
         .eq('addon_id', 'widget-cluster')
         .maybeSingle();
       if (data?.config) {
-        setConfig({ ...DEFAULT_CONFIG, ...data.config });
+        setConfig({ ...DEFAULT_CONFIG, ...(data.config as Partial<typeof DEFAULT_CONFIG>) });
       }
       setLoading(false);
     })();

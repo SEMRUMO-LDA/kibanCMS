@@ -1,12 +1,36 @@
 # kibanCMS — Documentation
 
+## Running the platform
+
+| Document | Description |
+|----------|-------------|
+| [New Client Setup](NEW_CLIENT_SETUP.md) | Add a new client (tenant) step by step |
+| [Multi-Tenant Guide](MULTI_TENANT_GUIDE.md) | How one deploy serves many clients, `TENANTS` config |
+| [Infrastructure Guide](INFRASTRUCTURE_GUIDE.md) | Railway, Supabase, GitHub — access and flows |
+| [Database migrations](../database/migrations/README.md) | Which SQL files every tenant needs; `UPGRADE_TENANT.sql` |
+
+## Building on the CMS
+
 | Document | Description |
 |----------|-------------|
 | [Developer Guide](DEVELOPER_GUIDE.md) | Architecture, setup, API, addons, deploy, troubleshooting |
-| [API Endpoints](API_ENDPOINTS.md) | All 39 endpoints with auth, params, and response format |
-| [Infrastructure Guide](INFRASTRUCTURE_GUIDE.md) | Railway, Supabase, GitHub — access and flows |
-| [Forms Email Setup](FORMS_EMAIL_SETUP.md) | Contact form integration + Make.com email webhook |
+| [API Endpoints](API_ENDPOINTS.md) | Endpoints with auth, params, and response format |
+
+## Add-ons
+
+| Document | Description |
+|----------|-------------|
+| [Forms Email Setup](FORMS_EMAIL_SETUP.md) | Contact forms: emails via Resend, optional webhook |
 | [Stripe Payments Setup](STRIPE_SETUP.md) | Accept payments via Stripe Checkout |
+| [Coupons](ADDON_COUPONS.md) | Discount codes for bookings and checkout |
 | [Newsletter Addon](NEWSLETTER_SETUP.md) | Email subscriptions from any frontend |
-| [SEO & Analytics](SEO_SETUP.md) | Complete SEO, Open Graph, analytics, structured data |
+| [SEO & Analytics](SEO_SETUP.md) | SEO, Open Graph, analytics, structured data |
 | [Redirects Manager](REDIRECTS_SETUP.md) | 301/302 redirects for SEO and migrations |
+
+## Checking a client
+
+In the client's admin panel: **Settings → Health** (is everything working?) and
+**Settings → API → Connect my site** (key + Vercel variables + connection test).
+
+Older documents (v1.4 roadmap/changelog, v1.6 audit, legacy HTML guide) are in
+[`archive/`](archive/README.md).

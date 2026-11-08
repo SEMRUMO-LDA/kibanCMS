@@ -18,8 +18,6 @@ import {
   Shield,
   Loader,
   X,
-  Check,
-  AlertCircle
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';

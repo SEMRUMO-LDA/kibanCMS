@@ -4,20 +4,17 @@
  * Create or edit an entry
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { EntryEditor, type EntryData } from '../components/EntryEditor';
 import { type FieldDefinition } from '../components/fields/FieldRenderer';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
-import { useAuth } from '../features/auth/hooks/useAuth';
 import { ArrowLeft, Loader, Clock, Eye, Share2, Copy } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { LivePreview } from '../components/LivePreview';
-import { EditingPresence } from '../components/EditingPresence';
 
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(12px); }
@@ -176,7 +173,6 @@ const EMPTY_FIELDS: FieldDefinition[] = [];
 export function EntryEdit() {
   const { collectionSlug, entryId } = useParams<{ collectionSlug: string; entryId?: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const toast = useToast();
   const [generatingPreview, setGeneratingPreview] = useState(false);
 
@@ -188,7 +184,6 @@ export function EntryEdit() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showRevisions, setShowRevisions] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [previewData, setPreviewData] = useState<any>({});
 
   const isEditMode = !!entryId;
 
@@ -437,8 +432,6 @@ export function EntryEdit() {
           {saveStatus === 'saving' ? 'Saving...' : 'Saved'}
         </div>
       )}
-
-      {isEditMode && entry && <EditingPresence entryId={entry.id} />}
 
       <EntryEditor
         fields={fields}

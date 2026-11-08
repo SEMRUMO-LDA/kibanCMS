@@ -9,12 +9,11 @@ import { useEffect, useMemo, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import {
   MessageCircle, Save, Loader, CheckCircle, Copy, Check,
-  Eye, Code as CodeIcon, AlertCircle,
+  Eye, AlertCircle,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 
 const fadeIn = keyframes`
@@ -275,7 +274,6 @@ const COLLECTION_SLUG = 'whatsapp-widget';
 const ENTRY_SLUG = 'config';
 
 export const WhatsAppWidgetSettings = () => {
-  const { user } = useAuth();
   const { locale } = useI18n();
   const toast = useToast();
   const [config, setConfig] = useState<Config>(DEFAULTS);
@@ -287,7 +285,7 @@ export const WhatsAppWidgetSettings = () => {
   const [installed, setInstalled] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [apiKey, setApiKey] = useState<string>('YOUR_API_KEY');
+  const [apiKey] = useState<string>('YOUR_API_KEY');
 
   const t = (en: string, pt: string) => locale === 'pt' ? pt : en;
 
@@ -321,14 +319,9 @@ export const WhatsAppWidgetSettings = () => {
       // If collection doesn't exist yet, just show empty form with defaults.
       // It'll be created on first save.
 
-      // Try to fetch a public API key for the embed snippet
-      try {
-        const { data: keys } = await api.getApiKeys?.() || {};
-        if (Array.isArray(keys) && keys.length > 0) {
-          const live = keys.find((k: any) => k.key_prefix?.startsWith('kiban_live_'));
-          if (live?.key_prefix) setApiKey(live.key_prefix);
-        }
-      } catch { /* ignore — embed will show placeholder */ }
+      // The embed snippet keeps a placeholder key: only the key's hash is
+      // stored, so the full key can't be shown here. Keys are created in
+      // Settings → API → "Connect my site". (api.getApiKeys never existed.)
     } catch (err) {
       console.error('[WhatsApp Widget] load error:', err);
     } finally {

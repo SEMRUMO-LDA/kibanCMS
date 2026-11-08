@@ -59,7 +59,7 @@ export const Diagnostics = () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, email, role')
-        .eq('id', user?.id)
+        .eq('id', user?.id ?? '')
         .single();
       if (error) throw error;
       return `Role: ${data.role} | Email: ${data.email}`;
@@ -67,7 +67,7 @@ export const Diagnostics = () => {
 
     // 4. All profiles read
     await runTest('All Profiles Read', async () => {
-      const { data, error, count } = await supabase
+      const { error, count } = await supabase
         .from('profiles')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;
@@ -76,7 +76,7 @@ export const Diagnostics = () => {
 
     // 5. Collections read
     await runTest('Collections Read', async () => {
-      const { data, error, count } = await supabase
+      const { error, count } = await supabase
         .from('collections')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;
@@ -85,7 +85,7 @@ export const Diagnostics = () => {
 
     // 6. Entries read
     await runTest('Entries Read', async () => {
-      const { data, error, count } = await supabase
+      const { error, count } = await supabase
         .from('entries')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;
@@ -94,7 +94,7 @@ export const Diagnostics = () => {
 
     // 7. Media read
     await runTest('Media Read', async () => {
-      const { data, error, count } = await supabase
+      const { error, count } = await supabase
         .from('media')
         .select('id', { count: 'exact', head: true });
       if (error) throw error;

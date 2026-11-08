@@ -10,9 +10,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
 import {
-  Globe, Languages, Sparkles, Check, AlertCircle, RefreshCw, Loader,
+  Globe, Languages, Sparkles, Check, AlertCircle, Loader,
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 

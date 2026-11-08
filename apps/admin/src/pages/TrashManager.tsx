@@ -10,7 +10,7 @@ import styled, { keyframes } from 'styled-components';
 import {
   Trash2, RotateCcw, AlertTriangle, RefreshCw, Clock, X,
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 

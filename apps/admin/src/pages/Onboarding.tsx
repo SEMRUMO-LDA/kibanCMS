@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
@@ -16,7 +15,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
-import { COLLECTION_PRESETS, type CollectionPreset } from '../config/collection-presets';
+import { COLLECTION_PRESETS } from '../config/collection-presets';
 
 // ============================================
 // ANIMATIONS
@@ -349,7 +348,6 @@ const ICON_MAP: Record<string, any> = {
 // ============================================
 
 export const Onboarding = () => {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);

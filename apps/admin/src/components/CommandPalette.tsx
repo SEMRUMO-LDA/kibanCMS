@@ -8,9 +8,9 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import {
   Search, FileText, Files, Image as ImageIcon, Users, Settings,
-  LayoutDashboard, ArrowRight, Hash, X, Loader
+  LayoutDashboard, ArrowRight, Hash, Loader
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
 
 const fadeIn = keyframes`

@@ -8,13 +8,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
-import { useAuth } from '../features/auth/hooks/useAuth';
 import { FieldTypeSelector } from '../components/collection-builder/FieldTypeSelector';
 import {
   ArrowLeft, Save, Plus, Trash2, GripVertical, Loader, AlertCircle,
-  ChevronDown, ChevronUp, Pencil,
+  ChevronDown, ChevronUp, 
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 
 // ============================================
 // TYPES

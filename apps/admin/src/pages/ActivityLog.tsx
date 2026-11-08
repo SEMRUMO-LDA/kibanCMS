@@ -10,8 +10,8 @@ import { colors, spacing, typography, borders, shadows } from '../shared/styles/
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import {
-  Clock, Plus, Edit, Trash2, Eye, ArrowRight, Loader, User,
-  FileText, Filter, ChevronLeft, ChevronRight,
+  Clock, Plus, Edit, Loader, 
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 const fadeIn = keyframes`from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); }`;

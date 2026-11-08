@@ -9,16 +9,15 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import {
   Mail, Search, FileInput, CalendarCheck, Package,
-  CheckCircle, Download, Trash2, ArrowRight, Loader, X, ExternalLink,
+  CheckCircle, Download, Trash2, ArrowRight, Loader, ExternalLink,
   Zap, Sparkles, CreditCard, Globe, Cookie, Accessibility, Power, PowerOff, RefreshCw,
   MessageCircle,
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { ADDONS_REGISTRY, type AddonDefinition } from '../config/addons-registry';
 import { api } from '../lib/api';
 import { getSupabase } from '../lib/supabase';
-import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 
 const fadeIn = keyframes`
@@ -216,7 +215,6 @@ const ICON_MAP: Record<string, any> = {
 // ============================================
 
 export const Addons = () => {
-  const { user } = useAuth();
   const { t } = useI18n();
   const toast = useToast();
   const navigate = useNavigate();
@@ -224,7 +222,7 @@ export const Addons = () => {
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [testingStripe, setTestingStripe] = useState(false);
 
   useEffect(() => {
@@ -246,7 +244,7 @@ export const Addons = () => {
         const { data: configs } = await supabase.from('addon_configs').select('addon_id, config');
         if (configs) {
           for (const cfg of configs) {
-            if (cfg.config && cfg.config.enabled === false) {
+            if ((cfg.config as Record<string, unknown> | null)?.enabled === false) {
               disabled.add(cfg.addon_id);
             }
           }
@@ -356,7 +354,7 @@ export const Addons = () => {
 
       // Load existing config, set enabled=false
       const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
-      const config = { ...(existing?.config || {}), enabled: false };
+      const config = { ...((existing?.config as Record<string, unknown> | null) || {}), enabled: false };
       // onConflict: the table's PK is `id`, addon_id is UNIQUE. Without it the
       // second save hit a unique violation (ignored) and nothing persisted.
       const { error: saveErr } = await supabase
@@ -380,7 +378,7 @@ export const Addons = () => {
       if (!supabase) throw new Error('Not connected');
 
       const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
-      const config = { ...(existing?.config || {}), enabled: true };
+      const config = { ...((existing?.config as Record<string, unknown> | null) || {}), enabled: true };
       // onConflict: the table's PK is `id`, addon_id is UNIQUE. Without it the
       // second save hit a unique violation (ignored) and nothing persisted.
       const { error: saveErr } = await supabase

@@ -5,8 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { X, Camera, RotateCcw, Trash2, Loader, ShieldCheck, AlertTriangle } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { X, Camera, RotateCcw, Trash2, Loader, ShieldCheck } from 'lucide-react';
+import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';
 
 const fadeIn = keyframes`

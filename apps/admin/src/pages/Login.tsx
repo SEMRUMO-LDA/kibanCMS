@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { initSupabaseWithConfig, getSupabase } from '../lib/supabase';
+import { initSupabaseWithConfig } from '../lib/supabase';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
 import { ArrowRight } from 'lucide-react';
@@ -16,10 +16,6 @@ const fadeIn = keyframes`
   to { opacity: 1; transform: translateY(0); }
 `;
 
-const float = keyframes`
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-`;
 
 // ============================================
 // STYLED COMPONENTS

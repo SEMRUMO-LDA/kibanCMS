@@ -11,7 +11,7 @@ import {
   RefreshCw, Filter, ChevronLeft, ChevronRight, Mail, Phone,
   Package, CalendarCheck, AlertCircle,
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 

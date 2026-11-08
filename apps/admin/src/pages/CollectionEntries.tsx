@@ -167,7 +167,7 @@ const SearchBox = styled.div`
 
   input {
     width: 100%;
-    padding: ${spacing[3]} ${spacing[4]} ${spacing[3]} ${spacing[11]};
+    padding: ${spacing[3]} ${spacing[4]} ${spacing[3]} 2.75rem; /* room for the search icon */
     border: 1px solid ${colors.gray[200]};
     border-radius: ${borders.radius.lg};
     font-size: ${typography.fontSize.sm};
@@ -197,37 +197,6 @@ const SearchBox = styled.div`
   }
 `;
 
-const FilterButton = styled.button`
-  background: ${colors.white};
-  border: 1px solid ${colors.gray[200]};
-  padding: ${spacing[3]} ${spacing[4]};
-  border-radius: ${borders.radius.lg};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: ${spacing[2]};
-  font-size: ${typography.fontSize.sm};
-  font-weight: ${typography.fontWeight.medium};
-  color: ${colors.gray[700]};
-  transition: all ${animations.duration.fast} ${animations.easing.out};
-  font-family: ${typography.fontFamily.sans};
-  white-space: nowrap;
-
-  &:hover {
-    background: ${colors.gray[50]};
-    border-color: ${colors.gray[300]};
-    color: ${colors.gray[900]};
-  }
-
-  &:active {
-    transform: scale(0.98);
-  }
-
-  &:focus-visible {
-    outline: 2px solid ${colors.accent[500]};
-    outline-offset: 2px;
-  }
-`;
 
 const CodeButton = styled.button`
   background: ${colors.white};
@@ -899,7 +868,7 @@ export const CollectionEntries = () => {
         // Publish or Archive
         const { error } = await supabase
           .from('entries')
-          .update({ status: action })
+          .update({ status: action as 'published' | 'archived' })
           .in('id', Array.from(selectedEntries));
 
         if (error) throw error;
@@ -911,7 +880,8 @@ export const CollectionEntries = () => {
 
       setSelectedEntries(new Set());
       setBulkAction('');
-      toast.success(`${action}ed ${count} ${count === 1 ? 'entry' : 'entries'}`);
+      const done = ({ delete: 'Deleted', publish: 'Published', archive: 'Archived' } as Record<string, string>)[action] || 'Updated';
+      toast.success(`${done} ${count} ${count === 1 ? 'entry' : 'entries'}`);
     } catch (err: any) {
       console.error('Error with bulk action:', err);
       toast.error('Bulk action failed: ' + (err.message || 'Unknown error'));

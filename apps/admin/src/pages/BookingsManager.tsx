@@ -7,11 +7,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import {
-  CalendarCheck, Users, CreditCard, XCircle, CheckCircle,
-  Clock, Filter, RefreshCw, ArrowRight, ChevronLeft, ChevronRight,
+  CalendarCheck, CreditCard, XCircle, CheckCircle,
+  Clock, Filter, RefreshCw, ChevronLeft, ChevronRight,
   MapPin, Mail, Phone, AlertCircle,
 } from 'lucide-react';
-import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 

@@ -28,7 +28,6 @@ import {
   Quote,
   Calendar,
   Loader,
-  Upload,
   Wand2,
   ImageIcon,
   X,
@@ -426,7 +425,7 @@ const ICON_MAP: Record<string, any> = {
 
 export const CollectionBuilder = () => {
   const navigate = useNavigate();
-  const { user, session } = useAuth();
+  const { session } = useAuth();
   const toast = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);

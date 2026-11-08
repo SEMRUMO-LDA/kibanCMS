@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders, animations } from '../shared/styles/design-tokens';
 import { FieldRenderer, type FieldDefinition } from './fields/FieldRenderer';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
 import { PublishBox } from './PublishBox';

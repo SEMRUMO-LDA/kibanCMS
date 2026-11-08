@@ -5,12 +5,12 @@ import { useAuth } from '../features/auth/hooks/useAuth';
 import { api } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import {
-  FileText, Users, Image as ImageIcon, Box, TrendingUp, Activity,
-  Clock, Edit, Plus, Upload, Wand2, ArrowRight, Key, CheckCircle,
+  FileText, Users, Image as ImageIcon, Box, 
+  Edit, Plus, Upload, Wand2, ArrowRight, Key, CheckCircle,
   AlertCircle, CalendarClock, Pencil,
 } from 'lucide-react';
 
-import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
+import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 
 // ============================================
 // ANIMATIONS

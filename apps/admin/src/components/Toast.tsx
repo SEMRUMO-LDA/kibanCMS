@@ -8,7 +8,7 @@
  * toast.error('Failed to save')
  */
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';

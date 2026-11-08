@@ -19,7 +19,6 @@ import {
   CalendarCheck,
   ShoppingBag,
   Handshake,
-  Trash2,
   ChevronsLeft,
   ChevronsRight,
   ExternalLink,

@@ -9,7 +9,7 @@ import styled from 'styled-components';
 import { colors, spacing, typography, borders, shadows } from '../../shared/styles/design-tokens';
 import { FieldWrapper } from './FieldWrapper';
 import { api } from '../../lib/api';
-import { Link2, Search, X, ExternalLink, Loader } from 'lucide-react';
+import { Link2, Search, X, Loader } from 'lucide-react';
 
 const Container = styled.div`display: flex; flex-direction: column; gap: ${spacing[3]};`;
 

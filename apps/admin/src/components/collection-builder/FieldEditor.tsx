@@ -8,7 +8,7 @@
 import { useState, memo, useCallback } from 'react';
 import styled from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../../shared/styles/design-tokens';
-import { X, GripVertical, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { GripVertical, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 // ============================================
 // TYPES

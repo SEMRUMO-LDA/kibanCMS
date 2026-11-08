@@ -18,16 +18,12 @@ import {
   Copy,
   Check,
   Search,
-  Filter,
-  X,
   File,
   FileVideo,
   FileAudio,
   Loader,
-  AlertCircle
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
@@ -114,7 +110,7 @@ const SearchBox = styled.div`
 
   input {
     width: 100%;
-    padding: ${spacing[3]} ${spacing[4]} ${spacing[3]} ${spacing[11]};
+    padding: ${spacing[3]} ${spacing[4]} ${spacing[3]} 2.75rem; /* room for the search icon */
     border: 1px solid ${colors.gray[200]};
     border-radius: ${borders.radius.lg};
     font-size: ${typography.fontSize.sm};
@@ -170,32 +166,6 @@ const FilterButton = styled.button<{ $active?: boolean }>`
   }
 `;
 
-const UploadButton = styled.button`
-  padding: ${spacing[3]} ${spacing[5]};
-  background: ${colors.accent[500]};
-  color: ${colors.white};
-  border: none;
-  border-radius: ${borders.radius.lg};
-  font-size: ${typography.fontSize.sm};
-  font-weight: ${typography.fontWeight.semibold};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: ${spacing[2]};
-  transition: all ${animations.duration.fast} ${animations.easing.out};
-  box-shadow: ${shadows.sm};
-  font-family: ${typography.fontFamily.sans};
-
-  &:hover:not(:disabled) {
-    background: ${colors.accent[600]};
-    box-shadow: ${shadows.md};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
 
 const DropZone = styled.div<{ $isDragging?: boolean }>`
   background: ${props => props.$isDragging ? colors.accent[50] : colors.gray[50]};
@@ -721,7 +691,7 @@ export const Media = () => {
               </MediaInfo>
 
               <MediaActions className="actions">
-                <button onClick={() => handleCopy(item.url, item.id)}>
+                <button onClick={() => handleCopy(item.url || '', item.id)}>
                   {copiedId === item.id ? <Check /> : <Copy />}
                   {copiedId === item.id ? 'Copied' : 'Copy'}
                 </button>
