@@ -45,11 +45,13 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    // On a tenant's own domain (e.g. marsolve.kiban.pt) only that tenant is
-    // tried. Otherwise the same email+password existing in several tenants
-    // would log the user into whichever tenant answered first.
+    // Every tenant is always tried (everyone may log in on the shared domain,
+    // e.g. kiban.pt). The domain is only a tie-breaker: when the same
+    // email+password is valid in several tenants, the tenant that owns this
+    // hostname wins. Restricting login to the hostname tenant would lock out
+    // every other client if the shared domain is mapped to one tenant.
     const hostTenant = resolveTenantByHostname(req.hostname || '');
-    const tenants = hostTenant ? [hostTenant] : getAllTenants();
+    const tenants = getAllTenants();
 
     if (tenants.length === 0) {
       res.status(500).json({
@@ -85,12 +87,13 @@ router.post('/login', async (req: Request, res: Response) => {
       (r): r is PromiseFulfilledResult<{ tenant: TenantConfig; session: any }> =>
         r.status === 'fulfilled'
     );
-    const success = successes[0];
+    const success =
+      (hostTenant && successes.find(s => s.value.tenant.id === hostTenant.id)) || successes[0];
 
     if (successes.length > 1) {
       console.warn(
         `[Auth] ${email} is valid in ${successes.length} tenants (${successes.map(s => s.value.tenant.id).join(', ')}); ` +
-        `logging into "${success.value.tenant.id}". Log in from the tenant's own domain to pick a specific one.`
+        `logging into "${success.value.tenant.id}"${hostTenant ? ` (domain ${req.hostname})` : ' (first match)'}. Use different passwords per tenant to avoid ambiguity.`
       );
     }
 

@@ -12,6 +12,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { lookup } from 'node:dns/promises';
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
@@ -122,10 +123,27 @@ async function latestEntryDate(collectionSlug: string): Promise<{ exists: boolea
   return { exists: true, latest: data?.created_at || null };
 }
 
+/**
+ * The URL sites should call: the domain this admin is being served from
+ * (it demonstrably resolves). Tenant subdomains may be configured in
+ * TENANTS without a DNS record, so they are not used here — sites identify
+ * the tenant with the X-Tenant header instead.
+ */
 function publicApiUrl(req: Request): string {
-  const tenant = tenantStore.getStore()?.tenant;
-  const host = tenant?.hostnames?.[0] || req.get('host') || '';
+  const host = req.get('host') || '';
   return host ? `https://${host}` : '';
+}
+
+async function resolves(hostname: string): Promise<boolean> {
+  try {
+    await Promise.race([
+      lookup(hostname),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Run one check; a failing check must never break the whole page. */
@@ -207,16 +225,24 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       };
     }),
 
-    safe('domain', async () => ({
-      id: 'domain',
-      status: tenant?.hostnames?.length ? 'ok' : 'warn',
-      facts: {
-        tenantId: tenant?.id || 'default',
-        hostnames: tenant?.hostnames || [],
-        origins: tenant?.origins || [],
-        apiUrl: publicApiUrl(req),
-      },
-    })),
+    safe('domain', async () => {
+      const hostnames = tenant?.hostnames || [];
+      const dnsMissing: string[] = [];
+      for (const h of hostnames) if (!(await resolves(h))) dnsMissing.push(h);
+      return {
+        id: 'domain',
+        // Sites work through the shared domain + X-Tenant; a configured
+        // subdomain without DNS is only a warning (it can't be used yet).
+        status: dnsMissing.length ? 'warn' : 'info',
+        facts: {
+          tenantId: tenant?.id || 'default',
+          apiUrl: publicApiUrl(req),
+          hostnames,
+          dnsMissing,
+          origins: tenant?.origins || [],
+        },
+      };
+    }),
   ]);
 
   const summary = {

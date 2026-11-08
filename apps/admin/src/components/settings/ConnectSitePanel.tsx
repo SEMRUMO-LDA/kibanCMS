@@ -49,7 +49,7 @@ export function ConnectSitePanel({ locale, onKeyCreated }: Props) {
   const { user } = useAuth();
   const { copied, copy } = useCopy();
 
-  const [info, setInfo] = useState<{ apiUrl: string; collections: Array<{ slug: string; name: string }> } | null>(null);
+  const [info, setInfo] = useState<{ tenantId: string; apiUrl: string; collections: Array<{ slug: string; name: string }> } | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
 
   const [key, setKey] = useState('');
@@ -71,10 +71,13 @@ export function ConnectSitePanel({ locale, onKeyCreated }: Props) {
   }, []);
 
   const keyLooksValid = KEY_PATTERN.test(key.trim());
-  const apiUrl = info?.apiUrl || 'https://<dominio-do-cliente>';
+  const apiUrl = info?.apiUrl || 'https://kiban.pt';
+  const tenantId = info?.tenantId || '<cliente>';
   const shownKey = keyLooksValid ? key.trim() : 'kiban_live_…';
 
-  const envBlock = `NEXT_PUBLIC_KIBAN_API_URL=${apiUrl}\nKIBAN_API_KEY=${shownKey}`;
+  // KIBAN_TENANT is sent as the X-Tenant header: all clients share the same
+  // API domain, so without it server-side requests land on the default tenant.
+  const envBlock = `NEXT_PUBLIC_KIBAN_API_URL=${apiUrl}\nKIBAN_TENANT=${tenantId}\nKIBAN_API_KEY=${shownKey}`;
 
   const exampleSlug = testCollection || 'blog';
   const snippet = useMemo(() => `// app/${exampleSlug}/page.tsx — Server Component (the key never reaches the browser)
@@ -82,7 +85,10 @@ async function getEntries() {
   const res = await fetch(
     \`\${process.env.NEXT_PUBLIC_KIBAN_API_URL}/api/v1/entries/${exampleSlug}\`,
     {
-      headers: { Authorization: \`Bearer \${process.env.KIBAN_API_KEY}\` },
+      headers: {
+        Authorization: \`Bearer \${process.env.KIBAN_API_KEY}\`,
+        'X-Tenant': process.env.KIBAN_TENANT!, // which client's content to read
+      },
       next: { revalidate: 60 },
     },
   );
@@ -224,15 +230,15 @@ async function getEntries() {
           </div>
           <ol>
             <li>{L('Vercel → projeto do site → Settings → Environment Variables.', 'Vercel → site project → Settings → Environment Variables.')}</li>
-            <li>{L('Cola as duas linhas (a Vercel aceita colar o bloco inteiro).', 'Paste both lines (Vercel accepts the whole block).')}</li>
+            <li>{L('Cola as três linhas (a Vercel aceita colar o bloco inteiro).', 'Paste the three lines (Vercel accepts the whole block).')}</li>
             <li>{L('Marca Production, Preview e Development.', 'Tick Production, Preview and Development.')}</li>
             <li>{L('Deployments → ⋯ no último deploy → Redeploy (as variáveis só entram em deploys novos).', 'Deployments → ⋯ on the latest deploy → Redeploy (variables only apply to new deploys).')}</li>
           </ol>
           <p style={{ marginBottom: 0 }}>
             <strong>{L('Importante:', 'Important:')}</strong>{' '}
             {L(
-              'a key nunca leva o prefixo NEXT_PUBLIC_ e só deve ser usada no servidor (Server Components, route handlers). No browser ficaria visível para qualquer pessoa.',
-              'the key must never have the NEXT_PUBLIC_ prefix and must only be used on the server (Server Components, route handlers). In the browser anyone could read it.',
+              'a key nunca leva o prefixo NEXT_PUBLIC_ e só deve ser usada no servidor (Server Components, route handlers). Todos os pedidos têm de enviar o cabeçalho X-Tenant com o valor de KIBAN_TENANT: todos os clientes partilham o mesmo endereço da API.',
+              'the key must never have the NEXT_PUBLIC_ prefix and must only be used on the server (Server Components, route handlers). Every request must send the X-Tenant header with the KIBAN_TENANT value: all clients share the same API address.',
             )}
           </p>
         </div>

@@ -192,22 +192,24 @@ export function describeCheck(c: Check, locale: 'pt' | 'en'): Described {
     }
 
     case 'domain': {
-      const title = L('Domínio da API', 'API domain');
+      const title = L('Endereço da API', 'API address');
       const origins = (f.origins as string[] || []).join(', ');
-      if (c.status === 'ok') {
+      const base = L(
+        `Os sites chamam ${f.apiUrl} com o cabeçalho X-Tenant: ${f.tenantId}.${origins ? ` Sites autorizados no browser: ${origins}.` : ''}`,
+        `Sites call ${f.apiUrl} with the header X-Tenant: ${f.tenantId}.${origins ? ` Browser origins allowed: ${origins}.` : ''}`,
+      );
+      const missing = (f.dnsMissing as string[] || []);
+      if (missing.length) {
         return {
           title,
-          message: L(
-            `${f.apiUrl}${origins ? ` · sites autorizados no browser: ${origins}` : ''}`,
-            `${f.apiUrl}${origins ? ` · browser origins allowed: ${origins}` : ''}`,
+          message: base,
+          action: L(
+            `O domínio ${missing.join(', ')} está configurado em TENANTS mas não existe no DNS. Até criares o registo (CNAME para a Railway + custom domain), usa ${f.apiUrl} com X-Tenant.`,
+            `${missing.join(', ')} is configured in TENANTS but has no DNS record. Until you add it (CNAME to Railway + custom domain), use ${f.apiUrl} with X-Tenant.`,
           ),
         };
       }
-      return {
-        title,
-        message: L('Este cliente não tem domínio próprio configurado.', 'This client has no domain of its own configured.'),
-        action: L('Adiciona o domínio (ex.: cliente.kiban.pt) à entrada deste cliente em TENANTS, na Railway.', "Add the domain (e.g. client.kiban.pt) to this client's TENANTS entry on Railway."),
-      };
+      return { title, message: base };
     }
 
     default:
