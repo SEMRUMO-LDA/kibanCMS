@@ -8,6 +8,7 @@ import { tenantStore } from '../middleware/tenant.js';
 import { autoTranslateEntryToAllLanguages } from './i18n.js';
 import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
 import { isApiKeyRequest, type AuthRequest } from '../middleware/auth.js';
+import { entryJsonLd, getSiteContext } from '../lib/structured-data.js';
 
 const router: Router = Router();
 
@@ -97,6 +98,7 @@ interface CachedCollection {
   name: string;
   slug: string;
   fields: any[];
+  settings?: Record<string, any> | null;
 }
 const collectionCache = new LRUCache<CachedCollection>({ maxSize: 200, ttlMs: 60_000 });
 
@@ -119,7 +121,7 @@ async function getCollection(slug: string): Promise<CachedCollection | null> {
 
   const { data, error } = await supabase
     .from('collections')
-    .select('id, name, slug, fields')
+    .select('id, name, slug, fields, settings')
     .eq('slug', slug)
     .single();
 
@@ -417,10 +419,21 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
+    // Optional schema.org JSON-LD for this entry (AI/search visibility)
+    let jsonld: Record<string, any> | undefined;
+    if (req.query.jsonld === '1' || req.query.jsonld === 'true') {
+      try {
+        jsonld = entryJsonLd(responseEntry, collection.slug, await getSiteContext(), collection.settings?.jsonld_type);
+      } catch (err: any) {
+        logger.warn('JSON-LD generation failed', { error: err?.message });
+      }
+    }
+
     res.json({
       data: publicRead ? redactForPublic(responseEntry) : responseEntry,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
+        ...(jsonld ? { jsonld } : {}),
         ...(fromCache ? { cached: true } : {}),
       },
       timestamp: new Date().toISOString(),

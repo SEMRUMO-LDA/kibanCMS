@@ -53,7 +53,8 @@ export function toSitemapXml(urls: SitemapUrl[]): string {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
 }
 
-async function getSingleton(collectionSlug: string): Promise<Record<string, any>> {
+/** Content of a single-entry config collection (slug "global", else the first). */
+export async function getSingletonContent(collectionSlug: string): Promise<Record<string, any>> {
   const { data: col } = await supabase.from('collections').select('id').eq('slug', collectionSlug).maybeSingle();
   if (!col) return {};
   const { data } = await supabase
@@ -71,8 +72,8 @@ export class SitemapConfigError extends Error {}
 
 /** Builds the sitemap for the current tenant (uses the tenant-scoped supabase client). */
 export async function buildSitemap(): Promise<SitemapUrl[]> {
-  const site = await getSingleton('site-settings');
-  const seo = await getSingleton('seo-settings');
+  const site = await getSingletonContent('site-settings');
+  const seo = await getSingletonContent('seo-settings');
 
   const siteUrl = normalizeSiteUrl(String(site.site_url || ''));
   if (!/^https?:\/\//.test(siteUrl)) {

@@ -14,7 +14,9 @@ import { logger } from '../lib/logger.js';
 import { withFallbackCache } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { tenantStore } from '../middleware/tenant.js';
-import { buildSitemap, toSitemapXml, SitemapConfigError, type SitemapUrl } from '../lib/sitemap.js';
+import { buildSitemap, toSitemapXml, SitemapConfigError, getSingletonContent, normalizeSiteUrl, type SitemapUrl } from '../lib/sitemap.js';
+import { buildRobotsTxt, normalizePolicy } from '../lib/ai-crawlers.js';
+import { getSiteContext, organizationJsonLd, websiteJsonLd, buildLlmsTxt } from '../lib/structured-data.js';
 
 const router: Router = Router();
 
@@ -147,31 +149,26 @@ router.get('/', async (req: AuthRequest, res: Response) => {
 
 router.get('/robots.txt', async (_req: AuthRequest, res: Response) => {
   try {
-    const { data: col } = await supabase
-      .from('collections')
-      .select('id')
-      .eq('slug', 'seo-settings')
-      .single();
+    const seo = await getSingletonContent('seo-settings');
+    const site = await getSingletonContent('site-settings');
 
-    let robots = 'User-agent: *\nAllow: /\n';
-
-    if (col) {
-      const { data: entry } = await supabase
-        .from('entries')
-        .select('content')
-        .eq('collection_id', col.id)
-        .eq('status', 'published')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      const c = (entry?.content as Record<string, any>) || {};
-      if (typeof c.robots_txt === 'string' && c.robots_txt.trim()) {
-        robots = c.robots_txt.trim() + '\n';
-      } else if (c.noindex_default === true || c.noindex_default === 'true') {
-        robots = 'User-agent: *\nDisallow: /\n';
-      }
+    let base = 'User-agent: *\nAllow: /';
+    if (typeof seo.robots_txt === 'string' && seo.robots_txt.trim()) {
+      base = seo.robots_txt.trim();
+    } else if (seo.noindex_default === true || seo.noindex_default === 'true') {
+      base = 'User-agent: *\nDisallow: /';
     }
+
+    const siteUrl = normalizeSiteUrl(String(site.site_url || ''));
+    const sitemapUrl = String(seo.sitemap_url || '').trim() || (/^https?:\/\//.test(siteUrl) ? `${siteUrl}/sitemap.xml` : '');
+
+    const robots = buildRobotsTxt({
+      base,
+      // Settings → AI & Performance
+      search: normalizePolicy(site.ai_search_bots),
+      training: normalizePolicy(site.ai_training_bots),
+      sitemapUrl,
+    });
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
@@ -227,6 +224,51 @@ router.get('/sitemap', async (_req: AuthRequest, res: Response) => {
     res.json({ data: urls, meta: { total: urls.length }, timestamp: new Date().toISOString() });
   } catch (error: any) {
     sitemapError(res, error);
+  }
+});
+
+// ============================================
+// GET /api/v1/seo/jsonld — site-wide JSON-LD (business + website)
+// Render once in the site layout: <script type="application/ld+json">
+// Entry-level JSON-LD: GET /api/v1/entries/:collection/:slug?jsonld=1 → meta.jsonld
+// ============================================
+router.get('/jsonld', async (_req: AuthRequest, res: Response) => {
+  try {
+    const ctx = await getSiteContext();
+    const graph: any[] = [organizationJsonLd(ctx), websiteJsonLd(ctx)];
+    // Hand-written JSON-LD in SEO settings is kept as an extra node
+    const custom = typeof ctx.seo.structured_data === 'string' ? ctx.seo.structured_data.trim() : '';
+    if (custom) {
+      try { graph.push(JSON.parse(custom)); } catch { /* invalid JSON in settings — ignored */ }
+    }
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.json({ data: graph, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    logger.error('Error building JSON-LD', { error: error?.message });
+    res.status(500).json({ error: { message: 'Failed to build structured data', status: 500, timestamp: new Date().toISOString() } });
+  }
+});
+
+// ============================================
+// GET /api/v1/seo/llms.txt — summary of the site for AI assistants
+// (llmstxt.org format). The site serves it at /llms.txt.
+// ============================================
+const llmsCache = new Map<string, { text: string; at: number }>();
+
+router.get('/llms.txt', async (_req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+    const hit = llmsCache.get(tenantId);
+    const text = hit && Date.now() - hit.at < SITEMAP_TTL ? hit.text : await buildLlmsTxt();
+    if (!hit || hit.text !== text) llmsCache.set(tenantId, { text, at: Date.now() });
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.send(text);
+  } catch (error: any) {
+    const msg = error?.message || '';
+    if (/site URL/.test(msg)) return res.status(400).json({ error: { message: msg, status: 400, timestamp: new Date().toISOString() } });
+    logger.error('Error building llms.txt', { error: msg });
+    res.status(500).json({ error: { message: 'Failed to build llms.txt', status: 500, timestamp: new Date().toISOString() } });
   }
 });
 
