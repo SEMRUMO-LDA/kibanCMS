@@ -20,9 +20,13 @@ files above in order in the tenant's Supabase SQL Editor.
 
 ## Existing tenant
 
-Never run `CLEAN_RESET.sql` on a tenant with real data. Run the numbered files
-(002 → 008) in the SQL Editor. They are idempotent, so running one that was
-already applied does no harm.
+Never run `CLEAN_RESET.sql` on a tenant with real data. Paste
+**`database/UPGRADE_TENANT.sql`** into the tenant's SQL Editor and run it: it
+contains 002 → 008 in one transaction (all or nothing) and ends with a
+checklist query. Repeat for every tenant.
+
+`UPGRADE_TENANT.sql` is generated — after adding or changing a numbered
+migration, run `bash scripts/build-upgrade-sql.sh` and commit the result.
 
 ## Seeds
 
