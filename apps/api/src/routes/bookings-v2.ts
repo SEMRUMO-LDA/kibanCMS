@@ -20,6 +20,7 @@ import { sendBookingConfirmation } from '../lib/email.js';
 import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon } from '../lib/coupons.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
+import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
 
 const router: Router = Router();
 
@@ -718,6 +719,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     }
 
     const bookingSlug = `booking-${Date.now().toString(36)}`;
+    const expiry = checkoutExpiry();
     const { data: booking, error: insertError } = await supabase
       .from('entries')
       .insert({
@@ -738,6 +740,8 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
           amount: totalCents,
           currency: resource.currency,
           booking_status: 'pending',
+          // Seat is released if not paid by then (Stripe session expires too)
+          checkout_expires_at: expiry.iso,
           source: (metadata && metadata.source) || 'direct',
           metadata: metadata || {},
           notes: notes || '',
@@ -751,6 +755,20 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       .single();
 
     if (insertError) throw insertError;
+
+    // Insert-then-verify: if another buyer took the last seats in the
+    // meantime, this booking is released (no overbooking).
+    if (!(await keepsSeat(bookingsColId, booking.id, { resource_slug, date, time_slot }, resource.capacity))) {
+      await releaseBooking(booking.id, 'sold_out_race');
+      return res.status(409).json({
+        error: {
+          message: 'This time slot just sold out. Please choose another time.',
+          code: 'SLOT_SOLD_OUT',
+          status: 409,
+          timestamp: new Date().toISOString(),
+        },
+      });
+    }
 
     const stripeConfig = await getStripeConfig();
 
@@ -833,6 +851,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     }
 
     const session = await stripe.checkout.sessions.create({
+      expires_at: expiry.unix, // same deadline as checkout_expires_at on the booking
       // Omit payment_method_types — Stripe auto-detects all methods enabled
       // in the dashboard (card, Apple Pay, Google Pay, SEPA, Multibanco, etc.)
       mode: 'payment',

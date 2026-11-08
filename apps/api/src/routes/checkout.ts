@@ -24,6 +24,7 @@ import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
+import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
 import {
   loadCoupon,
   validateCoupon,
@@ -348,6 +349,7 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
         adults,
         children,
         party_size: partySize,
+        capacity: resource.capacity,
         notes: item.notes || '',
       },
       stripeLineItem: {
@@ -649,6 +651,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
     // ── Create booking entries (one per booking line item) linked to order ──
     const bookingIds: string[] = [];
     const bookingsColId = await getCollectionId('bookings');
+    const expiry = checkoutExpiry();
 
     if (bookingsColId) {
       for (let i = 0; i < resolvedItems.length; i++) {
@@ -682,6 +685,8 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
               amount: r.total,
               currency: r.currency,
               booking_status: 'pending',
+              // Seat is released if not paid by then (Stripe session expires too)
+              checkout_expires_at: expiry.iso,
               notes: m.notes,
             },
             status: 'published',
@@ -694,6 +699,24 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
         if (bkErr) throw bkErr;
         bookingIds.push(bk.id);
+
+        // Insert-then-verify: another buyer may have taken the last seats.
+        if (!(await keepsSeat(bookingsColId, bk.id, { resource_slug: m.resource_slug, date: m.date, time_slot: m.time_slot }, Number(m.capacity) || 1))) {
+          for (const id of bookingIds) await releaseBooking(id, 'sold_out_race');
+          const { data: cur } = await supabase.from('entries').select('content').eq('id', order.id).single();
+          await supabase.from('entries').update({
+            content: { ...((cur?.content as any) || {}), status: 'cancelled', cancel_reason: 'sold_out_race' },
+            tags: ['order', 'cancelled'],
+          } as any).eq('id', order.id);
+          return res.status(409).json({
+            error: {
+              message: `${m.resource_title} — ${m.date} ${m.time_slot} just sold out. Please choose another time.`,
+              code: 'SLOT_SOLD_OUT',
+              status: 409,
+              timestamp: new Date().toISOString(),
+            },
+          });
+        }
       }
 
       // Update order with linked booking IDs
@@ -735,6 +758,8 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
     if (stripeCouponId) {
       sessionParams.discounts = [{ coupon: stripeCouponId }];
     }
+    // Orders with seats: the session expires when the seat hold does.
+    if (bookingIds.length > 0) sessionParams.expires_at = expiry.unix;
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 

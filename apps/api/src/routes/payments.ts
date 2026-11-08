@@ -11,6 +11,7 @@ import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
 import { requireAdmin, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
+import { setBookingsStatus, extendBookingHold } from '../lib/booking-capacity.js';
 
 const router: Router = Router();
 
@@ -342,6 +343,42 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 //   tenant_id would still fail signature verification with that tenant's key.
 // ============================================
 
+/** Bookings (and order) behind a Checkout Session — unified (order_id) or legacy (booking_id). */
+async function bookingsForSession(session: any): Promise<{ bookingIds: string[]; orderId?: string; orderContent?: Record<string, any> }> {
+  const orderId = session?.metadata?.order_id;
+  if (orderId) {
+    const { data } = await supabase.from('entries').select('content').eq('id', orderId).single();
+    const orderContent = (data?.content as Record<string, any>) || {};
+    let bookingIds: string[] = [];
+    try { bookingIds = JSON.parse(orderContent.related_booking_ids || '[]'); } catch { /* none */ }
+    return { bookingIds, orderId, orderContent };
+  }
+  const bookingId = session?.metadata?.booking_id;
+  return { bookingIds: bookingId ? [bookingId] : [] };
+}
+
+/** Checkout never paid (session expired / delayed payment failed): free the seats. */
+async function releaseUnpaidCheckout(session: any, reason: 'checkout_expired' | 'payment_failed'): Promise<void> {
+  const { bookingIds, orderId, orderContent } = await bookingsForSession(session);
+  const now = new Date().toISOString();
+  const released = await setBookingsStatus(bookingIds, 'expired', { expired_at: now, expire_reason: reason });
+  if (orderId && orderContent && orderContent.status === 'pending') {
+    await supabase.from('entries').update({
+      content: { ...orderContent, status: reason === 'payment_failed' ? 'payment_failed' : 'expired', expired_at: now },
+      tags: ['order', reason === 'payment_failed' ? 'payment_failed' : 'expired'],
+    } as any).eq('id', orderId);
+  }
+  const coupon = session?.metadata?.coupon_code || orderContent?.coupon_code;
+  if (coupon) {
+    for (const id of bookingIds) {
+      cancelPendingRedemption(id, 'expired').catch(err =>
+        logger.warn('Failed to expire pending redemption', { bookingId: id, error: err.message })
+      );
+    }
+  }
+  if (released || orderId) logger.info('Unpaid checkout released', { sessionId: session?.id, reason, released, orderId });
+}
+
 export async function webhookHandler(req: Request, res: Response): Promise<void> {
   const sig = req.headers['stripe-signature'] as string;
   if (!sig) {
@@ -418,6 +455,9 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
           sessionId: session.id,
           payment_status: session.payment_status,
         });
+        // Keep the seats while the delayed payment (e.g. Multibanco) is processed.
+        const { bookingIds } = await bookingsForSession(session);
+        if (bookingIds.length) await extendBookingHold(bookingIds);
         res.json({ received: true });
         return;
       }
@@ -552,6 +592,13 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             if (!bookingEntry) continue;
 
             const bkContent = bookingEntry.content as Record<string, any>;
+            if (bkContent.booking_status === 'expired') {
+              // Paid after the seat hold ran out (rare: very late payment). The
+              // customer paid, so confirm — but flag it: the slot may be over capacity.
+              logger.warn('Booking paid after its hold expired — check slot capacity', {
+                bookingId: bkId, date: bkContent.date, time_slot: bkContent.time_slot, resource: bkContent.resource_slug,
+              });
+            }
             await supabase
               .from('entries')
               .update({
@@ -721,14 +768,13 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
     }
 
     // Release coupon hold if Stripe session expired before payment
+    // Session expired unpaid, or a delayed payment failed: free the seats now
+    // (the sweeper would do it later anyway) and cancel coupon reservations.
     if (event.type === 'checkout.session.expired') {
-      const session = event.data.object as any;
-      const bookingId = session.metadata?.booking_id;
-      if (bookingId && session.metadata?.coupon_code) {
-        cancelPendingRedemption(bookingId, 'expired').catch(err =>
-          logger.warn('Failed to expire pending redemption', { bookingId, error: err.message })
-        );
-      }
+      await releaseUnpaidCheckout(event.data.object as any, 'checkout_expired');
+    }
+    if (event.type === 'checkout.session.async_payment_failed') {
+      await releaseUnpaidCheckout(event.data.object as any, 'payment_failed');
     }
 
     // Handle refunds

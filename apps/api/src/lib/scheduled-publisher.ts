@@ -13,6 +13,7 @@
  */
 
 import { logger } from './logger.js';
+import { expireUnpaidBookingsForCurrentTenant } from './booking-capacity.js';
 import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
@@ -106,6 +107,9 @@ async function emptyExpiredTrashForCurrentTenant(): Promise<number> {
 // in the loop was ever swept (it set the timestamp, every other tenant skipped).
 const lastTrashSweepAt = new Map<string, number>();
 const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+// Unpaid checkout bookings: every 5 min per tenant is plenty (60 min holds).
+const lastBookingSweepAt = new Map<string, number>();
+const BOOKING_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 async function processCurrentTenant(): Promise<void> {
   await publishDueEntriesForCurrentTenant();
@@ -115,6 +119,15 @@ async function processCurrentTenant(): Promise<void> {
   if (Date.now() - (lastTrashSweepAt.get(tenantId) || 0) > TRASH_SWEEP_INTERVAL_MS) {
     lastTrashSweepAt.set(tenantId, Date.now());
     await emptyExpiredTrashForCurrentTenant();
+  }
+
+  if (Date.now() - (lastBookingSweepAt.get(tenantId) || 0) > BOOKING_SWEEP_INTERVAL_MS) {
+    lastBookingSweepAt.set(tenantId, Date.now());
+    try {
+      await expireUnpaidBookingsForCurrentTenant();
+    } catch (err: any) {
+      logger.warn('Booking expiry sweep failed', { tenant: tenantId, error: err?.message });
+    }
   }
 }
 
