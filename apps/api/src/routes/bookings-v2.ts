@@ -1039,6 +1039,8 @@ router.post('/:bookingId/cancel', requireEditor, async (req: AuthRequest, res: R
 
 router.get('/list', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
+    // Bookings hold customer personal data: not readable with a public API key
+
     const {
       status: statusFilter,
       resource,
@@ -1092,6 +1094,7 @@ router.get('/list', requireEditor, async (req: AuthRequest, res: Response) => {
 
 router.get('/stats', requireEditor, async (_req: AuthRequest, res: Response) => {
   try {
+
     const bookingsColId = await getCollectionId('bookings');
     if (!bookingsColId) {
       return res.json({

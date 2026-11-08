@@ -204,7 +204,7 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
 
     const { data: entry, error } = await supabase
       .from('entries')
-      .select(ENTRY_SELECT)
+      .select(`${ENTRY_SELECT}, collection_id`)
       .eq('id', id)
       .single();
 
@@ -368,6 +368,8 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     if (!collection) {
       return collectionNotFound(res);
     }
+
+    // Private collections (leads, bookings, secrets…) are not readable with a public API key
 
     const lang = req.query.lang as string | undefined;
     const cacheKey = `entries:${collectionSlug}:slug:${entrySlug}:lang=${lang || ''}:pub=${publicRead ? 1 : 0}`;

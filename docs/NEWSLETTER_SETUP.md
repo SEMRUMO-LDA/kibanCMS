@@ -243,13 +243,13 @@ Subscritores cancelados (unsubscribe) ficam com `is_active: false` no content.
 Ainda nao ha export nativo. Opcoes atuais:
 
 1. **Manual** — Ver no admin, copiar emails
-2. **API** — Fazer GET `/api/v1/entries/newsletter-subscribers?status=published&limit=500` e processar
+2. **API** — `newsletter-subscribers` e uma collection privada: **nenhuma API key a consegue ler** (as keys vao no codigo dos sites e qualquer pessoa as pode copiar). Para integracoes no servidor, usa o token de sessao (JWT) de um admin, ou a sincronizacao com a Brevo (`/api/v1/brevo/sync-all`, admin)
 3. **Supabase direto** — Query SQL no Supabase Dashboard
 
 ```bash
-# Exportar emails via API
-curl -s "https://kiban.pt/api/v1/entries/newsletter-subscribers?status=published&limit=500" \
-  -H "Authorization: Bearer kiban_live_xxxxx" | \
+# Exportar emails via API (token de sessao de um admin — API keys recebem 404)
+curl -s "https://<cliente>.kiban.pt/api/v1/entries/newsletter-subscribers?status=published&limit=500" \
+  -H "Authorization: Bearer <access_token de um admin>" | \
   jq -r '.data[].content.email'
 ```
 
