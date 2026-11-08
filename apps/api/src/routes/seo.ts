@@ -14,6 +14,7 @@ import { logger } from '../lib/logger.js';
 import { withFallbackCache } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { tenantStore } from '../middleware/tenant.js';
+import { buildSitemap, toSitemapXml, SitemapConfigError, type SitemapUrl } from '../lib/sitemap.js';
 
 const router: Router = Router();
 
@@ -179,6 +180,53 @@ router.get('/robots.txt', async (_req: AuthRequest, res: Response) => {
     logger.error('Error generating robots.txt', { error: error.message });
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send('User-agent: *\nAllow: /\n');
+  }
+});
+
+// ============================================
+// GET /api/v1/seo/sitemap.xml  — XML sitemap
+// GET /api/v1/seo/sitemap      — same URLs as JSON (e.g. Next.js app/sitemap.ts)
+// API key or JWT. The site serves it from its own domain (/sitemap.xml),
+// fetching it server-side with its key + X-Tenant header.
+// ============================================
+
+const sitemapCache = new Map<string, { urls: SitemapUrl[]; fetchedAt: number }>();
+const SITEMAP_TTL = 10 * 60 * 1000;
+
+async function getSitemap(): Promise<SitemapUrl[]> {
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+  const cached = sitemapCache.get(tenantId);
+  if (cached && Date.now() - cached.fetchedAt < SITEMAP_TTL) return cached.urls;
+  const urls = await buildSitemap();
+  sitemapCache.set(tenantId, { urls, fetchedAt: Date.now() });
+  return urls;
+}
+
+function sitemapError(res: Response, error: any) {
+  if (error instanceof SitemapConfigError) {
+    return res.status(400).json({ error: { message: error.message, status: 400, timestamp: new Date().toISOString() } });
+  }
+  logger.error('Error generating sitemap', { error: error?.message });
+  return res.status(500).json({ error: { message: 'Failed to generate sitemap', status: 500, timestamp: new Date().toISOString() } });
+}
+
+router.get('/sitemap.xml', async (_req: AuthRequest, res: Response) => {
+  try {
+    const urls = await getSitemap();
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.send(toSitemapXml(urls));
+  } catch (error: any) {
+    sitemapError(res, error);
+  }
+});
+
+router.get('/sitemap', async (_req: AuthRequest, res: Response) => {
+  try {
+    const urls = await getSitemap();
+    res.json({ data: urls, meta: { total: urls.length }, timestamp: new Date().toISOString() });
+  } catch (error: any) {
+    sitemapError(res, error);
   }
 });
 
