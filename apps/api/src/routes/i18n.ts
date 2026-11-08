@@ -14,6 +14,9 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import { tenantStore } from '../middleware/tenant.js';
+import { translateWithCache } from '../lib/translation-cache.js';
 import {
   translateFields,
   translateTexts,
@@ -41,12 +44,16 @@ interface I18nConfig {
   translatableCollections: string[];
 }
 
-let configCache: { config: I18nConfig; fetchedAt: number } | null = null;
+// Per tenant: a single shared slot meant one client could use another
+// client's translation key and languages for up to 60s.
+const configCache = new Map<string, { config: I18nConfig; fetchedAt: number }>();
 const CONFIG_TTL = 60_000;
 
 async function getI18nConfig(): Promise<I18nConfig | null> {
-  if (configCache && Date.now() - configCache.fetchedAt < CONFIG_TTL) {
-    return configCache.config;
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+  const cached = configCache.get(tenantId);
+  if (cached && Date.now() - cached.fetchedAt < CONFIG_TTL) {
+    return cached.config;
   }
 
   const { data: col } = await supabase
@@ -96,7 +103,7 @@ async function getI18nConfig(): Promise<I18nConfig | null> {
     translatableCollections: translatableCols,
   };
 
-  configCache = { config, fetchedAt: Date.now() };
+  configCache.set(tenantId, { config, fetchedAt: Date.now() });
   return config;
 }
 
@@ -890,7 +897,20 @@ router.post('/translate-everything', requireEditor, async (_req: AuthRequest, re
 // Body: { texts: string[], target_lang: string, source_lang?: string }
 // ============================================
 
-router.post('/translate-text', async (req: AuthRequest, res: Response) => {
+// Public (widget, API key): its own limit on top of the global one.
+// Legit use is ~1 request per page per language per new visitor.
+const translateTextLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Too many translation requests, try again later', status: 429 } },
+});
+
+const MAX_TEXT_CHARS = 5_000;
+const MAX_REQUEST_CHARS = 50_000;
+
+router.post('/translate-text', translateTextLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { texts, target_lang, source_lang } = req.body;
 
@@ -914,15 +934,29 @@ router.post('/translate-text', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const translations = await translateTexts(
-      texts,
-      target_lang,
-      config.googleApiKey,
-      source_lang || config.defaultLanguage
+    if (!texts.every((t: unknown) => typeof t === 'string')) {
+      return res.status(400).json({
+        error: { message: 'texts must be an array of strings', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+    const totalChars = (texts as string[]).reduce((n, t) => n + t.length, 0);
+    if ((texts as string[]).some(t => t.length > MAX_TEXT_CHARS) || totalChars > MAX_REQUEST_CHARS) {
+      return res.status(400).json({
+        error: { message: `Each text must be at most ${MAX_TEXT_CHARS} characters (${MAX_REQUEST_CHARS} per request)`, status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+
+    // Only texts never translated before reach the provider (see lib/translation-cache.ts)
+    const result = await translateWithCache(
+      texts as string[],
+      String(target_lang),
+      String(source_lang || config.defaultLanguage),
+      (missing, tgt, src) => translateTexts(missing, tgt, config.googleApiKey, src),
     );
 
     res.json({
-      data: { translations },
+      data: { translations: result.translations },
+      meta: { cached: result.fromCache, translated: result.translated },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
