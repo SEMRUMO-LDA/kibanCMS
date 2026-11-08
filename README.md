@@ -31,14 +31,10 @@ apps/
   api/          Express REST API
   example/      Next.js example frontend
 packages/
-  types/        Shared TypeScript types
-  core/         KibanClient SDK
-  kiban-client/  Published JS client
-  ui/           React component library
-  media/        Media processing
-  addons/       Add-on system
+  kiban-client/ Published JS client (@kiban/client)
 database/
-  migrations/   SQL for Supabase
+  migrations/   SQL for Supabase (see migrations/README.md)
+  UPGRADE_TENANT.sql  All migrations in one file for existing clients
 docs/           All documentation
 ```
 

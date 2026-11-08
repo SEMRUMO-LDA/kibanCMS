@@ -1,5 +1,5 @@
 import { getSupabase } from '../lib/supabase';
-import { AccessibilitySettingsPage } from '@addons/addons/accessibility/AccessibilitySettingsPage';
+import { AccessibilitySettingsPage } from '../components/addons/AccessibilitySettingsPage';
 
 export const AccessibilitySettings = () => {
   const supabase = getSupabase();

@@ -54,15 +54,11 @@ kibanCMS (monorepo)
 │   └── example/        → Next.js (frontend exemplo)
 │
 ├── packages/
-│   ├── types/          → TypeScript types partilhados
-│   ├── core/           → KibanClient (SDK)
-│   ├── ui/             → Componentes React reutilizaveis
-│   ├── media/          → Servicos de media/imagem
-│   ├── addons/         → Sistema de add-ons
 │   └── kiban-client/   → Cliente JS oficial (@kiban/client)
 │
 ├── database/
-│   └── migrations/     → SQL para Supabase
+│   ├── migrations/     → SQL para Supabase (ver migrations/README.md)
+│   └── UPGRADE_TENANT.sql → todas as migrations num ficheiro (clientes existentes)
 │
 ├── Dockerfile          → Build multi-stage
 ├── docker-compose.yml  → Config Docker

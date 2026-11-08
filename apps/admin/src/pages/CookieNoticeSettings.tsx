@@ -1,5 +1,5 @@
 import { getSupabase } from '../lib/supabase';
-import { CookieSettingsPage } from '@addons/addons/cookie-notice/CookieSettingsPage';
+import { CookieSettingsPage } from '../components/addons/CookieSettingsPage';
 
 export const CookieNoticeSettings = () => {
   const supabase = getSupabase();

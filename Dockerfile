@@ -10,7 +10,6 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/
 COPY apps/admin/package.json ./apps/admin/
-COPY packages/types/package.json ./packages/types/
 
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
@@ -22,8 +21,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/admin/node_modules ./apps/admin/node_modules
 COPY apps/admin/ ./apps/admin/
-COPY packages/types/ ./packages/types/
-COPY packages/addons/src/ ./packages/addons/src/
 
 WORKDIR /app/apps/admin
 
@@ -39,7 +36,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY apps/api/ ./apps/api/
-COPY packages/types/ ./packages/types/
 
 WORKDIR /app/apps/api
 RUN pnpm build:api
@@ -60,7 +56,6 @@ COPY --from=admin-builder /app/apps/admin/dist ./apps/admin/dist
 
 # Copy workspace config
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY packages/types/package.json ./packages/types/
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts
