@@ -19,7 +19,7 @@ import { LRUCache } from '../lib/lru-cache.js';
 import { sendBookingConfirmation } from '../lib/email.js';
 import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon } from '../lib/coupons.js';
 import { tenantStore } from '../middleware/tenant.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -944,7 +944,7 @@ router.get('/:bookingId/status', async (req: AuthRequest, res: Response) => {
 // POST /v2/:bookingId/confirm
 // ============================================
 
-router.post('/:bookingId/confirm', async (req: AuthRequest, res: Response) => {
+router.post('/:bookingId/confirm', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { bookingId } = req.params;
     const { data: entry, error: fetchErr } = await supabase
@@ -993,7 +993,7 @@ router.post('/:bookingId/confirm', async (req: AuthRequest, res: Response) => {
 // POST /v2/:bookingId/cancel
 // ============================================
 
-router.post('/:bookingId/cancel', async (req: AuthRequest, res: Response) => {
+router.post('/:bookingId/cancel', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { bookingId } = req.params;
     const { data: entry, error: fetchErr } = await supabase
@@ -1037,7 +1037,7 @@ router.post('/:bookingId/cancel', async (req: AuthRequest, res: Response) => {
 // Admin list with filters
 // ============================================
 
-router.get('/list', async (req: AuthRequest, res: Response) => {
+router.get('/list', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const {
       status: statusFilter,
@@ -1090,7 +1090,7 @@ router.get('/list', async (req: AuthRequest, res: Response) => {
 // GET /v2/stats
 // ============================================
 
-router.get('/stats', async (_req: AuthRequest, res: Response) => {
+router.get('/stats', requireEditor, async (_req: AuthRequest, res: Response) => {
   try {
     const bookingsColId = await getCollectionId('bookings');
     if (!bookingsColId) {

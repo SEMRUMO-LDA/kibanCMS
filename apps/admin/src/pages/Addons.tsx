@@ -357,7 +357,12 @@ export const Addons = () => {
       // Load existing config, set enabled=false
       const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
       const config = { ...(existing?.config || {}), enabled: false };
-      await supabase.from('addon_configs').upsert({ addon_id: addon.id, config });
+      // onConflict: the table's PK is `id`, addon_id is UNIQUE. Without it the
+      // second save hit a unique violation (ignored) and nothing persisted.
+      const { error: saveErr } = await supabase
+        .from('addon_configs')
+        .upsert({ addon_id: addon.id, config }, { onConflict: 'addon_id' });
+      if (saveErr) throw saveErr;
 
       setInstalledIds(prev => { const next = new Set(prev); next.delete(addon.id); return next; });
       setDisabledIds(prev => new Set([...prev, addon.id]));
@@ -376,7 +381,12 @@ export const Addons = () => {
 
       const { data: existing } = await supabase.from('addon_configs').select('config').eq('addon_id', addon.id).single();
       const config = { ...(existing?.config || {}), enabled: true };
-      await supabase.from('addon_configs').upsert({ addon_id: addon.id, config });
+      // onConflict: the table's PK is `id`, addon_id is UNIQUE. Without it the
+      // second save hit a unique violation (ignored) and nothing persisted.
+      const { error: saveErr } = await supabase
+        .from('addon_configs')
+        .upsert({ addon_id: addon.id, config }, { onConflict: 'addon_id' });
+      if (saveErr) throw saveErr;
 
       setInstalledIds(prev => new Set([...prev, addon.id]));
       setDisabledIds(prev => { const next = new Set(prev); next.delete(addon.id); return next; });

@@ -8,7 +8,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { getAllTenants, type TenantConfig } from '../config/tenants.js';
+import { getAllTenants, resolveTenantByHostname, type TenantConfig } from '../config/tenants.js';
 import { audit } from '../lib/audit.js';
 
 const router: Router = Router();
@@ -45,7 +45,11 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const tenants = getAllTenants();
+    // On a tenant's own domain (e.g. marsolve.kiban.pt) only that tenant is
+    // tried. Otherwise the same email+password existing in several tenants
+    // would log the user into whichever tenant answered first.
+    const hostTenant = resolveTenantByHostname(req.hostname || '');
+    const tenants = hostTenant ? [hostTenant] : getAllTenants();
 
     if (tenants.length === 0) {
       res.status(500).json({
@@ -77,10 +81,18 @@ router.post('/login', async (req: Request, res: Response) => {
     );
 
     // Find the first successful auth
-    const success = results.find(
+    const successes = results.filter(
       (r): r is PromiseFulfilledResult<{ tenant: TenantConfig; session: any }> =>
         r.status === 'fulfilled'
     );
+    const success = successes[0];
+
+    if (successes.length > 1) {
+      console.warn(
+        `[Auth] ${email} is valid in ${successes.length} tenants (${successes.map(s => s.value.tenant.id).join(', ')}); ` +
+        `logging into "${success.value.tenant.id}". Log in from the tenant's own domain to pick a specific one.`
+      );
+    }
 
     if (!success) {
       console.log(`[Auth] All tenants rejected login for ${email}`);

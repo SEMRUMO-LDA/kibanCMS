@@ -220,10 +220,16 @@ export function AccessibilitySettingsPage({ supabase, addonId = 'accessibility' 
 
   const handleSave = async () => {
     setSaving(true);
-    await supabase
+    // onConflict: addon_id is UNIQUE (PK is id). Without it every save after
+    // the first failed silently while the UI showed "Saved".
+    const { error } = await supabase
       .from('addon_configs')
-      .upsert({ addon_id: addonId, config });
+      .upsert({ addon_id: addonId, config }, { onConflict: 'addon_id' });
     setSaving(false);
+    if (error) {
+      alert('Failed to save: ' + error.message);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };

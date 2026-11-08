@@ -20,8 +20,20 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_created_at ON collection_snapshots(crea
 -- RLS policies
 ALTER TABLE collection_snapshots ENABLE ROW LEVEL SECURITY;
 
+-- DROP first so the file can be re-run safely.
+DROP POLICY IF EXISTS snapshots_select ON collection_snapshots;
+DROP POLICY IF EXISTS snapshots_insert ON collection_snapshots;
+DROP POLICY IF EXISTS snapshots_delete ON collection_snapshots;
+
+-- Snapshots hold full entry dumps (drafts included): admins/editors only.
 CREATE POLICY snapshots_select ON collection_snapshots
-    FOR SELECT USING (true);
+    FOR SELECT TO authenticated USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid()
+            AND role IN ('super_admin', 'admin', 'editor')
+        )
+    );
 
 CREATE POLICY snapshots_insert ON collection_snapshots
     FOR INSERT WITH CHECK (

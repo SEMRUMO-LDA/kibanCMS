@@ -195,6 +195,10 @@ export const Settings = () => {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Set when site settings failed to load. Saving is blocked in that state:
+  // the form would hold DEFAULTS and overwrite the real settings.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [apiKeysError, setApiKeysError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -226,10 +230,14 @@ export const Settings = () => {
         setGeneratedKey(row.api_key);
         await loadAll();
       } else {
-        throw new Error('No key returned. Ensure migration 008 has been applied.');
+        throw new Error('No key returned.');
       }
     } catch (err: any) {
-      toast.error('Failed to generate key: ' + (err.message || 'Unknown error'));
+      const msg = err?.message || 'Unknown error';
+      const hint = /could not find the function|does not exist/i.test(msg)
+        ? ' — run database/migrations/008_security_hardening.sql in this client\'s Supabase SQL Editor.'
+        : '';
+      toast.error('Failed to generate key: ' + msg + hint);
       setShowGenerateModal(false);
     } finally {
       setGenerating(false);
@@ -298,44 +306,58 @@ export const Settings = () => {
 
   const loadAll = async () => {
     try {
-      // Load site settings via API
-      const { data: entryData } = await api.getEntries('site-settings');
-      const globalEntry = (entryData || []).find((e: any) => e.slug === 'global');
-      if (globalEntry?.content) setSettings({ ...DEFAULTS, ...globalEntry.content });
-
-      // Load API keys (Supabase direct — table may not exist)
-      if (user?.id) {
-        try {
-          const { data: keys } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
-          setApiKeys(keys || []);
-        } catch { /* api_keys table may not exist — ignore */ }
+      // Load site settings via API. "Collection not found" just means the
+      // tenant has no settings yet (defaults are correct). Any other error
+      // means we DON'T know the real settings → block saving.
+      const { data: entryData, error: settingsErr } = await api.getEntries('site-settings');
+      if (settingsErr && !/collection not found/i.test(settingsErr)) {
+        setLoadError(settingsErr);
+      } else {
+        setLoadError(null);
+        const globalEntry = (entryData || []).find((e: any) => e.slug === 'global');
+        if (globalEntry?.content) setSettings({ ...DEFAULTS, ...globalEntry.content });
       }
-    } catch (err) {
+
+      // Load API keys (Supabase direct)
+      if (user?.id) {
+        const { data: keys, error: keysErr } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
+        setApiKeysError(keysErr ? keysErr.message : null);
+        setApiKeys(keys || []);
+      }
+    } catch (err: any) {
       console.error('Settings load error:', err);
+      setLoadError(err?.message || 'Failed to load settings');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSave = async () => {
+    if (loadError) {
+      toast.error('Settings could not be loaded, so saving is disabled to avoid overwriting them. Reload the page and try again.');
+      return;
+    }
     setSaving(true);
     try {
+      // Every call is checked: api.* never throws, it returns { error }.
       // Ensure collection exists
-      const { data: cols } = await api.getCollections();
+      const { data: cols, error: colsErr } = await api.getCollections();
+      if (colsErr) throw new Error(colsErr);
       const exists = (cols || []).find((c: any) => c.slug === 'site-settings');
       if (!exists) {
-        await api.createCollection({ name: 'Site Settings', slug: 'site-settings', description: 'Global configuration', type: 'custom', fields: [] });
+        const { error: createColErr } = await api.createCollection({ name: 'Site Settings', slug: 'site-settings', description: 'Global configuration', type: 'custom', fields: [] });
+        if (createColErr) throw new Error(createColErr);
       }
 
       // Check if entry exists
-      const { data: entries } = await api.getEntries('site-settings');
+      const { data: entries, error: entriesErr } = await api.getEntries('site-settings');
+      if (entriesErr) throw new Error(entriesErr);
       const globalEntry = (entries || []).find((e: any) => e.slug === 'global');
 
-      if (globalEntry) {
-        await api.updateEntry('site-settings', 'global', { title: 'Global Settings', content: settings, status: 'published' });
-      } else {
-        await api.createEntry('site-settings', { title: 'Global Settings', slug: 'global', content: settings, status: 'published' });
-      }
+      const { error: saveErr } = globalEntry
+        ? await api.updateEntry('site-settings', 'global', { title: 'Global Settings', content: settings, status: 'published' })
+        : await api.createEntry('site-settings', { title: 'Global Settings', slug: 'global', content: settings, status: 'published' });
+      if (saveErr) throw new Error(saveErr);
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -357,11 +379,19 @@ export const Settings = () => {
       <Header>
         <h1>{t('settings.title')}</h1>
         {activeTab !== 'api' && (
-          <SaveBtn onClick={handleSave} disabled={saving}>
+          <SaveBtn onClick={handleSave} disabled={saving || !!loadError} title={loadError ? `Settings failed to load: ${loadError}` : undefined}>
             {saving ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> {locale === 'pt' ? 'A guardar...' : 'Saving...'}</> : <><Save size={18} /> {t('settings.save')}</>}
           </SaveBtn>
         )}
       </Header>
+
+      {loadError && (
+        <div role="alert" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 8, padding: spacing[4], marginBottom: spacing[4] }}>
+          {locale === 'pt'
+            ? `Não foi possível carregar as definições (${loadError}). A gravação está desativada para não as substituir pelos valores por omissão. Recarregue a página.`
+            : `Settings could not be loaded (${loadError}). Saving is disabled so they aren't overwritten with defaults. Reload the page.`}
+        </div>
+      )}
 
       <TabNav>
         {TABS.map(tab => (
@@ -416,7 +446,11 @@ export const Settings = () => {
                 ? 'As API keys permitem que apps frontend acedam ao conteúdo. Nunca as exponha em código client-side.'
                 : 'API keys allow frontend apps to fetch content. Never expose them in client-side code.'}
             </div>
-            {apiKeys.length === 0 ? (
+            {apiKeysError ? (
+              <p role="alert" style={{ color: '#991b1b', textAlign: 'center', padding: spacing[8] }}>
+                {locale === 'pt' ? `Erro ao carregar as API keys: ${apiKeysError}` : `Failed to load API keys: ${apiKeysError}`}
+              </p>
+            ) : apiKeys.length === 0 ? (
               <p style={{ color: colors.gray[500], textAlign: 'center', padding: spacing[8] }}>
                 {locale === 'pt' ? 'Nenhuma API key encontrada. Clique em "Gerar Nova Key" para criar uma.' : 'No API keys found. Click "Generate New Key" to create one.'}
               </p>

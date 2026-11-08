@@ -118,6 +118,12 @@ export function resolveTenantById(id: string): TenantConfig | null {
   return tenantIdMap.get(id.toLowerCase()) || null;
 }
 
+/** Exact hostname match only — no fallback to the default tenant. */
+export function resolveTenantByHostname(hostname: string): TenantConfig | null {
+  const host = hostname.toLowerCase().split(':')[0];
+  return hostnameMap.get(host) || null;
+}
+
 export function resolveTenant(hostname: string): TenantConfig | null {
   const host = hostname.toLowerCase().split(':')[0];
   return hostnameMap.get(host) || defaultTenant;

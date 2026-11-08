@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase, clearTenant } from '../../../lib/supabase';
 
@@ -27,6 +27,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const profileFetchedForId = useRef<string | null>(null);
   const initialised = useRef(false);
+  // Mirror of `session` for the interval below (its closure would otherwise
+  // only ever see the initial `null`, so dead sessions were never detected).
+  const sessionRef = useRef<Session | null>(null);
+  useEffect(() => { sessionRef.current = session; }, [session]);
 
   const fetchProfile = useCallback(async (userId: string): Promise<any | null> => {
     try {
@@ -91,6 +95,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (event === 'SIGNED_IN' && newSession?.user) {
+        // supabase-js re-emits SIGNED_IN whenever the tab regains focus.
+        // Nothing changed → don't push new objects through the whole app.
+        if (sessionRef.current?.access_token === newSession.access_token) return;
         setSession(newSession);
         setUser(newSession.user);
         setLoading(false);
@@ -116,7 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (!active) return;
       try {
         const { data } = await supabase.auth.getSession();
-        if (!data.session && session) {
+        if (!data.session && sessionRef.current) {
           // Session died silently — force logout
           console.warn('[Auth] Session expired — redirecting to login');
           setSession(null);
@@ -191,8 +198,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
+  const value = useMemo(
+    () => ({ session, user, profile, loading, signOut, refreshAuth }),
+    [session, user, profile, loading, signOut, refreshAuth],
+  );
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signOut, refreshAuth }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

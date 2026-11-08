@@ -102,16 +102,19 @@ async function emptyExpiredTrashForCurrentTenant(): Promise<number> {
 
 // Track when we last ran the trash auto-empty so we don't hammer the DB —
 // once per hour is enough; trash retention is 30 days, so precision doesn't matter.
-let lastTrashSweepAt = 0;
+// Tracked PER TENANT: a single shared timestamp meant only the first tenant
+// in the loop was ever swept (it set the timestamp, every other tenant skipped).
+const lastTrashSweepAt = new Map<string, number>();
 const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 async function processCurrentTenant(): Promise<void> {
   await publishDueEntriesForCurrentTenant();
 
   // Run trash auto-empty at most once per hour per tenant
-  if (Date.now() - lastTrashSweepAt > TRASH_SWEEP_INTERVAL_MS) {
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+  if (Date.now() - (lastTrashSweepAt.get(tenantId) || 0) > TRASH_SWEEP_INTERVAL_MS) {
+    lastTrashSweepAt.set(tenantId, Date.now());
     await emptyExpiredTrashForCurrentTenant();
-    lastTrashSweepAt = Date.now();
   }
 }
 
@@ -131,7 +134,6 @@ async function processAllTenants(): Promise<void> {
     } catch (err: any) {
       logger.error('Scheduled publisher: default tenant failed', { error: err.message });
     }
-    lastTrashSweepAt = Date.now();
     return;
   }
 
@@ -150,7 +152,6 @@ async function processAllTenants(): Promise<void> {
       });
     }
   }
-  lastTrashSweepAt = Date.now();
 }
 
 /**

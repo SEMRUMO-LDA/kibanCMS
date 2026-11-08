@@ -1,26 +1,50 @@
-# kibanCMS — Configurar Notificacoes de Email (Forms Addon)
+# kibanCMS — Notificacoes de Email dos Formularios
 
-> Guia para configurar o envio de emails automaticos quando um formulario e submetido num frontend.
+> Como funcionam os emails enviados quando um formulario e submetido num frontend.
 
 ---
 
 ## Arquitetura
 
 ```
-Frontend → POST /api/v1/forms/submit → Lead guardada no CMS
-                                      → Webhook → Make.com → Email enviado
+Frontend → POST /api/v1/forms/submit → Lead guardada no CMS (collection form-submissions)
+                                      → Email para o admin (Resend)
+                                      → Resposta automatica ao visitante (opcional)
+                                      → Webhook (opcional, ex.: Make.com)
 ```
 
-O CMS guarda a lead e dispara um webhook. O Make.com recebe e envia o email. Zero codigo no backend.
+O envio e feito pela propria API, atraves da Resend. O webhook/Make.com e opcional
+(so para automacoes extra, ex.: CRM, Google Sheets).
+
+> Importante: so `POST /api/v1/forms/submit` envia emails. Gravar a submissao com
+> `POST /api/v1/entries/form-submissions` NAO envia nada.
 
 ---
 
 ## Pre-requisitos
 
-1. Addon **Forms** instalado no CMS (Extensoes > Forms > Install)
-2. Conta no Make.com (gratis ate 1000 operacoes/mes)
+1. **Na Railway (servico da API)**, em Variables:
+   - `RESEND_API_KEY` — sem isto **nenhum email e enviado** (os logs mostram
+     `Email NOT sent: RESEND_API_KEY is not set`)
+   - `DEFAULT_FROM_EMAIL` — num dominio verificado na Resend (ex.: `noreply@kiban.pt`)
+2. Addon **Forms** instalado no CMS (Extensoes > Forms > Install)
+3. **Destinatarios** (por ordem de prioridade):
+   1. `notification_emails` na Forms Config desse formulario
+   2. Settings → Email → "Notification Email(s)"
+   3. Settings → General → "Contact Email"
+   4. Variavel `NOTIFICATION_EMAIL` na Railway
+
+### Testar
+
+Settings → Email → **Enviar email de teste**. Se responder `NO_API_KEY`, falta a
+`RESEND_API_KEY` na Railway.
 
 ---
+
+## (Opcional) Webhook para Make.com
+
+Os passos abaixo so sao precisos se quiseres, alem do email, enviar cada lead para
+outra ferramenta.
 
 ## Passo 1: Criar Scenario no Make.com
 
@@ -267,7 +291,11 @@ Se preferires gerir o texto do auto-reply dentro do CMS em vez de hardcoded no M
 
 ### Formulario submete mas nao recebo email
 1. Verifica no CMS se a lead foi criada (Conteudo > Form Submissions)
-2. Se sim, o problema e no webhook. Verifica:
+2. Se sim, ve os logs da API na Railway:
+   - `Email NOT sent: RESEND_API_KEY is not set` → falta a variavel na Railway
+   - `Form notification skipped — no recipient emails configured` → preenche "Notification Email(s)" nas Settings
+   - `Resend API error` → dominio do `DEFAULT_FROM_EMAIL` nao verificado na Resend
+3. Se usas o webhook do Make.com, verifica tambem:
    - Forms Config tem `is_active: true` e `webhook_url` preenchido?
    - O Scenario no Make.com esta ativo (Scheduling ON)?
    - Verifica o historico de execucoes no Make.com

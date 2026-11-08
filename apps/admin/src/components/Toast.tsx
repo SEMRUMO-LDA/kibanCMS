@@ -8,7 +8,7 @@
  * toast.error('Failed to save')
  */
 
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -31,6 +31,8 @@ interface ToastContextValue {
   error: (message: string, duration?: number) => void;
   warning: (message: string, duration?: number) => void;
   info: (message: string, duration?: number) => void;
+  /** Generic form used by several pages: toast.show('Saved', 'success'). */
+  show: (message: string, type?: ToastType, duration?: number) => void;
 }
 
 // ============================================
@@ -193,12 +195,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, [removeToast]);
 
-  const value: ToastContextValue = {
+  // Memoised: a new object on every toast change made every consumer
+  // re-render, and pages with `toast` in effect deps re-fetched their data
+  // (wiping forms) each time a notification appeared or disappeared.
+  const value = useMemo<ToastContextValue>(() => ({
     success: (message, duration) => addToast('success', message, duration),
     error: (message, duration) => addToast('error', message, duration),
     warning: (message, duration) => addToast('warning', message, duration),
     info: (message, duration) => addToast('info', message, duration),
-  };
+    // Pages called toast.show(), which didn't exist: it threw and aborted
+    // the rest of the handler (e.g. the reload after an affiliate payout).
+    show: (message, type = 'info', duration) => addToast(type, message, duration),
+  }), [addToast]);
 
   const getIcon = (type: ToastType) => {
     switch (type) {

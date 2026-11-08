@@ -166,6 +166,13 @@ interface Entry {
   version?: number;
 }
 
+// Stable references. The editor re-initialises its form whenever
+// `initialData`/`fields` change identity, so passing a fresh `{}`/`[]` on
+// every render wiped whatever the user was typing in a NEW entry each time
+// the page re-rendered (first keystroke, any toast, returning to the tab…).
+const EMPTY_CONTENT: EntryData = {};
+const EMPTY_FIELDS: FieldDefinition[] = [];
+
 export function EntryEdit() {
   const { collectionSlug, entryId } = useParams<{ collectionSlug: string; entryId?: string }>();
   const navigate = useNavigate();
@@ -258,12 +265,19 @@ export function EntryEdit() {
 
     const title = String(rawTitle).trim().slice(0, MAX_TITLE_LEN);
 
-    const slug = (title
+    const slugify = (value: string) => (value
       .toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       || 'entry').slice(0, MAX_SLUG_LEN);
+
+    // The slug is the public URL of the entry. It is derived from the title
+    // only when the entry is CREATED. On edit we keep the existing slug, so
+    // fixing a typo in a published title doesn't silently change its URL
+    // (breaking links/SEO) — unless the collection has an explicit `slug` field.
+    const explicitSlug = typeof data.slug === 'string' && data.slug.trim() ? slugify(data.slug) : null;
+    const slug = explicitSlug || (isEditMode && entry ? entry.slug : slugify(title));
 
     try {
       if (isEditMode && entry && collectionSlug) {
@@ -288,10 +302,14 @@ export function EntryEdit() {
           }
           throw new Error(error);
         }
-        // Update local version to match server after successful save
-        if (result?.version) {
-          setEntry(prev => prev ? { ...prev, version: result.version } : prev);
-        }
+        // Sync version/slug/title with the server. `content` is deliberately
+        // left untouched: replacing it would re-initialise the editor form.
+        setEntry(prev => prev ? {
+          ...prev,
+          title,
+          slug: result?.slug || slug,
+          ...(result?.version ? { version: result.version } : {}),
+        } : prev);
         setIsDirty(false);
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -371,7 +389,7 @@ export function EntryEdit() {
     );
   }
 
-  const fields = collection.fields || [];
+  const fields = collection.fields || EMPTY_FIELDS;
 
   return (
     <>
@@ -424,7 +442,7 @@ export function EntryEdit() {
 
       <EntryEditor
         fields={fields}
-        initialData={entry?.content || {}}
+        initialData={entry?.content || EMPTY_CONTENT}
         initialStatus={entry?.status || 'draft'}
         onSave={handleSave}
         onCancel={handleCancel}
@@ -464,7 +482,7 @@ export function EntryEdit() {
       {showPreview && collection && (
         <LivePreview
           previewUrl=""
-          entryData={entry?.content || {}}
+          entryData={entry?.content || EMPTY_CONTENT}
           collectionSlug={collection.slug}
           onClose={() => setShowPreview(false)}
         />

@@ -5,6 +5,13 @@ import { logger } from '../lib/logger.js';
 export interface AuthRequest extends Request {
   profileId?: string;
   user?: any;
+  /**
+   * How the caller authenticated. API keys are embedded in public frontends
+   * (anyone can copy them from the page source), so they must only grant
+   * read access to published content plus a few public write endpoints
+   * (forms, newsletter, checkout). JWTs belong to logged-in admin users.
+   */
+  authType?: 'api_key' | 'jwt';
 }
 
 /**
@@ -92,6 +99,7 @@ export async function validateApiKey(
 
     // Attach profile ID to request
     req.profileId = keyRecord.profile_id;
+    req.authType = 'api_key';
 
     next();
   } catch (error) {
@@ -148,6 +156,7 @@ export async function validateJWT(
     // Attach user to request
     req.user = data.user;
     req.profileId = data.user.id;
+    req.authType = 'jwt';
 
     next();
   } catch (error) {
@@ -189,6 +198,61 @@ export async function validateAny(
     return validateJWT(req, res, next);
   }
 }
+
+export function isApiKeyRequest(req: AuthRequest): boolean {
+  return req.authType === 'api_key';
+}
+
+function forbidden(res: Response, message: string): void {
+  res.status(403).json({
+    error: { message, status: 403, timestamp: new Date().toISOString() },
+  });
+}
+
+/**
+ * Lets API-key callers through only for safe (read) methods.
+ * Mount after validateAny on routers that mix public reads with admin writes.
+ */
+export function apiKeyReadOnly(req: AuthRequest, res: Response, next: NextFunction): void {
+  if (isApiKeyRequest(req) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    forbidden(res, 'API keys are read-only for this endpoint. Log in to the admin panel to make changes.');
+    return;
+  }
+  next();
+}
+
+/**
+ * Requires a logged-in user (JWT) with one of the given roles.
+ * API keys are always rejected: they are public credentials.
+ */
+export function requireRole(...roles: string[]) {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (req.authType !== 'jwt' || !req.profileId) {
+      forbidden(res, 'This endpoint requires an admin login (API keys are not accepted).');
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', req.profileId)
+        .single();
+      if (!data?.role || !roles.includes(data.role)) {
+        forbidden(res, 'Forbidden: insufficient permissions');
+        return;
+      }
+      next();
+    } catch (error: any) {
+      logger.error('Role check failed', { error: error?.message });
+      res.status(500).json({
+        error: { message: 'Internal server error', status: 500, timestamp: new Date().toISOString() },
+      });
+    }
+  };
+}
+
+export const requireAdmin = requireRole('super_admin', 'admin');
+export const requireEditor = requireRole('super_admin', 'admin', 'editor');
 
 /**
  * CORS Middleware Helper

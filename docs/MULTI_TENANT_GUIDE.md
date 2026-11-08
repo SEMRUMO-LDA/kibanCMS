@@ -55,16 +55,21 @@ Isto garante que o setup existente continua a funcionar sem mudancas.
 ## Adicionar um novo cliente
 
 1. **Criar Supabase**: Novo projeto no Supabase dashboard
-2. **Correr schema**: Cola o conteudo de `database/migrations/CLEAN_RESET.sql` no SQL Editor
-3. **Criar storage bucket**: No Supabase Storage, criar bucket `media` (public)
-4. **Criar primeiro user**: Regista-te no Supabase Auth (Email)
-5. **Promover a super_admin**: Corre no SQL Editor:
-   ```sql
-   UPDATE profiles SET role = 'super_admin' WHERE email = 'admin@email.com';
-   ```
-6. **Adicionar ao TENANTS**: Adiciona a entrada no JSON do Railway
-7. **Adicionar dominio**: No Railway, adiciona o subdominio como custom domain
-8. **Deploy**: O Railway faz redeploy automatico
+2. **Correr schema** (ou usa `pnpm new-client`, que faz isto sozinho): no SQL Editor, corre por esta ordem:
+   1. `database/migrations/CLEAN_RESET.sql`
+   2. `002_collection_snapshots.sql`, `003_coupon_usage_rpc.sql`, `004_soft_delete_trash.sql`,
+      `006_addon_system.sql`, `007_channel_manager.sql`, `008_security_hardening.sql`
+
+   Os ficheiros numerados podem ser corridos mais do que uma vez sem problema.
+   A 008 tambem cria o bucket `media` e as permissoes de upload.
+   Os ficheiros em `database/seeds/` sao especificos de um cliente — nao os corras noutros.
+3. **Desligar registos publicos**: Authentication → Sign In / Providers → Email →
+   desliga "Allow new users to sign up". Os utilizadores entram por convite (Users → Invite).
+4. **Criar primeiro user**: Authentication → Users → Add user (com "Auto Confirm User").
+   O primeiro utilizador de cada cliente fica automaticamente super_admin.
+5. **Adicionar ao TENANTS**: Adiciona a entrada no JSON do Railway
+6. **Adicionar dominio**: No Railway, adiciona o subdominio como custom domain
+7. **Deploy**: O Railway faz redeploy automatico
 
 ## Endpoints relevantes
 

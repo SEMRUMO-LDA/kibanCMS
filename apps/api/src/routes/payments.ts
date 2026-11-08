@@ -9,7 +9,8 @@ import { confirmRedemption, cancelPendingRedemption } from '../lib/coupons.js';
 import { accrueCommission, reverseCommissionForCharge } from '../lib/affiliates.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireAdmin, type AuthRequest } from '../middleware/auth.js';
+import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 
 const router: Router = Router();
 
@@ -297,10 +298,11 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       cancel_url,
       ...(customer_email && { customer_email }),
       metadata: {
+        // Client metadata first, minus reserved keys — server keys always win.
+        ...sanitizeClientMetadata(metadata),
         source: 'kibanCMS',
         tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         ...(product_slug && { product_slug }),
-        ...(metadata && typeof metadata === 'object' ? metadata : {}),
       },
     });
 
@@ -403,9 +405,22 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
       tenant: tenantStore.getStore()?.tenant?.id || 'default',
     });
 
-    // Handle checkout.session.completed
-    if (event.type === 'checkout.session.completed') {
+    // Handle checkout.session.completed (+ delayed methods such as
+    // Multibanco/SEPA, which complete later via async_payment_succeeded)
+    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
       const session = event.data.object as any;
+
+      // A completed session is not necessarily PAID: with delayed payment
+      // methods it arrives as payment_status 'unpaid' and is paid (or fails)
+      // later. Only fulfil once Stripe says the money is there.
+      if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+        logger.info('Checkout session completed but not paid yet — waiting for async payment', {
+          sessionId: session.id,
+          payment_status: session.payment_status,
+        });
+        res.json({ received: true });
+        return;
+      }
 
       const colId = await getCollectionId('stripe-transactions');
       if (!colId) {
@@ -427,10 +442,22 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
         return;
       }
 
+      // Idempotency: Stripe retries webhooks (timeouts, 5xx, restarts). Record
+      // each session's transaction only once.
+      const { data: existingTxn } = await supabase
+        .from('entries')
+        .select('id')
+        .eq('collection_id', colId)
+        .filter('content->>stripe_session_id', 'eq', session.id)
+        .limit(1)
+        .maybeSingle();
+
       const timestamp = new Date().toISOString();
       const slug = `txn-${session.id.slice(-12)}-${Date.now().toString(36)}`;
 
-      await supabase.from('entries').insert({
+      if (existingTxn) {
+        logger.info('Stripe transaction already recorded — skipping insert', { sessionId: session.id });
+      } else await supabase.from('entries').insert({
         collection_id: colId,
         title: `${session.customer_details?.name || session.customer_details?.email || 'Payment'} — ${(session.amount_total || 0) / 100} ${(session.currency || 'eur').toUpperCase()}`,
         slug,
@@ -470,7 +497,30 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
           .eq('id', orderId)
           .single();
 
-        if (orderEntry) {
+        const orderContentPeek = (orderEntry?.content || {}) as Record<string, any>;
+        const alreadyFinalised =
+          orderContentPeek.status === 'confirmed' && orderContentPeek.stripe_session_id === session.id;
+        const expectedTotal = Number(orderContentPeek.total);
+        const underpaid =
+          Number.isFinite(expectedTotal) && expectedTotal > 0 &&
+          typeof session.amount_total === 'number' && session.amount_total < expectedTotal;
+
+        if (alreadyFinalised) {
+          // Retry of an event we already processed: don't confirm bookings,
+          // decrement stock or send emails a second time.
+          logger.info('Order already finalised for this session — skipping', { orderId, sessionId: session.id });
+        } else if (underpaid) {
+          logger.error('Order NOT confirmed: amount paid is lower than the order total', {
+            orderId, sessionId: session.id, paid: session.amount_total, expected: expectedTotal,
+          });
+          await supabase
+            .from('entries')
+            .update({
+              content: { ...orderContentPeek, status: 'payment_mismatch', stripe_session_id: session.id },
+              tags: ['order', 'payment_mismatch'],
+            })
+            .eq('id', orderId);
+        } else if (orderEntry) {
           const orderContent = orderEntry.content as Record<string, any>;
           const paidAt = new Date().toISOString();
 
@@ -596,7 +646,12 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
           .eq('id', bookingId)
           .single();
 
-        if (bookingEntry) {
+        const alreadyConfirmed =
+          (bookingEntry?.content as any)?.booking_status === 'confirmed' &&
+          (bookingEntry?.content as any)?.stripe_session_id === session.id;
+        if (alreadyConfirmed) {
+          logger.info('Booking already confirmed for this session — skipping', { bookingId, sessionId: session.id });
+        } else if (bookingEntry) {
           const content = bookingEntry.content as Record<string, any>;
           await supabase
             .from('entries')
@@ -730,7 +785,7 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
 // GET /api/v1/payments/transactions
 // ============================================
 
-router.get('/transactions', async (req: AuthRequest, res: Response) => {
+router.get('/transactions', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.profileId) {
       return res.status(401).json({
@@ -825,7 +880,7 @@ router.get('/config', async (req: AuthRequest, res: Response) => {
 // but a clear "test" label and minimal amount to avoid accidental charges.
 // ============================================
 
-router.post('/test', async (req: AuthRequest, res: Response) => {
+router.post('/test', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.profileId) {
       return res.status(401).json({

@@ -104,7 +104,12 @@ async function getEmailConfig(): Promise<EmailConfig | null> {
 
   // Env-only fallback — no site-settings entry yet (new tenant, first install).
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    // Every email helper returns early on a null config. Without this log,
+    // form/booking/order emails were skipped with no trace at all.
+    logger.warn('Email NOT sent: RESEND_API_KEY is not set on the API server (Railway → Variables)', { tenant: tenantId });
+    return null;
+  }
 
   const config: EmailConfig = {
     resendApiKey: apiKey,

@@ -7,9 +7,49 @@ import { LRUCache } from '../lib/lru-cache.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { autoTranslateEntryToAllLanguages } from './i18n.js';
 import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { isApiKeyRequest, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
+
+// ============================================
+// PUBLIC (API-KEY) READ RULES
+// API keys are embedded in public frontends, so anyone can copy them.
+// API-key reads only ever see published entries of non-private collections,
+// with secret-looking fields and author emails stripped.
+// ============================================
+
+/** Collections holding secrets, customer data or internal config. */
+export const PRIVATE_COLLECTIONS = new Set([
+  'stripe-config', 'stripe-transactions',
+  'i18n-config', 'addons-config',
+  'forms-config', 'form-submissions',
+  'newsletter-subscribers',
+  'orders', 'bookings',
+  'coupons', 'coupon-redemptions',
+  'affiliates', 'commission-ledger',
+  'automations', 'post-tour-reviews',
+]);
+
+const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails)/i;
+
+export function redactForPublic(entry: any): any {
+  if (!entry) return entry;
+  const content = entry.content && typeof entry.content === 'object'
+    ? Object.fromEntries(Object.entries(entry.content).filter(([k]) => !SECRET_FIELD_PATTERN.test(k)))
+    : entry.content;
+  const { author, ...rest } = entry;
+  return {
+    ...rest,
+    content,
+    ...(author ? { author: { id: author.id, full_name: author.full_name } } : {}),
+  };
+}
+
+function collectionNotFound(res: Response) {
+  return res.status(404).json({
+    error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
+  });
+}
 
 /** Escape special ILIKE characters to prevent pattern injection */
 function escapeIlike(str: string): string {
@@ -60,8 +100,21 @@ interface CachedCollection {
 }
 const collectionCache = new LRUCache<CachedCollection>({ maxSize: 200, ttlMs: 60_000 });
 
+// Keyed per tenant: every tenant has its own Supabase, so the same slug
+// (e.g. "blog") maps to a different collection id in each one.
+function collectionCacheKey(slug: string): string {
+  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
+  return `${tenantId}:${slug}`;
+}
+
+/** Drop a cached collection schema (call after collection PUT/DELETE). */
+export function invalidateCollectionCache(slug: string): void {
+  collectionCache.delete(collectionCacheKey(slug));
+}
+
 async function getCollection(slug: string): Promise<CachedCollection | null> {
-  const cached = collectionCache.get(slug);
+  const cacheKey = collectionCacheKey(slug);
+  const cached = collectionCache.get(cacheKey);
   if (cached) return cached;
 
   const { data, error } = await supabase
@@ -73,7 +126,7 @@ async function getCollection(slug: string): Promise<CachedCollection | null> {
   if (error || !data) return null;
 
   const entry: CachedCollection = { ...data, fields: data.fields || [] };
-  collectionCache.set(slug, entry);
+  collectionCache.set(cacheKey, entry);
   return entry;
 }
 
@@ -99,7 +152,7 @@ function isAdminOrEditor(role: string | null): boolean {
 // Includes author join.
 // ============================================
 const ENTRY_SELECT = `
-  id, title, slug, content, excerpt, status,
+  id, collection_id, title, slug, content, excerpt, status,
   published_at, created_at, updated_at,
   author_id, tags, meta, version, featured_image,
   author:profiles!author_id(id, full_name, email)
@@ -168,8 +221,19 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
       .eq('id', (entry as any).collection_id)
       .single();
 
+    const publicRead = isApiKeyRequest(req);
+    if (publicRead && (
+      !collection ||
+      PRIVATE_COLLECTIONS.has(collection.slug) ||
+      (entry as any).status !== 'published'
+    )) {
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
     res.json({
-      data: entry,
+      data: publicRead ? redactForPublic(entry) : entry,
       meta: collection
         ? { collection: { id: collection.id, name: collection.name, slug: collection.slug } }
         : undefined,
@@ -196,19 +260,25 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       order = 'desc',
     } = req.query;
 
+    const publicRead = isApiKeyRequest(req);
+    if (publicRead && PRIVATE_COLLECTIONS.has(collectionSlug as string)) {
+      return collectionNotFound(res);
+    }
+
     const collection = await getCollection(collectionSlug as string);
     if (!collection) {
-      return res.status(404).json({
-        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
-      });
+      return collectionNotFound(res);
     }
+
+    // Public frontends (API key) only ever see published content.
+    const effectiveStatus = publicRead ? 'published' : status;
 
     const limitNum = Math.min(parseInt(limit as string, 10) || 100, 500);
     const offsetNum = parseInt(offset as string, 10) || 0;
     const lang = req.query.lang as string | undefined;
 
     // Build a stable cache key from query params
-    const cacheKey = `entries:${collectionSlug}:list:s=${status || ''}:q=${search || ''}:t=${tags || ''}:l=${limitNum}:o=${offsetNum}:sort=${sort}:ord=${order}:lang=${lang || ''}`;
+    const cacheKey = `entries:${collectionSlug}:list:s=${effectiveStatus || ''}:q=${search || ''}:t=${tags || ''}:l=${limitNum}:o=${offsetNum}:sort=${sort}:ord=${order}:lang=${lang || ''}`;
 
     const { data: result, fromCache } = await withFallbackCache(cacheKey, async () => {
       let query = supabase
@@ -221,8 +291,8 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
         query = query.is('deleted_at', null);
       }
 
-      if (status && typeof status === 'string') {
-        query = query.eq('status', status);
+      if (effectiveStatus && typeof effectiveStatus === 'string') {
+        query = query.eq('status', effectiveStatus);
       }
 
       if (search && typeof search === 'string') {
@@ -265,7 +335,7 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
     });
 
     res.json({
-      data: result.data,
+      data: publicRead ? result.data.map(redactForPublic) : result.data,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
         pagination: { limit: limitNum, offset: offsetNum, total: result.count },
@@ -289,15 +359,18 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
   try {
     const { collection: collectionSlug, slug: entrySlug } = req.params;
 
+    const publicRead = isApiKeyRequest(req);
+    if (publicRead && PRIVATE_COLLECTIONS.has(collectionSlug as string)) {
+      return collectionNotFound(res);
+    }
+
     const collection = await getCollection(collectionSlug as string);
     if (!collection) {
-      return res.status(404).json({
-        error: { message: 'Collection not found', status: 404, timestamp: new Date().toISOString() },
-      });
+      return collectionNotFound(res);
     }
 
     const lang = req.query.lang as string | undefined;
-    const cacheKey = `entries:${collectionSlug}:slug:${entrySlug}:lang=${lang || ''}`;
+    const cacheKey = `entries:${collectionSlug}:slug:${entrySlug}:lang=${lang || ''}:pub=${publicRead ? 1 : 0}`;
 
     const { data: responseEntry, fromCache } = await withFallbackCache(cacheKey, async () => {
       let slugQuery = supabase
@@ -306,15 +379,21 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
         .eq('collection_id', collection.id)
         .eq('slug', entrySlug);
 
+      if (publicRead) {
+        slugQuery = slugQuery.eq('status', 'published');
+      }
+
       if (await hasSoftDelete()) {
         slugQuery = slugQuery.is('deleted_at', null);
       }
 
-      const { data: entry, error } = await slugQuery.single();
+      const { data: entry, error } = await slugQuery.maybeSingle();
 
-      if (error || !entry) {
-        throw new Error('ENTRY_NOT_FOUND');
-      }
+      // A real DB failure throws (→ Redis fallback). "Not found" is a valid
+      // answer and must NOT fall back to a stale cached copy, otherwise a
+      // deleted/unpublished entry keeps being served for up to 24h.
+      if (error) throw error;
+      if (!entry) return null;
 
       // i18n: overlay translations if ?lang= is provided
       let processed = entry as any;
@@ -330,8 +409,14 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       return processed;
     });
 
+    if (!responseEntry) {
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
     res.json({
-      data: responseEntry,
+      data: publicRead ? redactForPublic(responseEntry) : responseEntry,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
         ...(fromCache ? { cached: true } : {}),
@@ -649,6 +734,13 @@ router.post('/:collection/:slug/duplicate', async (req: AuthRequest, res: Respon
     if (!authorId) {
       return res.status(401).json({
         error: { message: 'Unauthorized', status: 401, timestamp: new Date().toISOString() },
+      });
+    }
+
+    const role = await getUserRole(authorId);
+    if (!['super_admin', 'admin', 'editor', 'author'].includes(role || '')) {
+      return res.status(403).json({
+        error: { message: 'Forbidden: Insufficient permissions to duplicate entries', status: 403, timestamp: new Date().toISOString() },
       });
     }
 

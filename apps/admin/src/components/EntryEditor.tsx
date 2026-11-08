@@ -199,9 +199,13 @@ interface EntryEditorProps {
   extraActions?: React.ReactNode;
 }
 
+// Stable default: a new `{}` per render would re-trigger the init effect
+// below and wipe the form.
+const NO_INITIAL_DATA: EntryData = {};
+
 export function EntryEditor({
   fields,
-  initialData = {},
+  initialData = NO_INITIAL_DATA,
   initialStatus = 'draft',
   onSave,
   onCancel,
@@ -216,7 +220,9 @@ export function EntryEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Initialize data with default values for required fields
+  // Initialize data with default values for required fields.
+  // Runs on mount and whenever the parent passes a NEW initialData/fields
+  // object (e.g. restoring a revision). Parents must pass stable references.
   useEffect(() => {
     const initializedData: EntryData = { ...initialData };
     fields.forEach(field => {

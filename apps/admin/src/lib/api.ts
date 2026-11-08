@@ -164,6 +164,10 @@ class ApiClient {
     return this.request<any>('DELETE', `/users/${id}`);
   }
 
+  async inviteUser(data: { email: string; role: string; full_name?: string }) {
+    return this.request<any>('POST', '/users/invite', data);
+  }
+
   // ── Media ──
   async getMedia(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';

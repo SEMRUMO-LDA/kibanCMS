@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth.js';
 import { logger } from '../lib/logger.js';
 import { audit } from '../lib/audit.js';
 import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
+import { invalidateCollectionCache } from './entries.js';
 
 const router: Router = Router();
 
@@ -343,8 +344,11 @@ router.put('/:slug', async (req: AuthRequest, res: Response) => {
 
     audit(req, 'update', 'collection', collection.id, { slug, fields: Object.keys(updateData) });
 
-    // Invalidate collections cache
+    // Invalidate collections cache (+ the entries router's schema cache, so
+    // field changes apply immediately instead of after up to 60s)
     invalidateCachePattern('collections:*').catch(() => {});
+    invalidateCollectionCache(slug);
+    if (collection?.slug && collection.slug !== slug) invalidateCollectionCache(collection.slug);
 
     res.json({
       data: collection,
@@ -433,6 +437,7 @@ router.delete('/:slug', async (req: AuthRequest, res: Response) => {
 
     // Invalidate collections cache
     invalidateCachePattern('collections:*').catch(() => {});
+    invalidateCollectionCache(slug);
 
     res.json({
       data: { id: existing.id, slug },

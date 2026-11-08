@@ -210,8 +210,9 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
         return;
       }
 
-      // Only super_admin can assign super_admin role
-      if (updateData.role === 'super_admin') {
+      // Only a super_admin can grant OR remove the super_admin role
+      // (otherwise an admin could demote the tenant owner and take over).
+      if (updateData.role === 'super_admin' || existing.role === 'super_admin') {
         const { data: currentProfile } = await supabase
           .from('profiles')
           .select('role')
@@ -221,7 +222,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response) => {
         if (currentProfile?.role !== 'super_admin') {
           res.status(403).json({
             error: {
-              message: 'Only super admins can assign the super_admin role',
+              message: 'Only super admins can grant or remove the super_admin role',
               status: 403,
               timestamp: new Date().toISOString(),
             },
@@ -389,7 +390,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
     // Check if user exists
     const { data: existing } = await supabase
       .from('profiles')
-      .select('id, email')
+      .select('id, email, role')
       .eq('id', id)
       .single();
 
@@ -403,6 +404,25 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
         },
       });
       return;
+    }
+
+    // Only a super_admin may delete another super_admin.
+    if (existing.role === 'super_admin') {
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', req.user?.id)
+        .single();
+      if (currentProfile?.role !== 'super_admin') {
+        res.status(403).json({
+          error: {
+            message: 'Only super admins can delete a super admin',
+            status: 403,
+            timestamp: new Date().toISOString(),
+          },
+        });
+        return;
+      }
     }
 
     // Delete via Supabase admin API (cascades to profile via FK)

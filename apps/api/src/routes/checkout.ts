@@ -22,7 +22,8 @@ import Stripe from 'stripe';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, type AuthRequest } from '../middleware/auth.js';
+import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 import {
   loadCoupon,
   validateCoupon,
@@ -719,11 +720,15 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       success_url: body.success_url,
       cancel_url: body.cancel_url,
       metadata: {
+        // Client metadata first, minus reserved keys — server keys always win.
+        ...sanitizeClientMetadata(body.metadata),
         source: 'kibanCMS-checkout',
+        // Without tenant_id the webhook falls back to the default tenant and
+        // non-default tenants' orders stay pending forever.
+        tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         order_id: order.id,
         order_number: orderNumber,
         ...(couponMeta?.code ? { coupon_code: couponMeta.code } : {}),
-        ...(body.metadata || {}),
       },
     };
 
@@ -825,10 +830,20 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 router.get('/orders/:id', async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    // Only ever return entries of the orders collection — this endpoint is
+    // reachable with the public API key (success page), so it must not act
+    // as a generic "fetch any entry by id" (e.g. stripe-config).
+    const ordersColId = await getCollectionId('orders');
+    if (!ordersColId) {
+      return res.status(404).json({
+        error: { message: 'Order not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
     const { data: entry, error } = await supabase
       .from('entries')
       .select('id, title, slug, content, status, tags, created_at, updated_at')
       .eq('id', id)
+      .eq('collection_id', ordersColId)
       .single();
 
     if (error || !entry) {
@@ -851,7 +866,7 @@ router.get('/orders/:id', async (req: AuthRequest, res: Response) => {
 // Admin list of orders (paginated, filterable by status)
 // ============================================
 
-router.get('/orders', async (req: AuthRequest, res: Response) => {
+router.get('/orders', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { status, limit = '50', offset = '0' } = req.query as Record<string, string | undefined>;
 
@@ -896,7 +911,7 @@ router.get('/orders', async (req: AuthRequest, res: Response) => {
 // GET /api/v1/checkout/stats
 // ============================================
 
-router.get('/stats', async (_req: AuthRequest, res: Response) => {
+router.get('/stats', requireEditor, async (_req: AuthRequest, res: Response) => {
   try {
     const colId = await getCollectionId('orders');
     if (!colId) {

@@ -10,7 +10,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -380,7 +380,7 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
 // Manually sync a tour to its bookable_resource (admin-triggered from UI)
 // ============================================
 
-router.post('/:slug/sync', async (req: AuthRequest, res: Response) => {
+router.post('/:slug/sync', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const colId = await getCollectionId('tours');
     if (!colId) {

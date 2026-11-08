@@ -66,7 +66,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Onboarding check — only if profile is loaded (non-blocking)
-  if (profile && !profile.onboarding_completed && window.location.pathname !== '/onboarding') {
+  // Only admins set up the project; invited editors/authors/viewers go
+  // straight to the dashboard (they can't create collections anyway).
+  if (
+    profile &&
+    !profile.onboarding_completed &&
+    ['super_admin', 'admin'].includes(profile.role) &&
+    window.location.pathname !== '/onboarding'
+  ) {
     return <Navigate to="/onboarding" replace />;
   }
 

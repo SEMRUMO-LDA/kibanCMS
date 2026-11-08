@@ -13,7 +13,7 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import {
   translateFields,
   translateTexts,
@@ -223,7 +223,7 @@ router.get('/supported-languages', async (_req: AuthRequest, res: Response) => {
 // Detects the default language from existing content
 // ============================================
 
-router.post('/detect-language', async (req: AuthRequest, res: Response) => {
+router.post('/detect-language', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const config = await getI18nConfig();
     if (!config) {
@@ -281,7 +281,7 @@ router.post('/detect-language', async (req: AuthRequest, res: Response) => {
 // Body: { entry_id, collection_slug, target_lang }
 // ============================================
 
-router.post('/translate', async (req: AuthRequest, res: Response) => {
+router.post('/translate', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { entry_id, collection_slug, target_lang } = req.body;
 
@@ -426,7 +426,7 @@ router.post('/translate', async (req: AuthRequest, res: Response) => {
 // Body: { collection_slug, target_lang }
 // ============================================
 
-router.post('/translate-bulk', async (req: AuthRequest, res: Response) => {
+router.post('/translate-bulk', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { collection_slug, target_lang } = req.body;
 
@@ -651,7 +651,7 @@ router.get('/status/:collection', async (req: AuthRequest, res: Response) => {
 // Body: { fields: { field_id: "translated value", ... } }
 // ============================================
 
-router.put('/translation/:entryId/:lang', async (req: AuthRequest, res: Response) => {
+router.put('/translation/:entryId/:lang', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { entryId, lang } = req.params;
     const { fields } = req.body;
@@ -726,7 +726,7 @@ const SYSTEM_COLLECTION_SLUGS = new Set([
   'bookable-resources', 'bookings',
 ]);
 
-router.post('/translate-everything', async (_req: AuthRequest, res: Response) => {
+router.post('/translate-everything', requireEditor, async (_req: AuthRequest, res: Response) => {
   try {
     const config = await getI18nConfig();
     if (!config) {

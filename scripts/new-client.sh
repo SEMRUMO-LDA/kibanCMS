@@ -22,7 +22,21 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SCHEMA_FILE="$PROJECT_ROOT/database/migrations/CLEAN_RESET.sql"
+MIGRATIONS_DIR="$PROJECT_ROOT/database/migrations"
+SCHEMA_FILE="$MIGRATIONS_DIR/CLEAN_RESET.sql"
+# Applied in this order on every new tenant. CLEAN_RESET builds the core
+# schema; the numbered migrations add Snapshots, coupon limits, Trash,
+# add-ons, Channel Manager and the security hardening. All numbered files are
+# idempotent (safe to re-run). Seeds for specific clients live in database/seeds/.
+SCHEMA_FILES=(
+  "$SCHEMA_FILE"
+  "$MIGRATIONS_DIR/002_collection_snapshots.sql"
+  "$MIGRATIONS_DIR/003_coupon_usage_rpc.sql"
+  "$MIGRATIONS_DIR/004_soft_delete_trash.sql"
+  "$MIGRATIONS_DIR/006_addon_system.sql"
+  "$MIGRATIONS_DIR/007_channel_manager.sql"
+  "$MIGRATIONS_DIR/008_security_hardening.sql"
+)
 
 # Colors
 RED='\033[0;31m'
@@ -117,7 +131,7 @@ echo ""
 
 echo -e "${CYAN}[1/4]${NC} Running database schema..."
 
-SCHEMA_SQL=$(cat "$SCHEMA_FILE")
+SCHEMA_SQL=$(cat "${SCHEMA_FILES[@]}")
 
 # Use Supabase REST API to run SQL via the management API
 # We use the PostgREST RPC endpoint with the service role key
@@ -143,7 +157,7 @@ PROJECT_REF=$(echo "$SUPABASE_URL" | sed -n 's|https://\([^.]*\)\.supabase\.co|\
 
 if [ -z "$PROJECT_REF" ]; then
   echo -e "${YELLOW}  Could not extract project ref from URL.${NC}"
-  echo -e "${YELLOW}  Please run CLEAN_RESET.sql manually in the Supabase SQL Editor.${NC}"
+  echo -e "${YELLOW}  Please run CLEAN_RESET.sql and migrations 002, 003, 004, 006, 007, 008 manually in the Supabase SQL Editor.${NC}"
   SCHEMA_DONE=false
 else
   # Try using the Supabase database connection string
@@ -157,8 +171,7 @@ else
   # Check if supabase CLI is available
   if command -v supabase &> /dev/null; then
     echo -e "  ${GREEN}Supabase CLI found. Running schema...${NC}"
-    echo "$SCHEMA_SQL" | supabase db execute --project-ref "$PROJECT_REF" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    if echo "$SCHEMA_SQL" | supabase db execute --project-ref "$PROJECT_REF"; then
       echo -e "  ${GREEN}Schema applied successfully.${NC}"
       SCHEMA_DONE=true
     else
@@ -171,9 +184,12 @@ else
     echo -e "  ${YELLOW}Enter the database password (from Supabase project settings > Database):${NC}"
     read -sp "  DB Password: " DB_PASSWORD
     echo ""
-    DB_URL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
-    echo "$SCHEMA_SQL" | psql "$DB_URL" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    # Override with SUPABASE_POOLER_HOST if the project isn't in eu-central-1.
+    POOLER_HOST="${SUPABASE_POOLER_HOST:-aws-0-eu-central-1.pooler.supabase.com}"
+    DB_URL="postgresql://postgres.${PROJECT_REF}:${DB_PASSWORD}@${POOLER_HOST}:6543/postgres"
+    # ON_ERROR_STOP: fail on the first SQL error instead of reporting success.
+    # stderr is NOT hidden, so the actual error is visible.
+    if echo "$SCHEMA_SQL" | psql -v ON_ERROR_STOP=1 "$DB_URL"; then
       echo -e "  ${GREEN}Schema applied successfully.${NC}"
       SCHEMA_DONE=true
     else
@@ -186,8 +202,10 @@ else
 
   if [ "$SCHEMA_DONE" = false ]; then
     echo ""
-    echo -e "  ${YELLOW}ACTION REQUIRED:${NC} Copy and run this file in Supabase SQL Editor:"
-    echo -e "  ${BOLD}$SCHEMA_FILE${NC}"
+    echo -e "  ${YELLOW}ACTION REQUIRED:${NC} Run these files, in this order, in the Supabase SQL Editor:"
+    for f in "${SCHEMA_FILES[@]}"; do
+      echo -e "    ${BOLD}$f${NC}"
+    done
     echo ""
     read -p "  Press Enter when done..." _
   fi

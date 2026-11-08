@@ -22,7 +22,6 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { useI18n } from '../lib/i18n';
@@ -556,18 +555,19 @@ export const Users = () => {
     setInviting(true);
 
     try {
-      // In a real implementation, you'd call Supabase admin API to create user
-      // For now, we'll show a success message
-      toast.info('User invitation sent! They will receive an email to set up their account.');
+      // The API sends the Supabase invite email and sets the role with the
+      // service role (end users can't set roles directly).
+      const { error } = await api.inviteUser({ email: inviteEmail.trim(), role: inviteRole });
+      if (error) throw new Error(error);
+
+      toast.success('User invitation sent! They will receive an email to set up their account.');
       setShowInviteModal(false);
       setInviteEmail('');
       setInviteRole('editor');
-
-      // Reload users after a delay
-      setTimeout(loadUsers, 1000);
+      loadUsers();
     } catch (error: any) {
       console.error('Error inviting user:', error);
-      toast.error('Failed to invite user');
+      toast.error(`Failed to invite user: ${error?.message || 'unknown error'}`);
     } finally {
       setInviting(false);
     }
@@ -580,18 +580,16 @@ export const Users = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ role: newRole })
-        .eq('id', userId);
-
-      if (error) throw error;
+      // Through the API: a direct Supabase update matched 0 rows under RLS
+      // (users can only update themselves) and still reported success.
+      const { error } = await api.updateUser(userId, { role: newRole });
+      if (error) throw new Error(error);
 
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
       toast.success('User role updated successfully');
     } catch (error: any) {
       console.error('Error updating role:', error);
-      toast.error('Failed to update user role');
+      toast.error(`Failed to update user role: ${error?.message || 'unknown error'}`);
     }
   };
 
@@ -611,19 +609,16 @@ export const Users = () => {
     }
 
     try {
-      // Note: In production, use Supabase admin API to delete auth user
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', userId);
-
-      if (error) throw error;
+      // Through the API, which deletes the auth user (service role). A direct
+      // profiles delete was blocked by RLS and silently did nothing.
+      const { error } = await api.deleteUser(userId);
+      if (error) throw new Error(error);
 
       setUsers(prev => prev.filter(u => u.id !== userId));
       toast.success('User deleted successfully');
     } catch (error: any) {
       console.error('Error deleting user:', error);
-      toast.error('Failed to delete user');
+      toast.error(`Failed to delete user: ${error?.message || 'unknown error'}`);
     }
   };
 

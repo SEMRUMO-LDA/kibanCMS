@@ -396,13 +396,10 @@ export const Onboarding = () => {
 
       console.log('[Onboarding] Starting completion for user:', user.id);
 
-      // 1. Ensure user has admin role (first user = super_admin) and save manifesto
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single() as { data: { role: string | null } | null; error: any };
-
+      // 1. Save manifesto and mark onboarding as done.
+      // Roles are NOT set here: the first user of a tenant is made
+      // super_admin by the database (handle_new_user, migration 008).
+      // Promoting client-side let any invited viewer become super_admin.
       const updateData: Record<string, any> = {
         onboarding_completed: true,
         project_manifesto: {
@@ -411,11 +408,6 @@ export const Onboarding = () => {
           version: '1.0',
         },
       };
-
-      // Assign super_admin if no role set yet (first user doing onboarding)
-      if (!existingProfile?.role || existingProfile.role === 'viewer') {
-        updateData.role = 'super_admin';
-      }
 
       const { error: profileError } = await supabase
         .from('profiles')

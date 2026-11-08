@@ -17,6 +17,7 @@ CREATE OR REPLACE FUNCTION bump_coupon_usage(
 ) RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   updated_rows INTEGER;
@@ -32,5 +33,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION bump_coupon_usage(UUID, INTEGER, INTEGER)
-  TO authenticated, anon, service_role;
+-- Server-only: the API calls it with the service role. Granting it to
+-- anon/authenticated let anyone with the public anon key rewrite usage_count
+-- on any entry (e.g. reset a coupon's usage to bypass max_uses_total).
+REVOKE ALL ON FUNCTION bump_coupon_usage(UUID, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION bump_coupon_usage(UUID, INTEGER, INTEGER) TO service_role;

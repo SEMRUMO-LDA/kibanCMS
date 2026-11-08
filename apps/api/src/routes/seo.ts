@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { withFallbackCache } from '../lib/redis.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { tenantStore } from '../middleware/tenant.js';
 
 const router: Router = Router();
 
@@ -38,29 +39,36 @@ function emptyConfig() {
 
 router.get('/', async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = (req as any).tenantId || 'default';
+    // req.tenantId is never set — resolve from the request's tenant context,
+    // otherwise every tenant shares one cache slot and gets another site's SEO.
+    const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
     const cached = cache.get(tenantId);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
       return res.json({ data: cached.data, timestamp: new Date().toISOString() });
     }
 
     const { data: seoData, fromCache: fromRedis } = await withFallbackCache(`seo:settings`, async () => {
-      const { data: col } = await supabase
+      const { data: col, error: colErr } = await supabase
         .from('collections')
         .select('id')
         .eq('slug', 'seo-settings')
-        .single();
+        .maybeSingle();
 
+      // supabase-js returns errors instead of throwing: rethrow so an outage
+      // falls back to the Redis snapshot instead of overwriting it with an
+      // empty config.
+      if (colErr) throw colErr;
       if (!col) return emptyConfig();
 
       // Prefer slug "global" (canonical), fall back to first published entry.
-      const { data: preferred } = await supabase
+      const { data: preferred, error: prefErr } = await supabase
         .from('entries')
         .select('content')
         .eq('collection_id', col.id)
         .eq('slug', 'global')
         .eq('status', 'published')
         .maybeSingle();
+      if (prefErr) throw prefErr;
 
       let entry = preferred;
       if (!entry?.content) {

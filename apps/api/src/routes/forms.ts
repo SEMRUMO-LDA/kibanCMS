@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { sendFormNotification, sendFormAutoReply } from '../lib/email.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -67,7 +67,9 @@ async function fireFormNotifications(
       if (globalEntry?.content) {
         const sc = globalEntry.content as Record<string, any>;
         if (!webhookUrl) webhookUrl = sc.forms_webhook_url || null;
-        if (!notificationEmails) notificationEmails = sc.contact_email || null;
+        // Same precedence as lib/email.ts and the Settings page:
+        // "Notification Email(s)" first, then the general Contact Email.
+        if (!notificationEmails) notificationEmails = sc.notification_emails || sc.contact_email || null;
       }
     }
   }
@@ -279,7 +281,7 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
  *   limit: number (default 50, max 200)
  *   offset: number (default 0)
  */
-router.get('/submissions', async (req: AuthRequest, res: Response) => {
+router.get('/submissions', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.profileId) {
       return res.status(401).json({

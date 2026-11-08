@@ -34,7 +34,8 @@ import { channelManagerRouter } from './routes/channel-manager.js';
 import authRouter from './routes/auth.js';
 import snapshotsRouter from './routes/snapshots.js';
 import { supabase as supabaseImport } from './lib/supabase.js';
-import { validateApiKey, validateJWT, validateAny, configureCors } from './middleware/auth.js';
+import { validateApiKey, validateJWT, validateAny, configureCors, apiKeyReadOnly, requireAdmin, requireEditor } from './middleware/auth.js';
+import { logger } from './lib/logger.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { loadTenants, resolveTenant, getAllTenants } from './config/tenants.js';
@@ -53,6 +54,11 @@ dotenv.config();
 loadTenants();
 
 const app: express.Express = express();
+
+// Railway terminates TLS at its edge proxy and forwards X-Forwarded-For.
+// Without this, req.ip is the proxy's address, so every visitor (across all
+// tenants) shares one rate-limit bucket.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const envOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
@@ -211,17 +217,19 @@ app.use('/api/v1/auth', authRouter);
 // Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)
 app.use('/api/v1/collections', adminLimiter, validateJWT, collectionsRouter);
 app.use('/api/v1/users', adminLimiter, validateJWT, usersRouter);
-app.use('/api/v1/entries', validateAny, entriesRouter);
-app.use('/api/v1/media', validateAny, mediaRouter);
-app.use('/api/v1/webhooks', validateAny, webhooksRouter);
+// API keys are public (embedded in client sites): read-only on entries/media,
+// never allowed to manage webhooks (they would stream every entry out).
+app.use('/api/v1/entries', validateAny, apiKeyReadOnly, entriesRouter);
+app.use('/api/v1/media', validateAny, apiKeyReadOnly, mediaRouter);
+app.use('/api/v1/webhooks', validateJWT, requireAdmin, webhooksRouter);
 app.use('/api/v1/ai', aiLimiter, validateJWT, aiRouter);
 app.use('/api/v1/ai', aiLimiter, validateJWT, aiContentRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
-app.use('/api/v1/forms', formsLimiter, validateApiKey, formsRouter); // API Key + stricter rate limit
+app.use('/api/v1/forms', formsLimiter, validateAny, formsRouter); // API Key (submit) + JWT (admin listing), stricter rate limit
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
-app.use('/api/v1/brevo', adminLimiter, validateJWT, brevoRouter); // Brevo admin endpoints — JWT only
+app.use('/api/v1/brevo', adminLimiter, validateJWT, requireAdmin, brevoRouter); // Brevo admin endpoints — JWT only
 // Stripe webhook — mounted as a direct POST handler (not via router) so the
 // request body reaches the handler without falling through to the generic
 // `/payments` mount (which requires API key and would 401 Stripe's unsigned
@@ -255,11 +263,14 @@ app.use('/api/v1/coupons', validateAny, couponsRouter); // Coupons — public /v
 // One mount, conditional auth — same pattern as /preview.
 app.use('/api/v1/channel-manager', (req, res, next) => {
   if (req.method === 'POST' && req.path.startsWith('/webhook/')) return next();
-  return validateJWT(req as any, res, next);
+  return validateJWT(req as any, res, (err?: any) => {
+    if (err) return next(err);
+    return requireAdmin(req as any, res, next);
+  });
 }, channelManagerRouter);
-app.use('/api/v1/affiliates', adminLimiter, validateJWT, affiliatesRouter); // Affiliates — admin-only (commission management).
-app.use('/api/v1/email', adminLimiter, validateJWT, emailRouter); // Email diagnostics — admin only (test send).
-app.use('/api/v1/snapshots', validateJWT, snapshotsRouter); // Snapshots — admin only (JWT)
+app.use('/api/v1/affiliates', adminLimiter, validateJWT, requireAdmin, affiliatesRouter); // Affiliates — admin-only (commission management).
+app.use('/api/v1/email', adminLimiter, validateJWT, requireAdmin, emailRouter); // Email diagnostics — admin only (test send).
+app.use('/api/v1/snapshots', validateJWT, requireEditor, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
 app.get('/api/v1/i18n/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
@@ -390,10 +401,15 @@ app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
   try {
     const { visitor_id, consent_given, categories } = req.body;
     if (!visitor_id) return res.status(400).json({ error: { message: 'Missing visitor_id', status: 400 } });
-    await supabaseImport.from('addon_cookie_notice_consents').insert({
+    const { error: insertErr } = await supabaseImport.from('addon_cookie_notice_consents').insert({
       visitor_id, consent_given: !!consent_given, categories: categories || {},
       ip_address: req.ip, user_agent: req.headers['user-agent'] || '',
     });
+    // Consent records are GDPR proof: never report success if nothing was stored.
+    if (insertErr) {
+      logger.error('Cookie consent not stored', { error: insertErr.message, hint: 'Run database/migrations/008_security_hardening.sql on this tenant' });
+      return res.status(500).json({ error: { message: 'Consent could not be stored', status: 500 } });
+    }
     res.json({ data: { ok: true }, timestamp: new Date().toISOString() });
   } catch (err: any) { res.status(500).json({ error: { message: err.message, status: 500 } }); }
 });
