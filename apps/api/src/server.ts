@@ -37,6 +37,7 @@ import snapshotsRouter from './routes/snapshots.js';
 import { supabase as supabaseImport } from './lib/supabase.js';
 import { validateApiKey, validateJWT, validateAny, configureCors, apiKeyReadOnly, requireAdmin, requireEditor } from './middleware/auth.js';
 import { logger } from './lib/logger.js';
+import { getOptimizedImage, ImageError } from './lib/image-optimizer.js';
 import { tenantMiddleware, tenantStore } from './middleware/tenant.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { loadTenants, resolveTenant, getAllTenants } from './config/tenants.js';
@@ -60,6 +61,43 @@ const app: express.Express = express();
 // Without this, req.ip is the proxy's address, so every visitor (across all
 // tenants) shares one rate-limit bucket.
 app.set('trust proxy', 1);
+
+// ── Image optimisation (public) ───────────────────────────────
+// Registered BEFORE the global CORS middleware: images are public and are
+// embedded on client sites (<img>, next/image, crossorigin fetches).
+// See lib/image-optimizer.ts. Only this CMS's public storage URLs are accepted.
+const imageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1500, // a page with many images, many visitors behind one IP
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.get('/api/v1/img', imageLimiter, async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const result = await getOptimizedImage(
+      String(req.query.src || ''),
+      Number(req.query.w),
+      Number(req.query.q),
+      req.get('accept'),
+    );
+    if ('redirect' in result) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.redirect(302, result.redirect);
+    }
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=2592000, stale-while-revalidate=86400');
+    res.setHeader('Vary', 'Accept');
+    res.setHeader('X-Image-Source', result.source);
+    res.send(result.body);
+  } catch (err: any) {
+    if (err instanceof ImageError) {
+      return res.status(err.status).json({ error: { message: err.message, status: err.status } });
+    }
+    logger.error('Image optimisation failed', { error: err?.message });
+    res.status(500).json({ error: { message: 'Image optimisation failed', status: 500 } });
+  }
+});
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const envOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
