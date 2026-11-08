@@ -12,6 +12,7 @@ Each client (tenant) has its own Supabase project. Every tenant must have
 | `006_addon_system.sql` | Add-on registry/config tables | Yes |
 | `007_channel_manager.sql` | Channel Manager tables | Yes |
 | `008_security_hardening.sql` | Role-escalation fix, API-key RPC, cookie-consent table, `media` bucket + upload policies, webhook/snapshot policies, indexes | Yes |
+| `009_schema_status.sql` | `kiban_schema_status()` used by Settings → Health. **Bump its `schema_version` (and `EXPECTED_SCHEMA_VERSION` in the API) with every new migration.** | Yes |
 
 ## New tenant
 
@@ -22,7 +23,7 @@ files above in order in the tenant's Supabase SQL Editor.
 
 Never run `CLEAN_RESET.sql` on a tenant with real data. Paste
 **`database/UPGRADE_TENANT.sql`** into the tenant's SQL Editor and run it: it
-contains 002 → 008 in one transaction (all or nothing) and ends with a
+contains 002 → 009 in one transaction (all or nothing) and ends with a
 checklist query. Repeat for every tenant.
 
 `UPGRADE_TENANT.sql` is generated — after adding or changing a numbered

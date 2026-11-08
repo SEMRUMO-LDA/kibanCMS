@@ -13,7 +13,8 @@
     "start:prod": "NODE_ENV=production node dist/server.js",
     "lint": "eslint src --ext .ts",
     "test": "node --import tsx --test src/__tests__/smoke.test.ts",
-    "test:smoke": "node --import tsx --test src/__tests__/smoke.test.ts"
+    "test:smoke": "node --import tsx --test src/__tests__/smoke.test.ts",
+    "test:unit": "node --import tsx --test src/__tests__/security.test.ts src/__tests__/site-health.test.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

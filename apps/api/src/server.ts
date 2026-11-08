@@ -27,6 +27,7 @@ import toursRouter from './routes/tours.js';
 import couponsRouter from './routes/coupons.js';
 import affiliatesRouter from './routes/affiliates.js';
 import emailRouter from './routes/email.js';
+import siteHealthRouter from './routes/site-health.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
@@ -269,7 +270,8 @@ app.use('/api/v1/channel-manager', (req, res, next) => {
   });
 }, channelManagerRouter);
 app.use('/api/v1/affiliates', adminLimiter, validateJWT, requireAdmin, affiliatesRouter); // Affiliates — admin-only (commission management).
-app.use('/api/v1/email', adminLimiter, validateJWT, requireAdmin, emailRouter); // Email diagnostics — admin only (test send).
+app.use('/api/v1/email', adminLimiter, validateJWT, requireAdmin, emailRouter);
+app.use('/api/v1/site-health', adminLimiter, validateJWT, requireAdmin, siteHealthRouter); // Settings → Health + Connect site (admin only) // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, requireEditor, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
 app.get('/api/v1/i18n/widget.js', (req, res) => {

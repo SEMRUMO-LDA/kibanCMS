@@ -168,6 +168,23 @@ class ApiClient {
     return this.request<any>('POST', '/users/invite', data);
   }
 
+  // ── Site health / connect site (Settings → Health, Settings → API) ──
+  async getSiteHealth() {
+    return this.request<{
+      checks: Array<{ id: string; status: 'ok' | 'warn' | 'error' | 'info'; facts: Record<string, any> }>;
+      summary: { error: number; warn: number; ok: number };
+      checkedAt: string;
+    }>('GET', '/site-health');
+  }
+
+  async getSiteConnection() {
+    return this.request<{
+      tenantId: string;
+      apiUrl: string;
+      collections: Array<{ slug: string; name: string }>;
+    }>('GET', '/site-health/connection');
+  }
+
   // ── Media ──
   async getMedia(params?: Record<string, string>) {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';

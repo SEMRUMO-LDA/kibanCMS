@@ -58,7 +58,7 @@ Isto garante que o setup existente continua a funcionar sem mudancas.
 2. **Correr schema** (ou usa `pnpm new-client`, que faz isto sozinho): no SQL Editor, corre por esta ordem:
    1. `database/migrations/CLEAN_RESET.sql`
    2. `002_collection_snapshots.sql`, `003_coupon_usage_rpc.sql`, `004_soft_delete_trash.sql`,
-      `006_addon_system.sql`, `007_channel_manager.sql`, `008_security_hardening.sql`
+      `006_addon_system.sql`, `007_channel_manager.sql`, `008_security_hardening.sql`, `009_schema_status.sql`
 
    Os ficheiros numerados podem ser corridos mais do que uma vez sem problema.
    A 008 tambem cria o bucket `media` e as permissoes de upload.
@@ -70,6 +70,10 @@ Isto garante que o setup existente continua a funcionar sem mudancas.
 5. **Adicionar ao TENANTS**: Adiciona a entrada no JSON do Railway
 6. **Adicionar dominio**: No Railway, adiciona o subdominio como custom domain
 7. **Deploy**: O Railway faz redeploy automatico
+8. **Verificar**: entra no painel do cliente → **Settings → Saúde**. Tem de estar tudo
+   verde ou cinzento; cada linha vermelha ou amarela diz o que falta fazer.
+9. **Ligar o site**: **Settings → API → Ligar o meu site** gera a key, dá o bloco de
+   variáveis para colar na Vercel e testa a ligação.
 
 ## Endpoints relevantes
 

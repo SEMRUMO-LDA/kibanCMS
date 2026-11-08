@@ -9,8 +9,10 @@ import styled, { keyframes } from 'styled-components';
 import {
   Globe, Key, Image as ImageIcon, Link2, Mail,
   Copy, Check, Save, Loader, CheckCircle,
-  Plus, Trash2, X,
+  Plus, Trash2, X, Activity,
 } from 'lucide-react';
+import { SiteHealthPanel } from '../components/settings/SiteHealthPanel';
+import { ConnectSitePanel } from '../components/settings/ConnectSitePanel';
 import { colors, spacing, typography, borders, shadows } from '../shared/styles/design-tokens';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -147,6 +149,7 @@ const Toast = styled.div<{ $v: boolean }>`
 const TABS = [
   { id: 'general', label: 'General', icon: Globe },
   { id: 'api', label: 'API', icon: Key },
+  { id: 'health', label: 'Health', icon: Activity },
   { id: 'media', label: 'Media', icon: ImageIcon },
   { id: 'permalinks', label: 'Permalinks', icon: Link2 },
   { id: 'email', label: 'Email', icon: Mail },
@@ -378,7 +381,7 @@ export const Settings = () => {
 
       <Header>
         <h1>{t('settings.title')}</h1>
-        {activeTab !== 'api' && (
+        {activeTab !== 'api' && activeTab !== 'health' && (
           <SaveBtn onClick={handleSave} disabled={saving || !!loadError} title={loadError ? `Settings failed to load: ${loadError}` : undefined}>
             {saving ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> {locale === 'pt' ? 'A guardar...' : 'Saving...'}</> : <><Save size={18} /> {t('settings.save')}</>}
           </SaveBtn>
@@ -431,8 +434,14 @@ export const Settings = () => {
       )}
 
       {/* ── API ── */}
+      {/* ── HEALTH ── */}
+      {activeTab === 'health' && (
+        <SiteHealthPanel locale={locale} onNavigateTab={switchTab} />
+      )}
+
       {activeTab === 'api' && (
         <>
+          <ConnectSitePanel locale={locale} onKeyCreated={loadAll} />
           <Section>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[5], paddingBottom: spacing[4], borderBottom: `1px solid ${colors.gray[100]}` }}>
               <h2 style={{ margin: 0, border: 'none', padding: 0 }}>API Keys</h2>

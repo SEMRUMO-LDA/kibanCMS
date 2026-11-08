@@ -36,6 +36,7 @@ SCHEMA_FILES=(
   "$MIGRATIONS_DIR/006_addon_system.sql"
   "$MIGRATIONS_DIR/007_channel_manager.sql"
   "$MIGRATIONS_DIR/008_security_hardening.sql"
+  "$MIGRATIONS_DIR/009_schema_status.sql"
 )
 
 # Colors
@@ -157,7 +158,7 @@ PROJECT_REF=$(echo "$SUPABASE_URL" | sed -n 's|https://\([^.]*\)\.supabase\.co|\
 
 if [ -z "$PROJECT_REF" ]; then
   echo -e "${YELLOW}  Could not extract project ref from URL.${NC}"
-  echo -e "${YELLOW}  Please run CLEAN_RESET.sql and migrations 002, 003, 004, 006, 007, 008 manually in the Supabase SQL Editor.${NC}"
+  echo -e "${YELLOW}  Please run CLEAN_RESET.sql and migrations 002, 003, 004, 006, 007, 008, 009 manually in the Supabase SQL Editor.${NC}"
   SCHEMA_DONE=false
 else
   # Try using the Supabase database connection string
