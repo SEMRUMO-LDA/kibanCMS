@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { createHash } from 'node:crypto';
 import { supabase, supabaseAdmin } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 
@@ -12,6 +13,11 @@ export interface AuthRequest extends Request {
    * (forms, newsletter, checkout). JWTs belong to logged-in admin users.
    */
   authType?: 'api_key' | 'jwt';
+}
+
+/** SHA-256 hex digest — identical to the SQL hash_api_key(): encode(digest(key, 'sha256'), 'hex'). */
+export function hashApiKey(apiKey: string): string {
+  return createHash('sha256').update(apiKey, 'utf8').digest('hex');
 }
 
 /**
@@ -51,22 +57,12 @@ export async function validateApiKey(
       return;
     }
 
-    // Hash the provided key to compare with database
-    const { data: hashData, error: hashError } = await supabase.rpc('hash_api_key', {
-      key_value: apiKey,
-    });
-
-    if (hashError) {
-      console.error('Error hashing API key:', hashError);
-      res.status(500).json({
-        error: {
-          message: 'Internal server error',
-          status: 500,
-          timestamp: new Date().toISOString(),
-        },
-      });
-      return;
-    }
+    // Hash the provided key to compare with database. Done here instead of
+    // via the hash_api_key() SQL function: same result
+    // (encode(digest(key,'sha256'),'hex')), one DB round-trip less per
+    // request, and no dependency on each tenant's copy of that function
+    // (an older/broken copy made every API-key request 500 on that tenant).
+    const hashData = hashApiKey(apiKey);
 
     // Look up the hashed key in database
     const { data: keyRecord, error: lookupError } = await supabase

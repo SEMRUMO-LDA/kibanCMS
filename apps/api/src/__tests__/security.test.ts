@@ -5,7 +5,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiKeyReadOnly, requireAdmin, type AuthRequest } from '../middleware/auth.js';
+import { apiKeyReadOnly, requireAdmin, hashApiKey, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 import { redactForPublic, PRIVATE_COLLECTIONS } from '../routes/entries.js';
 
@@ -95,5 +95,16 @@ describe('public entry redaction', () => {
       assert.ok(PRIVATE_COLLECTIONS.has(slug), slug);
     }
     assert.ok(!PRIVATE_COLLECTIONS.has('blog'));
+  });
+});
+
+describe('hashApiKey', () => {
+  it("matches Postgres encode(digest(key, 'sha256'), 'hex')", () => {
+    // SELECT encode(digest('abc', 'sha256'), 'hex');
+    assert.equal(hashApiKey('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+
+  it('hashes a kiban key to 64 lowercase hex chars', () => {
+    assert.match(hashApiKey('kiban_live_abcdefghijklmnopqrstuvwx'), /^[0-9a-f]{64}$/);
   });
 });
