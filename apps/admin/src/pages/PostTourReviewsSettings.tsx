@@ -118,6 +118,13 @@ interface ReviewConfig {
   body_en: string;
   cta_google_label_en: string;
   cta_tripadvisor_label_en: string;
+  // Reminder before the tour (opt-in)
+  reminder_enabled: boolean;
+  reminder_hours_before: string;
+  reminder_subject_pt: string;
+  reminder_body_pt: string;
+  reminder_subject_en: string;
+  reminder_body_en: string;
 }
 
 const DEFAULTS: ReviewConfig = {
@@ -133,6 +140,12 @@ const DEFAULTS: ReviewConfig = {
   body_en: 'Thanks for choosing us!\n\nWe hope you enjoyed {tour_name} on {tour_date}. If you have a moment, we would love to hear your feedback — it helps us a lot and takes just a few seconds.',
   cta_google_label_en: 'Review on Google',
   cta_tripadvisor_label_en: 'Review on TripAdvisor',
+  reminder_enabled: false,
+  reminder_hours_before: '24',
+  reminder_subject_pt: 'Lembrete: {tour_name} — {tour_date} às {tour_time}',
+  reminder_body_pt: 'Está quase! A sua reserva para {tour_name} é no dia {tour_date} às {tour_time} ({participants} pessoa(s)).\n\nSe precisar de alterar alguma coisa, responda a este email.',
+  reminder_subject_en: 'Reminder: {tour_name} — {tour_date} at {tour_time}',
+  reminder_body_en: "It's almost time! Your booking for {tour_name} is on {tour_date} at {tour_time} ({participants} guest(s)).\n\nIf you need to change anything, just reply to this email.",
 };
 
 const COLLECTION_SLUG = 'post-tour-reviews';
@@ -328,6 +341,56 @@ export const PostTourReviewsSettings = () => {
           <Field>
             <label>TripAdvisor CTA label</label>
             <input value={cfg.cta_tripadvisor_label_en} onChange={e => update('cta_tripadvisor_label_en', e.target.value)} />
+          </Field>
+        </Grid>
+      </Section>
+
+      <Section>
+        <h2>Lembrete antes do tour</h2>
+        <p className="desc">
+          Email enviado algumas horas antes de cada reserva confirmada, para reduzir faltas. Usa o fuso horário definido em Settings → General.
+          Placeholders: <code>{'{customer_name}'}</code>, <code>{'{tour_name}'}</code>, <code>{'{tour_date}'}</code>, <code>{'{tour_time}'}</code>, <code>{'{participants}'}</code>.
+        </p>
+        <Toggle style={{ marginBottom: 16 }}>
+          <input
+            type="checkbox"
+            checked={cfg.reminder_enabled}
+            onChange={e => update('reminder_enabled', e.target.checked)}
+          />
+          <div className="label-text">
+            <strong>Enviar lembretes</strong>
+            <span>Independente dos pedidos de review. Cada reserva recebe no máximo um lembrete.</span>
+          </div>
+        </Toggle>
+        <Grid>
+          <Field>
+            <label>Horas antes do tour</label>
+            <input
+              type="number"
+              min={1}
+              max={168}
+              value={cfg.reminder_hours_before}
+              onChange={e => update('reminder_hours_before', e.target.value)}
+            />
+            <p className="help">Entre 1 e 168 (7 dias). Default: 24.</p>
+          </Field>
+          <Field />
+          <Field $full>
+            <label>Assunto (PT)</label>
+            <input value={cfg.reminder_subject_pt} onChange={e => update('reminder_subject_pt', e.target.value)} />
+          </Field>
+          <Field $full>
+            <label>Corpo (PT)</label>
+            <textarea rows={4} value={cfg.reminder_body_pt} onChange={e => update('reminder_body_pt', e.target.value)} />
+          </Field>
+          <Field $full>
+            <label>Subject (EN)</label>
+            <input value={cfg.reminder_subject_en} onChange={e => update('reminder_subject_en', e.target.value)} />
+          </Field>
+          <Field $full>
+            <label>Body (EN)</label>
+            <textarea rows={4} value={cfg.reminder_body_en} onChange={e => update('reminder_body_en', e.target.value)} />
+            <p className="help">O email inclui sempre um resumo com a experiência, data, hora e número de pessoas.</p>
           </Field>
         </Grid>
       </Section>

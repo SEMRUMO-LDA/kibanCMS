@@ -23,6 +23,7 @@ import {
   paymentReceiptTemplate,
   paymentAdminNotificationTemplate,
   postTourReviewTemplate,
+  bookingReminderTemplate,
 } from './email-templates.js';
 
 // ── Types ──
@@ -379,4 +380,25 @@ export async function sendPostTourReview(
   });
 
   return sendEmail({ to: booking.customer_email, subject, html });
+}
+
+/**
+ * Booking reminder N hours before the tour. Settings live in the Post-Tour
+ * Reviews add-on config (reminder_* fields). Returns the Resend id or null.
+ */
+export async function sendBookingReminder(
+  booking: Record<string, any>,
+  language: 'pt' | 'en',
+  reminderConfig: Record<string, any>,
+): Promise<{ id: string } | null> {
+  if (!booking.customer_email) return null;
+  const config = await getEmailConfig();
+  if (!config) return null;
+  const { subject, html } = bookingReminderTemplate({
+    booking,
+    language,
+    config: reminderConfig,
+    siteName: config.defaultFromName,
+  });
+  return sendEmail({ to: booking.customer_email, subject, html, replyTo: config.defaultReplyTo || undefined });
 }

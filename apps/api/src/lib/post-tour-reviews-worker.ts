@@ -16,7 +16,7 @@ import { logger } from './logger.js';
 import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
-import { sendPostTourReview } from './email.js';
+import { sendPostTourReview, sendBookingReminder } from './email.js';
 
 const DEFAULT_DELAY_DAYS = 2;
 const QUERY_LOOKBACK_DAYS = 30; // hard window so the query stays bounded
@@ -40,22 +40,53 @@ async function loadReviewConfig(): Promise<Record<string, any> | null> {
   return (data?.content as Record<string, any>) || null;
 }
 
-async function getSiteDefaultLanguage(): Promise<'pt' | 'en'> {
+async function getSiteSettings(): Promise<{ lang: 'pt' | 'en'; timeZone: string }> {
   try {
     const { data: settingsCol } = await supabase
       .from('collections').select('id').eq('slug', 'site-settings').single();
-    if (!settingsCol) return 'pt';
+    if (!settingsCol) return { lang: 'pt', timeZone: 'Europe/Lisbon' };
     const { data } = await supabase
       .from('entries')
       .select('content')
       .eq('collection_id', settingsCol.id)
       .eq('slug', 'global')
       .single();
-    const lang = (data?.content as any)?.language;
-    return lang === 'en' ? 'en' : 'pt';
+    const c = (data?.content as any) || {};
+    return { lang: c.language === 'en' ? 'en' : 'pt', timeZone: c.timezone || 'Europe/Lisbon' };
   } catch {
-    return 'pt';
+    return { lang: 'pt', timeZone: 'Europe/Lisbon' };
   }
+}
+
+async function getSiteDefaultLanguage(): Promise<'pt' | 'en'> {
+  return (await getSiteSettings()).lang;
+}
+
+/** "YYYY-MM-DDTHH:MM" wall-clock time in `timeZone`. */
+export function wallClock(now: Date, timeZone: string): string {
+  let tz = timeZone;
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); } catch { tz = 'Europe/Lisbon'; }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (t: string) => parts.find(p => p.type === t)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+/**
+ * Hours from `now` until the booking starts, comparing wall-clock times in
+ * the site's time zone (bookings store a local date + "HH:MM" slot).
+ * Unknown/invalid dates → null. A slot like "10:00-12:00" uses the start.
+ */
+export function hoursUntilBooking(date: string, timeSlot: string, now: Date, timeZone: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec((timeSlot || '').trim());
+  const time = m ? `${m[1].padStart(2, '0')}:${m[2]}` : '09:00';
+  const start = Date.parse(`${date}T${time}:00Z`);
+  const nowWall = Date.parse(`${wallClock(now, timeZone)}:00Z`);
+  if (Number.isNaN(start) || Number.isNaN(nowWall)) return null;
+  return (start - nowWall) / 3_600_000;
 }
 
 function isoDate(d: Date): string {
@@ -65,6 +96,15 @@ function isoDate(d: Date): string {
 async function processCurrentTenant(): Promise<void> {
   const config = await loadReviewConfig();
   if (!config) return;
+
+  // Reminders are opt-in and independent of review emails.
+  if (config.reminder_enabled === true || config.reminder_enabled === 'true') {
+    try {
+      await sendRemindersForCurrentTenant(config);
+    } catch (err: any) {
+      logger.error('Booking reminders pass failed', { error: err?.message });
+    }
+  }
 
   if (config.enabled === false || config.enabled === 'false') {
     return;
@@ -151,6 +191,63 @@ async function processCurrentTenant(): Promise<void> {
   if (sent > 0 || skipped > 0) {
     logger.info('Post-tour reviews pass complete', { sent, skipped, candidates: candidates.length });
   }
+}
+
+const DEFAULT_REMINDER_HOURS = 24;
+
+/** Sends "your tour is tomorrow" reminders; stamps reminder_sent_at (idempotent). */
+async function sendRemindersForCurrentTenant(config: Record<string, any>): Promise<void> {
+  const hoursBefore = (() => {
+    const n = Number(config.reminder_hours_before);
+    return Number.isFinite(n) && n >= 1 && n <= 168 ? n : DEFAULT_REMINDER_HOURS;
+  })();
+
+  const bookingsColId = await getCollectionId('bookings');
+  if (!bookingsColId) return;
+
+  const { lang: siteLang, timeZone } = await getSiteSettings();
+  const now = new Date();
+  const today = wallClock(now, timeZone).slice(0, 10);
+  const horizon = new Date(now.getTime() + (hoursBefore + 48) * 3_600_000);
+  const maxDate = wallClock(horizon, timeZone).slice(0, 10);
+
+  const { data: candidates, error } = await supabase
+    .from('entries')
+    .select('id, content')
+    .eq('collection_id', bookingsColId)
+    .filter('content->>booking_status', 'eq', 'confirmed')
+    .filter('content->>date', 'gte', today)
+    .filter('content->>date', 'lte', maxDate)
+    .limit(500);
+  if (error) {
+    logger.error('Booking reminders: select failed', { error: error.message });
+    return;
+  }
+
+  let sent = 0;
+  for (const entry of candidates || []) {
+    const c = entry.content as Record<string, any>;
+    if (c.reminder_sent_at || !c.customer_email || c.demo) continue;
+    const h = hoursUntilBooking(c.date, c.time_slot, now, timeZone);
+    if (h === null || h <= 0 || h > hoursBefore) continue;
+
+    // Mark first (same idempotency rule as review emails).
+    const { error: markErr } = await supabase
+      .from('entries')
+      .update({ content: { ...c, reminder_sent_at: new Date().toISOString() } })
+      .eq('id', entry.id)
+      .filter('content->>reminder_sent_at', 'is', null);
+    if (markErr) continue;
+
+    const lang: 'pt' | 'en' = c.customer_language === 'en' ? 'en' : c.customer_language === 'pt' ? 'pt' : siteLang;
+    try {
+      const result = await sendBookingReminder(c, lang, config);
+      if (result?.id) sent++;
+    } catch (err: any) {
+      logger.error('Booking reminder: send threw', { bookingId: entry.id, error: err.message });
+    }
+  }
+  if (sent > 0) logger.info('Booking reminders sent', { sent, hoursBefore });
 }
 
 async function processAllTenants(): Promise<void> {

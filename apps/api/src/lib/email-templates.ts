@@ -431,3 +431,82 @@ export function postTourReviewTemplate(
 
   return { subject, html };
 }
+
+// ============================================
+// Booking reminder (sent N hours before the tour — Post-Tour Reviews add-on config)
+// ============================================
+
+export interface BookingReminderInput {
+  booking: Record<string, any>;
+  language: 'pt' | 'en';
+  config: Record<string, any>;
+  siteName: string;
+}
+
+export function bookingReminderTemplate(input: BookingReminderInput): { subject: string; html: string } {
+  const { booking, language, config, siteName } = input;
+
+  const customerName = booking.customer_name || '';
+  const tourName = booking.tour_name || booking.tour_title || booking.resource_title || booking.resource_slug || '';
+  const tourDate = booking.date || '';
+  const tourTime = (booking.time_slot || '').toString().slice(0, 5);
+  const participants = String(
+    Number(booking.total_participants) || Number(booking.party_size) ||
+    ((Number(booking.adults) || 0) + (Number(booking.children) || 0)) || '',
+  );
+
+  const pick = (key: string, fallback: string): string => {
+    const v = (config[`${key}_${language}`] || '').toString().trim();
+    if (v) return v;
+    if (language !== 'pt') {
+      const pt = (config[`${key}_pt`] || '').toString().trim();
+      if (pt) return pt;
+    }
+    return fallback;
+  };
+
+  const defaults = {
+    pt: {
+      subject: 'Lembrete: {tour_name} — {tour_date} às {tour_time}',
+      body: 'Está quase! A sua reserva para {tour_name} é no dia {tour_date} às {tour_time} ({participants} pessoa(s)).\n\nSe precisar de alterar alguma coisa, responda a este email.',
+    },
+    en: {
+      subject: 'Reminder: {tour_name} — {tour_date} at {tour_time}',
+      body: "It's almost time! Your booking for {tour_name} is on {tour_date} at {tour_time} ({participants} guest(s)).\n\nIf you need to change anything, just reply to this email.",
+    },
+  }[language];
+
+  const replace = (s: string) => s
+    .replace(/\{customer_name\}/g, customerName)
+    .replace(/\{tour_name\}/g, tourName)
+    .replace(/\{tour_date\}/g, tourDate)
+    .replace(/\{tour_time\}/g, tourTime)
+    .replace(/\{participants\}/g, participants);
+
+  const subject = replace(pick('reminder_subject', defaults.subject));
+  const bodyHtml = replace(escapeHtml(pick('reminder_body', defaults.body)))
+    .split(/\n\s*\n/)
+    .map(p => `<p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;line-height:1.55;">${p.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  const greeting = customerName
+    ? (language === 'pt' ? `Olá ${escapeHtml(customerName)},` : `Hi ${escapeHtml(customerName)},`)
+    : (language === 'pt' ? 'Olá,' : 'Hi,');
+  const row = (label: string, value: string) => value
+    ? `<tr><td style="padding:6px 12px 6px 0;color:#888;font-size:14px;">${label}</td><td style="padding:6px 0;font-size:14px;color:#2c2c2c;font-weight:600;">${escapeHtml(value)}</td></tr>`
+    : '';
+  const L = language === 'pt'
+    ? { tour: 'Experiência', date: 'Data', time: 'Hora', people: 'Pessoas' }
+    : { tour: 'Experience', date: 'Date', time: 'Time', people: 'Guests' };
+
+  const html = layout(`
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">${greeting}</p>
+    ${bodyHtml}
+    <table style="margin:8px 0 16px;border-collapse:collapse;">
+      ${row(L.tour, tourName)}${row(L.date, tourDate)}${row(L.time, tourTime)}${row(L.people, participants)}
+    </table>
+    <p style="margin:24px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `, siteName);
+
+  return { subject, html };
+}
