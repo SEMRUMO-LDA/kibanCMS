@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 import { sendNewsletterWelcome, sendNewsletterAdminNotification } from '../lib/email.js';
 import { brevoUpsertContact, buildBrevoAttributes, BrevoError, type BrevoConfig } from '../lib/brevo.js';
 import type { AuthRequest } from '../middleware/auth.js';
+import { checkSpam, captchaFailed } from '../lib/spam-protection.js';
 
 const router: Router = Router();
 
@@ -113,6 +114,13 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     }
 
     const { email, name, source } = req.body;
+
+    // Spam protection: honeypot (fake success, nothing stored) + optional Turnstile
+    const spam = await checkSpam(req.body, req.ip);
+    if (spam === 'honeypot') {
+      return res.status(201).json({ success: true, data: { subscribed: true }, timestamp: new Date().toISOString() });
+    }
+    if (spam === 'captcha') return captchaFailed(res);
 
     if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({

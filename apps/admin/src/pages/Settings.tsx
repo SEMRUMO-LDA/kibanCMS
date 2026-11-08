@@ -170,6 +170,7 @@ interface SiteSettings {
   // Email (Resend — multi-tenant)
   resend_api_key: string; default_from_email: string; default_from_name: string; default_reply_to: string;
   notification_emails: string;
+  turnstile_secret_key: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -184,6 +185,7 @@ const DEFAULTS: SiteSettings = {
   entry_url_pattern: '/{collection}/{slug}', collection_url_pattern: '/{slug}',
   resend_api_key: '', default_from_email: '', default_from_name: '', default_reply_to: '',
   notification_emails: '',
+  turnstile_secret_key: '',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -606,6 +608,21 @@ export const Settings = () => {
                 placeholder="admin@yourdomain.com, sales@yourdomain.com"
               />
               <p className="help">Comma-separated. Receives form submissions, booking alerts and order copies. Leave blank to fall back to the General tab's "Contact Email".</p>
+            </Field>
+            <Field $full>
+              <label>{locale === 'pt' ? 'Anti-spam: Cloudflare Turnstile (secret key)' : 'Anti-spam: Cloudflare Turnstile (secret key)'}</label>
+              <input
+                type="password"
+                autoComplete="off"
+                value={settings.turnstile_secret_key}
+                onChange={e => update('turnstile_secret_key', e.target.value)}
+                placeholder="0x4AAAAAAA…"
+              />
+              <p className="help">
+                {locale === 'pt'
+                  ? 'Opcional. Com esta chave preenchida, formulários e newsletter passam a exigir o widget Turnstile no site (o site usa a "site key" pública). Todos os formulários já têm um honeypot invisível: o site só precisa de um campo escondido chamado _hp.'
+                  : 'Optional. When set, forms and newsletter sign-ups require the Turnstile widget on the site (the site uses the public "site key"). All forms already have an invisible honeypot: the site just needs a hidden field named _hp.'}
+              </p>
             </Field>
           </Grid>
 

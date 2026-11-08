@@ -298,6 +298,22 @@ const Table = styled.table`
   }
 `;
 
+// Lead status (form-submissions): new → contacted → won / lost
+const LEAD_LABELS: Record<string, string> = { new: 'New', contacted: 'Contacted', won: 'Won', lost: 'Lost', spam: 'Spam' };
+const LEAD_COLORS: Record<string, { bg: string; fg: string }> = {
+  new: { bg: '#e0f2fe', fg: '#075985' },
+  contacted: { bg: '#fef3c7', fg: '#92400e' },
+  won: { bg: '#dcfce7', fg: '#166534' },
+  lost: { bg: '#f3f4f6', fg: '#4b5563' },
+  spam: { bg: '#fee2e2', fg: '#991b1b' },
+};
+const LeadBadge = styled.span<{ $status: string }>`
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; vertical-align: middle;
+  background: ${p => (LEAD_COLORS[p.$status] || LEAD_COLORS.lost).bg};
+  color: ${p => (LEAD_COLORS[p.$status] || LEAD_COLORS.lost).fg};
+`;
+
 const StatusBadge = styled.span<{ $status: string }>`
   display: inline-flex;
   align-items: center;
@@ -753,6 +769,7 @@ export const CollectionEntries = () => {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [showImportCSV, setShowImportCSV] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string>('');
@@ -888,57 +905,87 @@ export const CollectionEntries = () => {
     }
   };
 
-  const filteredEntries = entries.filter(entry => {
+  // Same predicate for the table and for the CSV export.
+  const matchesFilters = (entry: Entry) => {
     const matchesSearch = entry.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       entry.slug?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesStatus = filterStatus === 'all' || entry.status === filterStatus;
 
     return matchesSearch && matchesStatus;
-  });
+  };
 
-  const handleExportCSV = () => {
-    if (filteredEntries.length === 0) return;
+  const filteredEntries = entries.filter(matchesFilters);
 
-    const allKeys = new Set<string>();
-    allKeys.add('title');
-    allKeys.add('slug');
-    allKeys.add('status');
-    allKeys.add('created_at');
-
-    filteredEntries.forEach(e => {
-      if (e.content && typeof e.content === 'object') {
-        Object.keys(e.content).forEach(k => allKeys.add(k));
+  /**
+   * Exports EVERY entry of the collection that matches the current filters —
+   * not just the (max 100) rows loaded in the table. Fetches page by page.
+   * The CSV opens correctly in Excel PT: UTF-8 BOM (accents) and ";" separator.
+   */
+  const handleExportCSV = async () => {
+    if (!collectionSlug || exporting) return;
+    setExporting(true);
+    try {
+      const all: Entry[] = [];
+      const PAGE = 500;
+      for (let offset = 0; offset < 100_000; offset += PAGE) {
+        const { data, error: pageErr, meta } = await api.getEntries(collectionSlug, { limit: String(PAGE), offset: String(offset) });
+        if (pageErr) throw new Error(pageErr);
+        const page = (data || []) as Entry[];
+        all.push(...page);
+        const total = meta?.pagination?.total ?? 0;
+        if (page.length < PAGE || all.length >= total) break;
       }
-    });
+      const rows = all.filter(matchesFilters);
+      if (rows.length === 0) {
+        toast.info('No entries to export with the current filters');
+        return;
+      }
 
-    const headers = Array.from(allKeys);
+      const contentKeys = new Set<string>();
+      const extraKeys = new Set<string>();
+      rows.forEach(e => {
+        if (e.content && typeof e.content === 'object') Object.keys(e.content).forEach(k => contentKeys.add(k));
+        const extra = e.meta?.extra_fields;
+        if (extra && typeof extra === 'object') Object.keys(extra).forEach(k => extraKeys.add(k));
+      });
+      const base = ['title', 'slug', 'status', 'created_at'];
+      const headers = [...base, ...[...contentKeys].filter(k => !base.includes(k)), ...[...extraKeys].map(k => `extra.${k}`)];
 
-    const csvRows = [
-      headers.join(','),
-      ...filteredEntries.map(entry => {
-        return headers.map(key => {
-          let val: any;
-          if (key === 'title') val = entry.title;
-          else if (key === 'slug') val = entry.slug;
-          else if (key === 'status') val = entry.status;
-          else if (key === 'created_at') val = entry.created_at;
-          else val = entry.content?.[key];
+      const SEP = ';';
+      const cell = (val: unknown) => {
+        if (val === null || val === undefined) return '';
+        const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        const escaped = str.replace(/"/g, '""');
+        return /[";\n\r]/.test(escaped) || escaped.includes(SEP) ? `"${escaped}"` : escaped;
+      };
+      const value = (entry: Entry, key: string): unknown => {
+        if (key.startsWith('extra.')) return entry.meta?.extra_fields?.[key.slice(6)];
+        if (key === 'title') return entry.title;
+        if (key === 'slug') return entry.slug;
+        if (key === 'status') return entry.status;
+        if (key === 'created_at') return entry.created_at;
+        return entry.content?.[key];
+      };
 
-          if (val === null || val === undefined) return '';
-          const str = String(val).replace(/"/g, '""');
-          return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
-        }).join(',');
-      }),
-    ];
+      const csv = [
+        headers.map(cell).join(SEP),
+        ...rows.map(entry => headers.map(h => cell(value(entry, h))).join(SEP)),
+      ].join('\r\n');
 
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${collectionSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${collectionSlug}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`);
+    } catch (err: any) {
+      toast.error('Export failed: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -994,9 +1041,9 @@ export const CollectionEntries = () => {
             Import CSV
           </CodeButton>
           {entries.length > 0 && (
-            <CodeButton onClick={handleExportCSV}>
-              <Download size={18} />
-              Export CSV
+            <CodeButton onClick={handleExportCSV} disabled={exporting}>
+              {exporting ? <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={18} />}
+              {exporting ? 'Exporting…' : 'Export CSV'}
             </CodeButton>
           )}
           <CreateButton onClick={() => navigate(`/content/${collectionSlug}/new`)}>
@@ -1107,7 +1154,12 @@ export const CollectionEntries = () => {
                       onChange={() => toggleSelectEntry(entry.id)}
                     />
                   </td>
-                  <td className="title">{entry.title || 'Untitled'}</td>
+                  <td className="title">
+                    {entry.title || 'Untitled'}
+                    {entry.content?.lead_status && (
+                      <LeadBadge $status={String(entry.content.lead_status)}>{LEAD_LABELS[String(entry.content.lead_status)] || String(entry.content.lead_status)}</LeadBadge>
+                    )}
+                  </td>
                   <td className="slug">{entry.slug || '-'}</td>
                   <td>
                     <StatusBadge $status={entry.status || 'draft'}>

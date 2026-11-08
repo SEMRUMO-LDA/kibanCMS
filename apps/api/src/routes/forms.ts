@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { sendFormNotification, sendFormAutoReply } from '../lib/email.js';
+import { checkSpam, captchaFailed } from '../lib/spam-protection.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -149,6 +150,15 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
 
     const { form_name, name, email, phone, subject, message, source_url, extra } = req.body;
 
+    // Spam protection: honeypot (fake success, nothing stored) + optional Turnstile
+    const spam = await checkSpam(req.body, req.ip);
+    if (spam === 'honeypot') {
+      logger.info('Form honeypot triggered — submission dropped', { form: typeof form_name === 'string' ? form_name.slice(0, 100) : undefined });
+      const now = new Date().toISOString();
+      return res.status(201).json({ success: true, data: { id: null, form: form_name, received_at: now }, timestamp: now });
+    }
+    if (spam === 'captcha') return captchaFailed(res);
+
     // Validate required fields
     if (!form_name || typeof form_name !== 'string' || form_name.trim().length === 0) {
       return res.status(400).json({
@@ -211,6 +221,7 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
       message: cleanMessage,
       submitted_at: timestamp,
       is_read: false,
+      lead_status: 'new',
       source_url: cleanSourceUrl,
     };
 

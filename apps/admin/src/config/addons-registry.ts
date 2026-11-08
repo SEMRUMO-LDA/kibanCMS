@@ -130,7 +130,8 @@ const seo: AddonDefinition = {
         // Structured Data
         { id: 'structured_data', name: 'structured_data', label: 'JSON-LD Schema', type: 'textarea', helpText: 'Global structured data in JSON-LD format' },
         // Sitemap & Multilingual
-        { id: 'sitemap_url', name: 'sitemap_url', label: 'Sitemap URL', type: 'url', placeholder: 'https://example.com/sitemap.xml', helpText: 'URL of the XML sitemap for search engines' },
+        { id: 'sitemap_url', name: 'sitemap_url', label: 'Sitemap URL', type: 'url', placeholder: 'https://example.com/sitemap.xml', helpText: 'Public URL of the sitemap. The CMS generates it at /api/v1/seo/sitemap.xml — serve it from the site (see docs/SEO_SETUP.md)' },
+        { id: 'sitemap_collections', name: 'sitemap_collections', label: 'Sitemap Collections', type: 'text', placeholder: 'blog, tours, pages', helpText: 'Optional. Comma-separated collections to include. Empty = all public content collections' },
         { id: 'hreflang', name: 'hreflang', label: 'Hreflang Tags', type: 'textarea', helpText: 'One per line: lang|url (e.g. pt|https://example.pt, en|https://example.com)' },
         // Domain Verification
         { id: 'google_site_verification', name: 'google_site_verification', label: 'Google Search Console', type: 'text', placeholder: 'google-site-verification=xxx', helpText: 'Verification meta tag content from Google Search Console' },
@@ -174,6 +175,14 @@ const forms: AddonDefinition = {
         { id: 'submitted_at', name: 'submitted_at', label: 'Submitted At', type: 'date', required: true },
         { id: 'is_read', name: 'is_read', label: 'Read', type: 'boolean' },
         { id: 'source_url', name: 'source_url', label: 'Source Page', type: 'url', helpText: 'Page where the form was submitted from' },
+        { id: 'lead_status', name: 'lead_status', label: 'Lead Status', type: 'select', options: [
+          { label: 'New', value: 'new' },
+          { label: 'Contacted', value: 'contacted' },
+          { label: 'Won', value: 'won' },
+          { label: 'Lost', value: 'lost' },
+          { label: 'Spam', value: 'spam' },
+        ], helpText: 'Where this lead is in your follow-up' },
+        { id: 'notes', name: 'notes', label: 'Internal Notes', type: 'textarea', helpText: 'Only visible in the CMS' },
       ],
     },
     {
