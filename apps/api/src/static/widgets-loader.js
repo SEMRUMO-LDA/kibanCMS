@@ -166,11 +166,17 @@
   var clusterConfig = {
     accentColor: null,
     includedWidgets: ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'],
+    // 'corner' = round trigger in the widgets' corner (default)
+    // 'edge'   = discreet tab at the vertical middle of the left/right edge
+    layout: 'corner',
+    edgeSide: 'right',
   };
   function applyClusterConfig(cfg) {
     if (cfg && typeof cfg === 'object') {
       if (typeof cfg.accentColor !== 'undefined') clusterConfig.accentColor = cfg.accentColor;
       if (Array.isArray(cfg.includedWidgets))    clusterConfig.includedWidgets = cfg.includedWidgets;
+      if (cfg.layout === 'edge' || cfg.layout === 'corner') clusterConfig.layout = cfg.layout;
+      if (cfg.edgeSide === 'left' || cfg.edgeSide === 'right') clusterConfig.edgeSide = cfg.edgeSide;
     }
     var root = document.documentElement;
     if (clusterConfig.accentColor) {
@@ -325,8 +331,51 @@
       '  pointer-events: auto;',
       '}',
       '.kiban-cluster-item:hover { transform: translateY(0) scale(1.06); }',
+      // ── Edge tab layout ────────────────────────────────────────────
+      // A slim, half-hidden tab at the vertical middle of the page edge.
+      // Visually ~10px wide; the ::before pseudo-element widens the hit
+      // area to 28px (WCAG 2.2 target size ≥ 24px) without showing it.
+      '.kiban-edge-tab {',
+      '  position: fixed; top: 50%; z-index: 2147483600;',
+      '  width: 10px; height: 64px; padding: 0; margin: 0;',
+      '  display: flex; align-items: center; justify-content: center;',
+      '  color: #fff; cursor: pointer; opacity: 0.55;',
+      '  transform: translateY(-50%);',
+      '  transition: width 0.22s cubic-bezier(0.2, 0.9, 0.2, 1), opacity 0.2s ease;',
+      '}',
+      '.kiban-edge-tab[data-side="right"] { right: 0; border-right: 0; border-radius: 12px 0 0 12px; }',
+      '.kiban-edge-tab[data-side="left"]  { left: 0;  border-left: 0;  border-radius: 0 12px 12px 0; }',
+      '.kiban-edge-tab::before { content: ""; position: absolute; top: -6px; bottom: -6px; width: 28px; }',
+      '.kiban-edge-tab[data-side="right"]::before { right: 0; }',
+      '.kiban-edge-tab[data-side="left"]::before  { left: 0; }',
+      '.kiban-edge-tab:hover, .kiban-edge-tab:focus-visible, .kiban-edge-tab[aria-expanded="true"] { width: 30px; opacity: 1; }',
+      '.kiban-edge-tab:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }',
+      // Collapsed: a tiny grip. Hover/open: the preferences glyph.
+      '.kiban-edge-tab .kiban-edge-grip { width: 2px; height: 18px; border-radius: 1px; background: currentColor; opacity: 0.85; }',
+      '.kiban-edge-tab .kiban-edge-icon { display: none; }',
+      '.kiban-edge-tab:hover .kiban-edge-grip, .kiban-edge-tab:focus-visible .kiban-edge-grip, .kiban-edge-tab[aria-expanded="true"] .kiban-edge-grip { display: none; }',
+      '.kiban-edge-tab:hover .kiban-edge-icon, .kiban-edge-tab:focus-visible .kiban-edge-icon, .kiban-edge-tab[aria-expanded="true"] .kiban-edge-icon { display: flex; }',
+      '.kiban-edge-icon svg { width: 16px; height: 16px; pointer-events: none; }',
+      '.kiban-edge-panel {',
+      '  position: fixed; top: 50%; z-index: 2147483599;',
+      '  display: flex; flex-direction: column; gap: 2px;',
+      '  min-width: 184px; padding: 6px; border-radius: 16px;',
+      '  opacity: 0; pointer-events: none;',
+      '  transition: opacity 0.18s ease, transform 0.25s cubic-bezier(0.2, 0.9, 0.2, 1);',
+      '}',
+      '.kiban-edge-panel[data-side="right"] { right: 40px; transform: translate(10px, -50%); }',
+      '.kiban-edge-panel[data-side="left"]  { left: 40px;  transform: translate(-10px, -50%); }',
+      '.kiban-edge-panel[data-open="true"] { opacity: 1; pointer-events: auto; transform: translate(0, -50%); }',
+      '.kiban-edge-item {',
+      '  display: flex; align-items: center; gap: 12px; width: 100%;',
+      '  padding: 10px 12px; border: 0; border-radius: 11px;',
+      '  background: transparent; color: #fff; cursor: pointer; text-align: left;',
+      '  font: 500 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;',
+      '}',
+      '.kiban-edge-item:hover, .kiban-edge-item:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }',
+      '.kiban-edge-item svg, .kiban-edge-item img { width: 20px; height: 20px; flex: 0 0 20px; pointer-events: none; }',
       '@media (prefers-reduced-motion: reduce) {',
-      '  .kiban-cluster-trigger, .kiban-cluster-item { transition: none; }',
+      '  .kiban-cluster-trigger, .kiban-cluster-item, .kiban-edge-tab, .kiban-edge-panel { transition: none; }',
       '}',
     ].join('\n');
     document.head.appendChild(style);
@@ -592,6 +641,116 @@
     delete clusters[corner];
   }
 
+  // ── Edge tab cluster ───────────────────────────────────────────────
+  // One discreet tab for ALL clusterable widgets (whatever their corner),
+  // opening a small labelled menu. Keyboard: Enter/Space opens, arrows move,
+  // Esc closes and returns focus to the tab.
+  var EDGE_LABELS = {
+    pt: { tab: 'Preferências do site', accessibility: 'Acessibilidade', 'cookie-notice': 'Cookies', 'whatsapp-widget': 'WhatsApp', i18n: 'Idioma' },
+    en: { tab: 'Site preferences', accessibility: 'Accessibility', 'cookie-notice': 'Cookies', 'whatsapp-widget': 'WhatsApp', i18n: 'Language' },
+  };
+  function edgeLang() {
+    var l = (document.documentElement.getAttribute('lang') || navigator.language || 'pt').toLowerCase();
+    return l.indexOf('pt') === 0 ? 'pt' : 'en';
+  }
+  function edgeLabel(id, item) {
+    var t = EDGE_LABELS[edgeLang()];
+    return t[id] || (item && item.cluster && item.cluster.label) || id;
+  }
+
+  var edge = null; // { tab, panel, open, side }
+
+  function setEdgeOpen(open, focusTarget) {
+    if (!edge) return;
+    edge.open = open;
+    edge.panel.setAttribute('data-open', open ? 'true' : 'false');
+    edge.tab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      var first = edge.panel.querySelector('.kiban-edge-item');
+      if (first && focusTarget !== 'none') setTimeout(function () { try { first.focus(); } catch (_) {} }, 30);
+    } else if (focusTarget === 'tab') {
+      try { edge.tab.focus(); } catch (_) {}
+    }
+  }
+
+  function ensureEdgeCluster(ids) {
+    ensureClusterStyles();
+    var side = clusterConfig.edgeSide === 'left' ? 'left' : 'right';
+    if (!edge) {
+      var tab = document.createElement('button');
+      tab.type = 'button';
+      tab.id = 'kiban-edge-tab';
+      tab.className = 'kiban-edge-tab kiban-glass';
+      tab.setAttribute('aria-expanded', 'false');
+      tab.setAttribute('aria-controls', 'kiban-edge-panel');
+      tab.setAttribute('aria-haspopup', 'menu');
+      tab.innerHTML = '<span class="kiban-edge-grip" aria-hidden="true"></span>'
+                    + '<span class="kiban-edge-icon" aria-hidden="true">' + TRIGGER_ICON_SVG + '</span>';
+      var panel = document.createElement('div');
+      panel.id = 'kiban-edge-panel';
+      panel.className = 'kiban-edge-panel kiban-glass';
+      panel.setAttribute('role', 'menu');
+      panel.setAttribute('data-open', 'false');
+      document.body.appendChild(tab);
+      document.body.appendChild(panel);
+      edge = { tab: tab, panel: panel, open: false, side: side };
+
+      tab.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setEdgeOpen(!edge.open);
+      });
+      document.addEventListener('click', function (e) {
+        if (!edge || !edge.open) return;
+        if (!edge.tab.contains(e.target) && !edge.panel.contains(e.target)) setEdgeOpen(false, 'none');
+      });
+      document.addEventListener('keydown', function (e) {
+        if (!edge || !edge.open) return;
+        if (e.key === 'Escape') { setEdgeOpen(false, 'tab'); return; }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          var items = Array.prototype.slice.call(edge.panel.querySelectorAll('.kiban-edge-item'));
+          if (!items.length) return;
+          var i = items.indexOf(document.activeElement);
+          var next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+          items[next].focus();
+          e.preventDefault();
+        }
+      });
+    }
+    edge.side = side;
+    edge.tab.setAttribute('data-side', side);
+    edge.panel.setAttribute('data-side', side);
+    edge.tab.setAttribute('aria-label', EDGE_LABELS[edgeLang()].tab);
+    edge.tab.title = EDGE_LABELS[edgeLang()].tab;
+    ensureBodyObserver();
+
+    edge.panel.innerHTML = '';
+    ids.forEach(function (id) {
+      var item = stackItems[id];
+      stashElement(item.selector);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'kiban-edge-item';
+      btn.setAttribute('role', 'menuitem');
+      btn.setAttribute('data-widget-id', id);
+      var label = edgeLabel(id, item);
+      btn.innerHTML = cloneIconFor(item) + '<span></span>';
+      btn.lastChild.textContent = label;
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setEdgeOpen(false, 'none');
+        activateItem(item);
+      });
+      edge.panel.appendChild(btn);
+    });
+  }
+
+  function destroyEdgeCluster() {
+    if (!edge) return;
+    if (edge.tab.parentNode) edge.tab.parentNode.removeChild(edge.tab);
+    if (edge.panel.parentNode) edge.panel.parentNode.removeChild(edge.panel);
+    edge = null;
+  }
+
   function arrangeStack() {
     var byCorner = { bl: [], br: [], tl: [], tr: [] };
     Object.keys(stackItems).forEach(function (id) {
@@ -605,6 +764,46 @@
     });
 
     var css = '/* kiban widget stack — autogenerated */\n';
+
+    if (clusterConfig.layout === 'edge') {
+      // All included widgets go into the edge tab (one is enough: the point
+      // is to keep the page clean). Exempt/not-included ones stay in their
+      // corners, stacked individually.
+      var includedEdge = clusterConfig.includedWidgets || [];
+      var edgeIds = [];
+      Object.keys(byCorner).forEach(function (corner) {
+        byCorner[corner] = byCorner[corner].filter(function (id) {
+          var inEdge = includedEdge.indexOf(id) !== -1 && CLUSTER_KIND_EXEMPT.indexOf(id) === -1;
+          if (inEdge) edgeIds.push(id);
+          return !inEdge;
+        });
+        destroyCluster(corner);
+      });
+      edgeIds.sort(function (a, b) {
+        var ai = STACK_ORDER.indexOf(a), bi = STACK_ORDER.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+      if (edgeIds.length) ensureEdgeCluster(edgeIds); else destroyEdgeCluster();
+
+      var revealEdge = arrangeReady()
+        ? ' visibility: visible !important; pointer-events: auto !important;'
+        : '';
+      Object.keys(byCorner).forEach(function (corner) {
+        var vP = corner.charAt(0) === 'b' ? 'bottom' : 'top';
+        var hP = corner.charAt(1) === 'l' ? 'left' : 'right';
+        var off = STACK_EDGE;
+        byCorner[corner].forEach(function (id) {
+          var it = stackItems[id];
+          restoreFromStash(it.selector);
+          css += it.selector + ' { ' + vP + ': ' + off + 'px !important; '
+               + hP + ': ' + STACK_EDGE + 'px !important;' + revealEdge + ' }\n';
+          off += it.height + STACK_GAP;
+        });
+      });
+      writeStackCss(css);
+      return;
+    }
+    destroyEdgeCluster();
 
     Object.keys(byCorner).forEach(function (corner) {
       var ids = byCorner[corner];
@@ -677,6 +876,10 @@
       }
     });
 
+    writeStackCss(css);
+  }
+
+  function writeStackCss(css) {
     var style = document.getElementById('kiban-widget-stack');
     if (!style) {
       style = document.createElement('style');

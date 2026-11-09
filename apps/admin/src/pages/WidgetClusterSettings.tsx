@@ -4,6 +4,9 @@ import { getSupabase } from '../lib/supabase';
 type ClusterConfig = {
   accentColor: string | null;
   includedWidgets: string[];
+  /** 'corner' = round trigger in the corner; 'edge' = discreet tab at the middle of a side */
+  layout: 'corner' | 'edge';
+  edgeSide: 'left' | 'right';
 };
 
 const ALL_WIDGETS: Array<{ id: string; label: string; helper: string }> = [
@@ -16,6 +19,8 @@ const ALL_WIDGETS: Array<{ id: string; label: string; helper: string }> = [
 const DEFAULT_CONFIG: ClusterConfig = {
   accentColor: null,
   includedWidgets: ALL_WIDGETS.map(w => w.id),
+  layout: 'corner',
+  edgeSide: 'right',
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -42,6 +47,16 @@ const styles: Record<string, React.CSSProperties> = {
   previewTrigger: { position: 'absolute', bottom: 16, left: 16, width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)', color: '#fff' },
   previewPanel:   { position: 'absolute', bottom: 72, left: 16, display: 'flex', flexDirection: 'column-reverse', gap: 12 },
   previewItem:    { width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)', color: '#fff' },
+  layoutGrid:     { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 },
+  layoutCard:     { textAlign: 'left', padding: 14, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', font: 'inherit' },
+  layoutCardOn:   { borderColor: '#4f46e5', boxShadow: '0 0 0 3px #e0e7ff', background: '#f5f3ff' },
+  layoutThumb:    { position: 'relative', height: 72, borderRadius: 8, background: 'linear-gradient(135deg, #e5e7eb, #9ca3af)', marginBottom: 10, overflow: 'hidden' },
+  segmented:      { display: 'inline-flex', border: '1px solid #d1d5db', borderRadius: 8, overflow: 'hidden' },
+  segment:        { padding: '8px 16px', fontSize: 13, background: '#fff', border: 'none', cursor: 'pointer', color: '#374151' },
+  segmentOn:      { background: '#4f46e5', color: '#fff' },
+  edgeTab:        { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: 30, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)' },
+  edgePanel:      { position: 'absolute', top: '50%', transform: 'translateY(-50%)', minWidth: 170, padding: 6, borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 2, color: '#fff', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)' },
+  edgeItem:       { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', fontSize: 13, fontWeight: 500 },
 };
 
 const WIDGET_ICONS: Record<string, JSX.Element> = {
@@ -189,6 +204,64 @@ export const WidgetClusterSettings = () => {
       </div>
 
       <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Estilo e posição</h3>
+        <p style={styles.sectionSubtitle}>
+          Onde aparece o agregador no site.
+        </p>
+        <div style={styles.layoutGrid} role="radiogroup" aria-label="Estilo do agregador">
+          {([
+            { id: 'corner', title: 'Canto', text: 'Botão redondo no canto dos widgets. Junta-os a partir de 2.' },
+            { id: 'edge', title: 'Separador lateral discreto', text: 'Lingueta quase invisível a meio da margem; ao clicar mostra um menu com os widgets.' },
+          ] as const).map(opt => {
+            const on = config.layout === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                style={{ ...styles.layoutCard, ...(on ? styles.layoutCardOn : {}) }}
+                onClick={() => setConfig(c => ({ ...c, layout: opt.id }))}
+              >
+                <div style={styles.layoutThumb} aria-hidden>
+                  {opt.id === 'corner' ? (
+                    <div style={{ position: 'absolute', left: 8, bottom: 8, width: 18, height: 18, borderRadius: '50%', background: 'rgba(20,20,22,0.7)' }} />
+                  ) : (
+                    <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: 5, height: 26, borderRadius: '5px 0 0 5px', background: 'rgba(20,20,22,0.7)' }} />
+                  )}
+                </div>
+                <div style={styles.toggleLabel}>{opt.title}</div>
+                <div style={styles.toggleHelper}>{opt.text}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {config.layout === 'edge' && (
+          <div style={{ ...styles.field, marginTop: 16, marginBottom: 0 }}>
+            <label style={styles.label}>Lado</label>
+            <div style={styles.segmented} role="radiogroup" aria-label="Lado do separador">
+              {(['left', 'right'] as const).map(side => (
+                <button
+                  key={side}
+                  type="button"
+                  role="radio"
+                  aria-checked={config.edgeSide === side}
+                  style={{ ...styles.segment, ...(config.edgeSide === side ? styles.segmentOn : {}) }}
+                  onClick={() => setConfig(c => ({ ...c, edgeSide: side }))}
+                >
+                  {side === 'left' ? 'Esquerda' : 'Direita'}
+                </button>
+              ))}
+            </div>
+            <p style={{ ...styles.toggleHelper, marginTop: 8 }}>
+              No separador lateral entram todos os widgets selecionados abaixo (basta 1). O seletor de idioma fica sempre no seu canto.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Widgets no cluster</h3>
         <p style={styles.sectionSubtitle}>
           Quando ≥2 widgets selecionados estão activos no mesmo canto, o loader
@@ -223,18 +296,48 @@ export const WidgetClusterSettings = () => {
           Glass escuro num gradiente claro→escuro para verificares contraste em ambos
           os contextos. Os ícones reflectem a tua selecção.
         </p>
-        <div style={styles.preview}>
-          <div style={styles.previewPanel}>
-            {config.includedWidgets.map(id => (
-              <div key={id} style={{ ...styles.previewItem, background: previewTint || styles.previewItem.background }}>
-                {WIDGET_ICONS[id]}
-              </div>
-            ))}
+        {config.layout === 'edge' ? (
+          <div style={styles.preview}>
+            <div style={{
+              ...styles.edgePanel,
+              ...(config.edgeSide === 'left' ? { left: 40 } : { right: 40 }),
+              background: previewTint || styles.edgePanel.background,
+            }}>
+              {config.includedWidgets.filter(id => id !== 'i18n').map(id => (
+                <div key={id} style={styles.edgeItem}>
+                  {WIDGET_ICONS[id]} {ALL_WIDGETS.find(w => w.id === id)?.label}
+                </div>
+              ))}
+            </div>
+            <div style={{
+              ...styles.edgeTab,
+              ...(config.edgeSide === 'left'
+                ? { left: 0, borderLeft: 'none', borderRadius: '0 12px 12px 0' }
+                : { right: 0, borderRight: 'none', borderRadius: '12px 0 0 12px' }),
+              background: previewTint || styles.edgeTab.background,
+            }}>
+              {triggerSvg}
+            </div>
           </div>
-          <div style={{ ...styles.previewTrigger, background: previewTint || styles.previewTrigger.background }}>
-            {triggerSvg}
+        ) : (
+          <div style={styles.preview}>
+            <div style={styles.previewPanel}>
+              {config.includedWidgets.map(id => (
+                <div key={id} style={{ ...styles.previewItem, background: previewTint || styles.previewItem.background }}>
+                  {WIDGET_ICONS[id]}
+                </div>
+              ))}
+            </div>
+            <div style={{ ...styles.previewTrigger, background: previewTint || styles.previewTrigger.background }}>
+              {triggerSvg}
+            </div>
           </div>
-        </div>
+        )}
+        {config.layout === 'edge' && (
+          <p style={{ ...styles.toggleHelper, marginTop: 8 }}>
+            Pré-visualização aberta. Fechado, o separador é apenas uma lingueta fina e translúcida, que sai ao passar o rato ou ao focar com o teclado.
+          </p>
+        )}
       </div>
 
       <div style={styles.saveBar}>

@@ -407,6 +407,9 @@ app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
 const DEFAULT_CLUSTER_CONFIG = {
   accentColor: null as string | null,
   includedWidgets: ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'],
+  // 'corner' = round trigger in the corner; 'edge' = discreet side tab
+  layout: 'corner' as 'corner' | 'edge',
+  edgeSide: 'right' as 'left' | 'right',
 };
 
 app.get('/api/v1/widgets/cluster-config', validateApiKey, async (_req, res) => {
