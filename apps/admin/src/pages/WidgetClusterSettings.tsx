@@ -12,7 +12,7 @@ type ClusterConfig = {
 const ALL_WIDGETS: Array<{ id: string; label: string; helper: string }> = [
   { id: 'cookie-notice',   label: 'Cookies',         helper: 'Banner de consentimento (Silktide)' },
   { id: 'accessibility',   label: 'Acessibilidade',  helper: 'Painel EAA 2025' },
-  { id: 'i18n',            label: 'Idioma',          helper: 'Seletor de idioma' },
+  { id: 'i18n',            label: 'Idioma',          helper: 'Seletor de idioma — no cluster, as línguas aparecem diretamente no menu' },
   { id: 'whatsapp-widget', label: 'WhatsApp',        helper: 'Botão flutuante de chat' },
 ];
 
@@ -55,7 +55,7 @@ const styles: Record<string, React.CSSProperties> = {
   segment:        { padding: '8px 16px', fontSize: 13, background: '#fff', border: 'none', cursor: 'pointer', color: '#374151' },
   segmentOn:      { background: '#4f46e5', color: '#fff' },
   edgeTab:        { position: 'absolute', top: '50%', transform: 'translateY(-50%)', width: 30, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)' },
-  edgePanel:      { position: 'absolute', top: '50%', transform: 'translateY(-50%)', minWidth: 170, padding: 6, borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 2, color: '#fff', background: 'rgba(20,20,22,0.55)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)' },
+  edgePanel:      { position: 'absolute', top: '50%', transform: 'translateY(-50%)', minWidth: 170, padding: 6, borderRadius: 14, display: 'flex', flexDirection: 'column', gap: 2, color: '#fff', background: 'rgba(20,20,22,0.86)', backdropFilter: 'blur(22px) saturate(1.7)', WebkitBackdropFilter: 'blur(22px) saturate(1.7)', border: '1px solid rgba(255,255,255,0.14)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)' },
   edgeItem:       { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', fontSize: 13, fontWeight: 500 },
 };
 
@@ -255,7 +255,7 @@ export const WidgetClusterSettings = () => {
               ))}
             </div>
             <p style={{ ...styles.toggleHelper, marginTop: 8 }}>
-              No separador lateral entram todos os widgets selecionados abaixo (basta 1). O seletor de idioma fica sempre no seu canto.
+              No separador lateral entram todos os widgets selecionados abaixo (basta 1). O idioma mostra as línguas diretamente no menu.
             </p>
           </div>
         )}
@@ -303,9 +303,14 @@ export const WidgetClusterSettings = () => {
               ...(config.edgeSide === 'left' ? { left: 40 } : { right: 40 }),
               background: previewTint || styles.edgePanel.background,
             }}>
-              {config.includedWidgets.filter(id => id !== 'i18n').map(id => (
+              {[...config.includedWidgets]
+                .sort((a, b) => ALL_WIDGETS.findIndex(w => w.id === a) - ALL_WIDGETS.findIndex(w => w.id === b))
+                .map(id => (
                 <div key={id} style={styles.edgeItem}>
                   {WIDGET_ICONS[id]} {ALL_WIDGETS.find(w => w.id === id)?.label}
+                  {id === 'i18n' && (
+                    <span style={{ marginLeft: 'auto', padding: '1px 7px', borderRadius: 999, background: 'rgba(255,255,255,0.16)', fontSize: 11, fontWeight: 600 }}>PT</span>
+                  )}
                 </div>
               ))}
             </div>

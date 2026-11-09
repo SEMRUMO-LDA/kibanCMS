@@ -181,8 +181,10 @@
     var root = document.documentElement;
     if (clusterConfig.accentColor) {
       root.style.setProperty('--kiban-widget-tint', clusterConfig.accentColor);
+      root.setAttribute('data-kiban-tint', '');
     } else {
       root.style.removeProperty('--kiban-widget-tint');
+      root.removeAttribute('data-kiban-tint');
     }
     // Re-arrange in case the inclusion list changed widgets that were
     // already registered when the config arrived.
@@ -232,6 +234,23 @@
   // controls whether it's *visible* (left here intentionally so a future
   // version can drop this exemption when we ship a sub-menu).
   var CLUSTER_KIND_EXEMPT = ['i18n'];
+  // i18n joins the cluster when its public API is available: the menu then
+  // lists the languages itself (it can't just "click" the in-place pill).
+  function i18nApi() {
+    var api = window.KibanI18n;
+    if (!api || typeof api.getLanguages !== 'function' || typeof api.setLanguage !== 'function') return null;
+    var langs = api.getLanguages() || [];
+    return langs.length > 1 ? api : null;
+  }
+  function isClusterExempt(id) {
+    if (id === 'i18n') return !i18nApi();
+    return CLUSTER_KIND_EXEMPT.indexOf(id) !== -1;
+  }
+  // Re-render menus when the language changes (badge shows the current one)
+  window.addEventListener('kiban-lang-change', function () {
+    clearTimeout(stackTimer);
+    stackTimer = setTimeout(function () { arrangeStack(); }, 60);
+  });
 
   var stackItems = {};
   var clusters = {};   // per-corner: { trigger, panel, open }
@@ -270,8 +289,15 @@
       '@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {',
       '  .kiban-glass { background: rgba(20, 20, 22, 0.92); }',
       '}',
-      ':root:not([data-kiban-no-tint]) .kiban-glass {',
+      ':root[data-kiban-tint]:not([data-kiban-no-tint]) .kiban-glass {',
       '  background: color-mix(in srgb, var(--kiban-widget-tint, transparent) 22%, rgba(20, 20, 22, 0.55));',
+      '}',
+      // Menus with TEXT (edge menu, language tray) need a denser glass: at
+      // 55% over a white page the white labels drop below WCAG AA contrast.
+      // 86% keeps the glass look while staying readable on any background.
+      '.kiban-edge-panel.kiban-glass, .kiban-lang-tray.kiban-glass { background: rgba(20, 20, 22, 0.86); }',
+      ':root[data-kiban-tint]:not([data-kiban-no-tint]) .kiban-edge-panel.kiban-glass, :root[data-kiban-tint]:not([data-kiban-no-tint]) .kiban-lang-tray.kiban-glass {',
+      '  background: color-mix(in srgb, var(--kiban-widget-tint, transparent) 22%, rgba(20, 20, 22, 0.86));',
       '}',
       // Trigger is fixed to the corner. Items inside the panel are
       // statically positioned so they actually participate in the
@@ -374,8 +400,26 @@
       '}',
       '.kiban-edge-item:hover, .kiban-edge-item:focus-visible { background: rgba(255, 255, 255, 0.12); outline: none; }',
       '.kiban-edge-item svg, .kiban-edge-item img { width: 20px; height: 20px; flex: 0 0 20px; pointer-events: none; }',
+      // Language: badge with the current code, submenu (edge) / tray (corner)
+      '.kiban-edge-badge { margin-left: auto; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,0.16); font: 600 11px/1.4 -apple-system, sans-serif; letter-spacing: .04em; text-transform: uppercase; }',
+      '.kiban-edge-chevron { width: 14px; height: 14px; flex: 0 0 14px; opacity: .8; transition: transform .2s ease; }',
+      '.kiban-edge-item[aria-expanded="true"] .kiban-edge-chevron { transform: rotate(180deg); }',
+      '.kiban-edge-sub { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 4px 32px; }',
+      '.kiban-edge-sub[hidden] { display: none; }',
+      '.kiban-edge-subitem { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: rgba(255,255,255,.85); cursor: pointer; text-align: left; font: 500 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }',
+      '.kiban-edge-subitem:hover, .kiban-edge-subitem:focus-visible { background: rgba(255,255,255,0.12); outline: none; color: #fff; }',
+      '.kiban-edge-subitem[aria-checked="true"] { color: #fff; font-weight: 600; }',
+      '.kiban-edge-subitem .kiban-edge-check { width: 14px; flex: 0 0 14px; text-align: center; }',
+      '.kiban-cluster-item.kiban-lang-item { position: relative; font: 600 11px/1 -apple-system, sans-serif; letter-spacing: .06em; text-transform: uppercase; }',
+      '.kiban-lang-tray { position: absolute; top: 50%; transform: translateY(-50%); display: none; gap: 4px; padding: 4px; border-radius: 999px; white-space: nowrap; }',
+      '.kiban-lang-tray[data-open="true"] { display: flex; }',
+      '.kiban-lang-tray[data-side="left"]  { left: calc(100% + 8px); }',
+      '.kiban-lang-tray[data-side="right"] { right: calc(100% + 8px); }',
+      '.kiban-lang-code { padding: 8px 12px; border: 0; border-radius: 999px; background: transparent; color: rgba(255,255,255,.7); cursor: pointer; font: 600 11px/1 -apple-system, sans-serif; letter-spacing: .06em; text-transform: uppercase; }',
+      '.kiban-lang-code:hover, .kiban-lang-code:focus-visible { color: #fff; background: rgba(255,255,255,.12); outline: none; }',
+      '.kiban-lang-code[aria-checked="true"] { color: #fff; background: rgba(255,255,255,.2); }',
       '@media (prefers-reduced-motion: reduce) {',
-      '  .kiban-cluster-trigger, .kiban-cluster-item, .kiban-edge-tab, .kiban-edge-panel { transition: none; }',
+      '  .kiban-cluster-trigger, .kiban-cluster-item, .kiban-edge-tab, .kiban-edge-panel, .kiban-edge-chevron { transition: none; }',
       '}',
     ].join('\n');
     document.head.appendChild(style);
@@ -394,8 +438,14 @@
     + '<line x1="4" y1="18" x2="13" y2="18"/><line x1="17" y1="18" x2="20" y2="18"/>'
     + '<circle cx="15" cy="18" r="2" fill="currentColor"/></svg>';
 
-  function cloneIconFor(item) {
+  var GLOBE_ICON_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" '
+    + 'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20"/></svg>';
+
+  function cloneIconFor(item, id) {
     if (item.cluster && item.cluster.icon) return item.cluster.icon;
+    if (id === 'i18n') return GLOBE_ICON_SVG; // the language pill has no icon of its own
     var el = document.querySelector(item.selector);
     if (el) {
       var svg = el.querySelector('svg, img');
@@ -603,11 +653,23 @@
     positionCluster(corner, c);
     ensureBodyObserver();
 
-    // Re-render proxy items each pass — cheap, and handles widgets that
-    // register or de-register dynamically.
+    // Re-render proxy items only when the set (or current language) changed,
+    // so an open panel/language tray isn't reset by a background re-arrange.
+    var api18c = i18nApi();
+    var sigC = ids.join(',') + '|' + (api18c ? api18c.getLanguage() : '');
+    if (c.signature === sigC) {
+      ids.forEach(function (id) { stashElement(stackItems[id].selector); });
+      return;
+    }
+    c.signature = sigC;
     c.panel.innerHTML = '';
     ids.forEach(function (id, idx) {
       var item = stackItems[id];
+      if (id === 'i18n' && i18nApi()) {
+        stashElement(item.selector);
+        c.panel.appendChild(buildCornerLanguageItem(corner, idx));
+        return;
+      }
       // Move the original element(s) into the off-screen stash so they
       // can't peek through behind the cluster trigger or steal pointer
       // events. stashElement handles duplicate matches (Silktide can
@@ -623,7 +685,7 @@
       btn.setAttribute('aria-label',
         (item.cluster && item.cluster.label) || id);
       btn.style.transitionDelay = (idx * 40) + 'ms';
-      btn.innerHTML = cloneIconFor(item);
+      btn.innerHTML = cloneIconFor(item, id);
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         activateItem(item);
@@ -631,6 +693,50 @@
       });
       c.panel.appendChild(btn);
     });
+  }
+
+  function buildCornerLanguageItem(corner, idx) {
+    var api = i18nApi();
+    var current = api.getLanguage();
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kiban-cluster-item kiban-glass kiban-lang-item';
+    btn.setAttribute('role', 'menuitem');
+    btn.setAttribute('data-widget-id', 'i18n');
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', EDGE_LABELS[edgeLang()].i18n + ': ' + String(current).toUpperCase());
+    btn.style.transitionDelay = (idx * 40) + 'ms';
+    btn.appendChild(document.createTextNode(String(current).toUpperCase()));
+
+    var tray = document.createElement('div');
+    tray.className = 'kiban-lang-tray kiban-glass';
+    tray.setAttribute('role', 'group');
+    tray.setAttribute('data-side', corner.charAt(1) === 'l' ? 'left' : 'right');
+    api.getLanguages().forEach(function (lang) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'kiban-lang-code';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', lang.code === current ? 'true' : 'false');
+      b.setAttribute('aria-label', lang.name || lang.code);
+      b.textContent = lang.code;
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        api.setLanguage(lang.code);
+        setClusterOpen(corner, false);
+      });
+      tray.appendChild(b);
+    });
+    btn.appendChild(tray);
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (e.target !== btn) return; // clicks on the codes are handled above
+      var open = tray.getAttribute('data-open') !== 'true';
+      tray.setAttribute('data-open', open ? 'true' : 'false');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    return btn;
   }
 
   function destroyCluster(corner) {
@@ -707,7 +813,7 @@
         if (!edge || !edge.open) return;
         if (e.key === 'Escape') { setEdgeOpen(false, 'tab'); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-          var items = Array.prototype.slice.call(edge.panel.querySelectorAll('.kiban-edge-item'));
+          var items = Array.prototype.slice.call(edge.panel.querySelectorAll('.kiban-edge-item, .kiban-edge-sub:not([hidden]) .kiban-edge-subitem'));
           if (!items.length) return;
           var i = items.indexOf(document.activeElement);
           var next = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
@@ -723,17 +829,30 @@
     edge.tab.title = EDGE_LABELS[edgeLang()].tab;
     ensureBodyObserver();
 
+    // Re-arranges run several times after load (late widgets) and on every
+    // registration: rebuilding the menu each time collapsed the language
+    // list and dropped focus while the visitor was using it. Only rebuild
+    // when what the menu shows actually changed.
+    var api18 = i18nApi();
+    var signature = ids.join(',') + '|' + edgeLang() + '|' + (api18 ? api18.getLanguage() : '');
+    ids.forEach(function (id) { stashElement(stackItems[id].selector); });
+    if (edge.signature === signature) return;
+    edge.signature = signature;
+
     edge.panel.innerHTML = '';
     ids.forEach(function (id) {
       var item = stackItems[id];
-      stashElement(item.selector);
+      if (id === 'i18n' && i18nApi()) {
+        edge.panel.appendChild(buildEdgeLanguageGroup(item));
+        return;
+      }
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'kiban-edge-item';
       btn.setAttribute('role', 'menuitem');
       btn.setAttribute('data-widget-id', id);
       var label = edgeLabel(id, item);
-      btn.innerHTML = cloneIconFor(item) + '<span></span>';
+      btn.innerHTML = cloneIconFor(item, id) + '<span></span>';
       btn.lastChild.textContent = label;
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -742,6 +861,61 @@
       });
       edge.panel.appendChild(btn);
     });
+  }
+
+  var CHEVRON_SVG = '<svg class="kiban-edge-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  function buildEdgeLanguageGroup(item) {
+    var api = i18nApi();
+    var current = api.getLanguage();
+    var group = document.createElement('div');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'kiban-edge-item';
+    btn.setAttribute('role', 'menuitem');
+    btn.setAttribute('data-widget-id', 'i18n');
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', 'kiban-edge-langs');
+    btn.innerHTML = cloneIconFor(item, 'i18n') + '<span></span><span class="kiban-edge-badge"></span>' + CHEVRON_SVG;
+    btn.children[1].textContent = edgeLabel('i18n', item);
+    btn.querySelector('.kiban-edge-badge').textContent = String(current);
+
+    var sub = document.createElement('div');
+    sub.id = 'kiban-edge-langs';
+    sub.className = 'kiban-edge-sub';
+    sub.setAttribute('role', 'group');
+    sub.hidden = true;
+    api.getLanguages().forEach(function (lang) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'kiban-edge-subitem';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', lang.code === current ? 'true' : 'false');
+      b.innerHTML = '<span class="kiban-edge-check" aria-hidden="true"></span><span></span>';
+      b.firstChild.textContent = lang.code === current ? '✓' : '';
+      b.lastChild.textContent = lang.name || String(lang.code).toUpperCase();
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        api.setLanguage(lang.code);
+        setEdgeOpen(false, 'none');
+      });
+      sub.appendChild(b);
+    });
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = sub.hidden;
+      sub.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) {
+        var checked = sub.querySelector('[aria-checked="true"]') || sub.firstChild;
+        if (checked) setTimeout(function () { try { checked.focus(); } catch (_) {} }, 20);
+      }
+    });
+    group.appendChild(btn);
+    group.appendChild(sub);
+    return group;
   }
 
   function destroyEdgeCluster() {
@@ -773,7 +947,7 @@
       var edgeIds = [];
       Object.keys(byCorner).forEach(function (corner) {
         byCorner[corner] = byCorner[corner].filter(function (id) {
-          var inEdge = includedEdge.indexOf(id) !== -1 && CLUSTER_KIND_EXEMPT.indexOf(id) === -1;
+          var inEdge = includedEdge.indexOf(id) !== -1 && !isClusterExempt(id);
           if (inEdge) edgeIds.push(id);
           return !inEdge;
         });
@@ -816,7 +990,7 @@
       var includedSet = clusterConfig.includedWidgets || [];
       var clusterables = ids.filter(function (id) {
         return includedSet.indexOf(id) !== -1
-            && CLUSTER_KIND_EXEMPT.indexOf(id) === -1;
+            && !isClusterExempt(id);
       });
       var exempt = ids.filter(function (id) {
         return clusterables.indexOf(id) === -1;
