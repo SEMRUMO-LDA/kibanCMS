@@ -15,6 +15,7 @@ Each client (tenant) has its own Supabase project. Every tenant must have
 | `009_schema_status.sql` | `kiban_schema_status()` used by Settings → Health. **Bump its `schema_version` (and `EXPECTED_SCHEMA_VERSION` in the API) with every new migration** — the latest definition lives in the newest migration. | Yes |
 | `010_addons_improvements.sql` | Translation cache table, lead status/notes fields on form submissions, sitemap collections field on SEO settings, schema status v10 | Yes |
 | `011_meta_capi_fields.sql` | Meta Pixel autoload + Conversions API fields on SEO settings (form fields only) | Yes |
+| `012_google_tags_fields.sql` | Google Ads ID, Google tags autoload and Consent Mode fields on SEO settings (form fields only) | Yes |
 
 ## New tenant
 
@@ -25,7 +26,7 @@ files above in order in the tenant's Supabase SQL Editor.
 
 Never run `CLEAN_RESET.sql` on a tenant with real data. Paste
 **`database/UPGRADE_TENANT.sql`** into the tenant's SQL Editor and run it: it
-contains 002 → 011 in one transaction (all or nothing) and ends with a
+contains 002 → 012 in one transaction (all or nothing) and ends with a
 checklist query. Repeat for every tenant.
 
 `UPGRADE_TENANT.sql` is generated — after adding or changing a numbered

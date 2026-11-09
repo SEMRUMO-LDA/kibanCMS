@@ -39,6 +39,7 @@ SCHEMA_FILES=(
   "$MIGRATIONS_DIR/009_schema_status.sql"
   "$MIGRATIONS_DIR/010_addons_improvements.sql"
   "$MIGRATIONS_DIR/011_meta_capi_fields.sql"
+  "$MIGRATIONS_DIR/012_google_tags_fields.sql"
 )
 
 # Colors

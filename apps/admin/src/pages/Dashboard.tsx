@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import { api } from '../lib/api';
+import { MarketingCard } from '../components/dashboard/MarketingCard';
 import { useI18n } from '../lib/i18n';
 import {
   FileText, Users, Image as ImageIcon, Box, 
@@ -412,6 +413,8 @@ export const Dashboard = () => {
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: spacing[5] }}>
+          <MarketingCard />
+
           {/* Entries per Collection */}
           <Card>
             <CardHeader>

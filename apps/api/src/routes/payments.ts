@@ -595,6 +595,7 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             phone: orderContent.customer_phone,
             name: orderContent.customer_name,
             orderId: orderContent.order_number || orderId,
+            schedule: (() => { try { return JSON.parse(orderContent.related_booking_ids || '[]').length > 0; } catch { return false; } })(),
           });
 
           // Confirm related bookings + fire booking emails
@@ -741,6 +742,7 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             name: content.customer_name,
             orderId: bookingId,
             contentName: content.resource_title,
+            schedule: true,
           });
 
           // Send customer confirmation + admin notification (non-blocking)

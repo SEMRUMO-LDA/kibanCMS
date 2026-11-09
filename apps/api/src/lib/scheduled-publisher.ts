@@ -14,6 +14,7 @@
 
 import { logger } from './logger.js';
 import { expireUnpaidBookingsForCurrentTenant } from './booking-capacity.js';
+import { purgeOldConsentsForCurrentTenant } from '../routes/marketing.js';
 import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
@@ -110,6 +111,9 @@ const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 // Unpaid checkout bookings: every 5 min per tenant is plenty (60 min holds).
 const lastBookingSweepAt = new Map<string, number>();
 const BOOKING_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+// Cookie consent log retention: once a day per tenant.
+const lastConsentPurgeAt = new Map<string, number>();
+const CONSENT_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 async function processCurrentTenant(): Promise<void> {
   await publishDueEntriesForCurrentTenant();
@@ -127,6 +131,15 @@ async function processCurrentTenant(): Promise<void> {
       await expireUnpaidBookingsForCurrentTenant();
     } catch (err: any) {
       logger.warn('Booking expiry sweep failed', { tenant: tenantId, error: err?.message });
+    }
+  }
+
+  if (Date.now() - (lastConsentPurgeAt.get(tenantId) || 0) > CONSENT_PURGE_INTERVAL_MS) {
+    lastConsentPurgeAt.set(tenantId, Date.now());
+    try {
+      await purgeOldConsentsForCurrentTenant();
+    } catch (err: any) {
+      logger.warn('Consent log purge failed', { tenant: tenantId, error: err?.message });
     }
   }
 }

@@ -130,18 +130,22 @@
   }
 
 
-  // ── Meta Pixel + conversion tracking (SEO add-on) ───────────────────
-  // Makes the Pixel and the Conversions API work on every site that loads
-  // this script, without site code changes. GDPR: the Pixel is injected
-  // ONLY after the visitor accepted marketing cookies in the Kiban banner,
-  // and conversions carry the consent flag the server checks before sending
-  // anything to Meta.
+  // ── Marketing tags: Meta Pixel, Google (Consent Mode v2), conversions ──
+  // Makes the Pixel, Google Analytics / Ads / Tag Manager and the Meta
+  // Conversions API work on every site that loads this script, without site
+  // code changes. GDPR: tags follow the visitor's choice in the Kiban cookie
+  // banner (KibanCookieNotice only reports consent once it has validated the
+  // stored choice: expiry, banner version), and conversions carry the
+  // consent flag the server checks before sending anything to Meta.
   var pixel = { id: null, loadedByKiban: false };
+  var google = { ga: '', ads: '', gtm: '', mode: 'basic', ready: false, own: false,
+    gtagLoaded: false, gaOn: false, adsOn: false, gtmOn: false, lastState: '' };
 
-  function hasMarketingConsent() {
+  function hasConsent(category) {
     var cn = window.KibanCookieNotice;
-    return !!(cn && typeof cn.hasConsentFor === 'function' && cn.hasConsentFor('marketing'));
+    return !!(cn && typeof cn.hasConsentFor === 'function' && cn.hasConsentFor(category));
   }
+  function hasMarketingConsent() { return hasConsent('marketing'); }
 
   function readCookie(name) {
     var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
@@ -172,6 +176,14 @@
     } catch (_) { return undefined; }
   }
 
+  function injectScript(src) {
+    var t = document.createElement('script');
+    t.async = true;
+    t.src = src;
+    (document.head || document.documentElement).appendChild(t);
+  }
+
+  // ── Meta Pixel ──
   function loadPixel() {
     if (!pixel.id || !hasMarketingConsent()) return;
     if (window.fbq) return; // the site installs its own Pixel — never double-load
@@ -193,6 +205,133 @@
     window.addEventListener('popstate', function () { try { window.fbq('track', 'PageView'); } catch (_) {} });
   }
 
+  // ── Google: GA4 / Ads / Tag Manager with Consent Mode v2 ──
+  function googleConsentState() {
+    var a = hasConsent('analytics') ? 'granted' : 'denied';
+    var m = hasMarketingConsent() ? 'granted' : 'denied';
+    return { analytics_storage: a, ad_storage: m, ad_user_data: m, ad_personalization: m };
+  }
+
+  function initGoogle(a) {
+    var pick = function (v, re) { v = String(v || '').trim(); return re.test(v) ? v : ''; };
+    google.ga = pick(a.google_analytics, /^G-[A-Z0-9]{4,}$/i);
+    google.ads = pick(a.google_ads, /^AW-\d{5,}$/i);
+    google.gtm = pick(a.google_tag_manager, /^GTM-[A-Z0-9]{4,}$/i);
+    google.mode = a.google_consent_mode === 'advanced' ? 'advanced' : 'basic';
+    if (a.google_autoload === false || !(google.ga || google.ads || google.gtm)) return;
+    // The site already runs Google tags itself: don't load them twice, only
+    // keep its Consent Mode in sync with the banner.
+    google.own = typeof window.gtag === 'function'
+      || !!document.querySelector('script[src*="googletagmanager.com/gtag/js"],script[src*="googletagmanager.com/gtm.js"]');
+    window.dataLayer = window.dataLayer || [];
+    if (typeof window.gtag !== 'function') window.gtag = function () { window.dataLayer.push(arguments); };
+    if (!google.own) {
+      window.gtag('consent', 'default', {
+        ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied',
+        analytics_storage: 'denied', wait_for_update: 500,
+      });
+    }
+    google.ready = true;
+    syncGoogle();
+  }
+
+  function syncGoogle() {
+    if (!google.ready) return;
+    var s = googleConsentState();
+    var key = JSON.stringify(s);
+    if (key !== google.lastState) {
+      google.lastState = key;
+      window.gtag('consent', 'update', s);
+    }
+    if (google.own) return;
+    // Basic mode (default): each tag loads only after the matching consent.
+    // Advanced: tags load at once and send cookieless pings until consent.
+    var adv = google.mode === 'advanced';
+    var wantGa = !!google.ga && (adv || s.analytics_storage === 'granted');
+    var wantAds = !!google.ads && (adv || s.ad_storage === 'granted');
+    var wantGtm = !!google.gtm && (adv || s.analytics_storage === 'granted' || s.ad_storage === 'granted');
+    if ((wantGa || wantAds) && !google.gtagLoaded) {
+      google.gtagLoaded = true;
+      window.gtag('js', new Date());
+      injectScript('https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(wantGa ? google.ga : google.ads));
+    }
+    if (wantGa && !google.gaOn) { google.gaOn = true; window.gtag('config', google.ga); }
+    if (wantAds && !google.adsOn) { google.adsOn = true; window.gtag('config', google.ads); }
+    if (wantGtm && !google.gtmOn) {
+      google.gtmOn = true;
+      window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
+      injectScript('https://www.googletagmanager.com/gtm.js?id=' + encodeURIComponent(google.gtm));
+    }
+  }
+
+  // ── Conversions (browser side) ──
+  var CONVERSIONS = {
+    lead:     { fb: 'Lead',                 ga: 'generate_lead' },
+    signup:   { fb: 'CompleteRegistration', ga: 'sign_up' },
+    checkout: { fb: 'InitiateCheckout',     ga: 'begin_checkout' },
+    contact:  { fb: 'Contact',              ga: 'contact' },
+  };
+
+  function fireConversion(kind, eventId, params) {
+    var c = CONVERSIONS[kind];
+    if (!c) return;
+    params = params || {};
+    // Meta: only with marketing consent; same event_id as the server event
+    try { if (hasMarketingConsent() && typeof window.fbq === 'function') window.fbq('track', c.fb, params, { eventID: eventId }); } catch (_) {}
+    // Google: Consent Mode decides what the tags may store/send
+    try {
+      if ((google.gaOn || google.adsOn || google.own) && typeof window.gtag === 'function') window.gtag('event', c.ga, params);
+    } catch (_) {}
+    // Tag Manager / custom setups
+    try {
+      if (window.dataLayer && typeof window.dataLayer.push === 'function') {
+        var dl = { event: 'kiban_' + kind, kiban_event_id: eventId };
+        for (var k in params) dl['kiban_' + k] = params[k];
+        window.dataLayer.push(dl);
+      }
+    } catch (_) {}
+  }
+
+  // WhatsApp / phone / email clicks → Contact (browser + Conversions API)
+  var lastContactAt = 0;
+  function trackContact(method) {
+    if (Date.now() - lastContactAt < 1500) return; // one click, one event
+    lastContactAt = Date.now();
+    var t = buildTracking();
+    fireConversion('contact', t.event_id, { method: method });
+    if (!t.marketing_consent) return; // the server would not send it anyway
+    try {
+      var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + API_KEY };
+      if (TENANT_ID) headers['X-Tenant'] = TENANT_ID;
+      fetch(BASE_URL + '/api/v1/marketing/track', {
+        method: 'POST', headers: headers, keepalive: true,
+        body: JSON.stringify({ event: 'Contact', method: method, tracking: t }),
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
+  function contactMethod(href) {
+    if (/^tel:/i.test(href)) return 'phone';
+    if (/^mailto:/i.test(href)) return 'email';
+    if (/^(https?:\/\/)?(wa\.me\/|api\.whatsapp\.com\/|web\.whatsapp\.com\/|chat\.whatsapp\.com\/)|^whatsapp:/i.test(href)) return 'whatsapp';
+    return '';
+  }
+
+  function installContactTracking() {
+    document.addEventListener('click', function (e) {
+      try {
+        var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        var m = contactMethod(a.getAttribute('href') || '');
+        if (m) trackContact(m);
+      } catch (_) {}
+    }, true);
+    // The Kiban WhatsApp widget opens the chat with window.open, not a link
+    window.addEventListener('kiban-contact', function (e) {
+      trackContact((e && e.detail && e.detail.method) || 'whatsapp');
+    });
+  }
+
   function fetchSeoConfig(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/seo');
@@ -208,26 +347,28 @@
     xhr.send();
   }
 
-  function initPixel() {
+  function initMarketing() {
     fetchSeoConfig(function (a) {
       var id = String(a.facebook_pixel || '').replace(/\D/g, '');
-      if (!id || a.facebook_pixel_autoload === false) return;
-      pixel.id = id;
-      loadPixel();
-      window.addEventListener('kiban-consent-change', loadPixel);
+      if (id && a.facebook_pixel_autoload !== false) pixel.id = id;
+      initGoogle(a);
+      var onConsent = function () { loadPixel(); syncGoogle(); };
+      onConsent();
+      window.addEventListener('kiban-consent-change', onConsent);
+      window.addEventListener('kiban-consent-ready', onConsent);
     });
   }
 
   // Conversions sent by the site to this CMS get `tracking` added
   // automatically (consent, event_id, _fbp/_fbc, page) unless the site
-  // already sends it. On success, the matching Pixel event fires with the
-  // same event_id so Meta deduplicates it against the server event.
+  // already sends it. On success, the matching browser events fire (Meta
+  // with the same event_id, so Meta deduplicates it against the server event).
   var TRACKED_PATHS = [
-    { re: /\/api\/v1\/forms\/submit(?:\?|$)/, pixelEvent: 'Lead' },
-    { re: /\/api\/v1\/newsletter\/subscribe(?:\?|$)/, pixelEvent: 'CompleteRegistration' },
-    { re: /\/api\/v1\/checkout\/create-session(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
-    { re: /\/api\/v1\/bookings(?:\/v2)?\/checkout(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
-    { re: /\/api\/v1\/payments\/create-session(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
+    { re: /\/api\/v1\/forms\/submit(?:\?|$)/, kind: 'lead' },
+    { re: /\/api\/v1\/newsletter\/subscribe(?:\?|$)/, kind: 'signup' },
+    { re: /\/api\/v1\/checkout\/create-session(?:\?|$)/, kind: 'checkout' },
+    { re: /\/api\/v1\/bookings(?:\/v2)?\/checkout(?:\?|$)/, kind: 'checkout' },
+    { re: /\/api\/v1\/payments\/create-session(?:\?|$)/, kind: 'checkout' },
   ];
 
   function installConversionTracking() {
@@ -235,7 +376,7 @@
     var originalFetch = window.fetch;
     var wrapped = function (input, init) {
       try {
-        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        var url = typeof input === 'string' ? input : (input && input.url) || String(input || '');
         var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
         var match = null;
         if (method === 'POST' && url.indexOf(BASE_URL + '/api/v1/') === 0) {
@@ -245,6 +386,7 @@
         }
         if (match && init && typeof init.body === 'string') {
           var body = JSON.parse(init.body);
+          // Sites that send their own `tracking` also fire their own events
           if (body && typeof body === 'object' && !Array.isArray(body) && !body.tracking) {
             var t = buildTracking();
             body.tracking = t;
@@ -252,11 +394,7 @@
             for (var k in init) newInit[k] = init[k];
             newInit.body = JSON.stringify(body);
             return originalFetch.call(this, input, newInit).then(function (res) {
-              try {
-                if (res && res.ok && t.marketing_consent && window.fbq) {
-                  window.fbq('track', match.pixelEvent, {}, { eventID: t.event_id });
-                }
-              } catch (_) {}
+              try { if (res && res.ok) fireConversion(match.kind, t.event_id); } catch (_) {}
               return res;
             });
           }
@@ -271,7 +409,7 @@
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
     bootTime = Date.now();
-    initPixel();
+    initMarketing();
     // Kick the cluster config fetch first so its accent colour lands on
     // :root before any widget renders. The script-tag fetches don't wait
     // for it — we don't want a missing config to block the page either.
@@ -335,6 +473,7 @@
   }
 
   installConversionTracking();
+  installContactTracking();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

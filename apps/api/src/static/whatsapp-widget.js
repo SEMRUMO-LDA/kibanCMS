@@ -355,6 +355,9 @@
         try { localStorage.setItem(STORAGE_CONSENT, '1'); } catch (e) {}
       }
 
+      // Kiban widgets script: Contact event (Meta / Google, consent-gated)
+      try { window.dispatchEvent(new CustomEvent('kiban-contact', { detail: { method: 'whatsapp' } })); } catch (e) {}
+
       window.open(waUrl, '_blank', 'noopener');
     });
 
