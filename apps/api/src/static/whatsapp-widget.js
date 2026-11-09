@@ -144,14 +144,14 @@
       + '<style>'
       + '#kiban-wa-widget{position:fixed;z-index:2147483000;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
       +   (position === 'bottom-right' ? 'right:20px;' : 'left:20px;') + 'bottom:20px}'
-      + '#kiban-wa-btn{width:60px;height:60px;border-radius:50%;background:' + color + ';color:#fff;border:none;cursor:pointer;'
+      + '#kiban-wa-btn{width:48px;height:48px;border-radius:50%;background:' + color + ';color:#fff;border:none;cursor:pointer;'
       +   'box-shadow:0 4px 16px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s;position:relative}'
       + '#kiban-wa-btn:hover{transform:scale(1.06);box-shadow:0 6px 22px rgba(0,0,0,.22)}'
-      + '#kiban-wa-btn svg{width:32px;height:32px}'
-      + '#kiban-wa-bubble{position:absolute;top:-6px;right:-6px;background:#FF3B30;color:#fff;font-size:11px;font-weight:700;'
-      +   'min-width:20px;height:20px;padding:0 6px;border-radius:10px;display:flex;align-items:center;justify-content:center;'
+      + '#kiban-wa-btn svg{width:26px;height:26px}'
+      + '#kiban-wa-bubble{position:absolute;top:-4px;right:-4px;background:#FF3B30;color:#fff;font-size:10px;font-weight:700;'
+      +   'min-width:16px;height:16px;padding:0 4px;border-radius:8px;display:flex;align-items:center;justify-content:center;'
       +   'box-shadow:0 2px 6px rgba(0,0,0,.2)}'
-      + '#kiban-wa-popup{position:absolute;bottom:74px;' + (position === 'bottom-right' ? 'right:0;' : 'left:0;')
+      + '#kiban-wa-popup{position:absolute;bottom:62px;' + (position === 'bottom-right' ? 'right:0;' : 'left:0;')
       +   'width:340px;max-width:calc(100vw - 40px);background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);'
       +   'overflow:hidden;display:none;animation:kiban-wa-in .2s ease-out}'
       + '#kiban-wa-popup.open{display:block}'
@@ -231,11 +231,20 @@
 
     // Register with the universal loader so widgets in the same corner stack
     // instead of overlapping. No-op if loaded standalone.
+    // `cluster` tells the aggregator how to open the chat: its generic
+    // fallback clicked the first button in the widget (the popup's close
+    // button, which comes first in the markup) and the popup — positioned
+    // inside the widget — opened off-screen while the widget was stashed.
     if (window.KibanWidgets && typeof window.KibanWidgets.register === 'function') {
       window.KibanWidgets.register('whatsapp-widget', {
         selector: '#kiban-wa-widget',
         corner:   position,
-        height:   60,
+        height:   48,
+        cluster: {
+          label: 'WhatsApp',
+          icon: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2a9.9 9.9 0 0 0-8.6 14.82L2 22l5.31-1.39A9.9 9.9 0 1 0 12.04 2zm0 18.1a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.15.83.84-3.07-.2-.31a8.2 8.2 0 1 1 7 3.88zm4.5-6.14c-.25-.12-1.46-.72-1.69-.8-.23-.08-.39-.12-.56.12-.16.25-.64.8-.78.97-.15.16-.29.18-.53.06-.25-.12-1.05-.39-2-1.23-.74-.66-1.24-1.47-1.38-1.72-.15-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.15.16-.25.25-.41.08-.17.04-.31-.02-.43-.06-.13-.56-1.35-.76-1.84-.2-.48-.41-.42-.56-.43h-.48a.92.92 0 0 0-.67.31c-.23.25-.88.86-.88 2.09 0 1.23.9 2.42 1.02 2.59.12.16 1.77 2.7 4.29 3.79.6.26 1.07.41 1.43.53.6.19 1.15.16 1.58.1.48-.07 1.46-.6 1.67-1.18.2-.58.2-1.08.14-1.18-.06-.1-.23-.16-.47-.29z"/></svg>',
+          onActivate: function () { openFromCluster(); },
+        },
       });
     }
 
@@ -266,10 +275,60 @@
       popup.classList.remove('open');
     }
 
+    // Opened from the aggregator (corner cluster or side tab): the widget is
+    // stashed off-screen, so float the popup on the page — next to the side
+    // tab when that layout is used, else in the widget's corner.
+    function openFromCluster() {
+      if (popup.parentNode !== document.body) document.body.appendChild(popup);
+      var tab = document.getElementById('kiban-edge-tab');
+      var st = popup.style;
+      st.position = 'fixed';
+      st.zIndex = '2147483601';
+      st.left = st.right = st.top = st.bottom = st.transform = '';
+      var narrow = window.innerWidth <= 480;
+      if (tab) {
+        var side = tab.getAttribute('data-side') === 'left' ? 'left' : 'right';
+        st[side] = narrow ? '12px' : '48px';
+        if (narrow) st[side === 'left' ? 'right' : 'left'] = '12px';
+        st.bottom = 'auto'; // the stylesheet's bottom:62px would stretch it between top and bottom
+        st.visibility = 'hidden';
+        openPopup(); // display it to measure its height
+        st.top = Math.max(12, Math.round((window.innerHeight - popup.offsetHeight) / 2)) + 'px';
+        st.visibility = '';
+        setTimeout(function () { try { (closeBtn || cta).focus(); } catch (e) {} }, 30);
+        return;
+      } else {
+        var cornerSide = position === 'bottom-left' ? 'left' : 'right';
+        st.bottom = '16px';
+        st[cornerSide] = narrow ? '12px' : '16px';
+        if (narrow) st[cornerSide === 'left' ? 'right' : 'left'] = '12px';
+      }
+      openPopup();
+      setTimeout(function () { try { (closeBtn || cta).focus(); } catch (e) {} }, 30);
+    }
+
+    // Back to normal (the aggregator released the widget): dock the popup
+    // inside the widget again, above its own button.
+    function dockPopup() {
+      if (popup.parentNode === widget) return;
+      var st = popup.style;
+      st.position = st.zIndex = st.left = st.right = st.top = st.bottom = st.transform = st.visibility = '';
+      widget.insertBefore(popup, widget.firstChild);
+    }
+
     btn.addEventListener('click', function () {
+      dockPopup();
       if (popup.classList.contains('open')) closePopup(); else openPopup();
     });
     closeBtn.addEventListener('click', closePopup);
+    // Esc closes the chat; when it was opened from the side tab, focus
+    // returns there (keyboard users don't get lost).
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !popup.classList.contains('open')) return;
+      closePopup();
+      var tab = document.getElementById('kiban-edge-tab');
+      try { (popup.parentNode === document.body && tab ? tab : btn).focus(); } catch (err) {}
+    });
 
     if (consentCb && cta) {
       consentCb.addEventListener('change', function () {
