@@ -28,6 +28,12 @@
   var BASE_URL = srcUrl.origin;
   var CONSENT_KEY = 'kiban_cookie_consent';
   var offeredCategories = ['necessary'];
+  // Consent is only reported once the stored choice was validated against
+  // the CMS config (expiry, banner version) — until then nothing may load.
+  var ready = false;
+  var bannerEnabled = false;
+  var consentVersion = '';
+  var maxAgeMonths = 12;
   var VISITOR_KEY = 'kiban_visitor_id';
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
 
@@ -73,6 +79,7 @@
       consent_given: given,
       categories: categories,
       updated_at: new Date().toISOString(),
+      version: consentVersion,
     };
     saveConsent(data);
     // Let the site react (e.g. load the Meta Pixel only after marketing consent)
@@ -369,9 +376,57 @@
     });
   }
 
+  // Version of what the visitor was asked: the categories offered plus a
+  // number the admin bumps ("ask everyone again"). A different version means
+  // the old answer no longer covers what the site does.
+  function computeVersion(config) {
+    var cats = config.cookieTypes || {};
+    var offered = ['analytics', 'marketing', 'preferences'].filter(function (k) { return !!cats[k]; });
+    return String(parseInt(config.consentVersion, 10) || 1) + ':' + offered.join(',');
+  }
+
+  function clearStoredChoice() {
+    try { localStorage.removeItem(CONSENT_KEY); } catch (e) {}
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && (k.indexOf('stcm.') === 0 || k.indexOf('silktideCookieBanner_') === 0 || k.indexOf('silktideCookieChoice_') === 0)) keys.push(k);
+      }
+      keys.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+  }
+
+  /** Asks again when the choice is older than maxAgeMonths or the banner changed. */
+  function validateStoredChoice(config) {
+    consentVersion = computeVersion(config);
+    var m = parseInt(config.consentMaxAgeMonths, 10);
+    maxAgeMonths = m > 0 ? Math.min(m, 24) : 12;
+    var c = getConsent();
+    if (!c) return;
+    var age = c.updated_at ? Date.now() - Date.parse(c.updated_at) : 0;
+    var expired = age > maxAgeMonths * 30.44 * 86400000;
+    var changed = !!c.version && c.version !== consentVersion;
+    if (expired || changed) {
+      clearStoredChoice();
+    } else if (!c.version) {
+      // Choices saved before versioning: adopt them as the current version
+      c.version = consentVersion;
+      saveConsent(c);
+    }
+  }
+
+  function markReady() {
+    ready = true;
+    try { window.dispatchEvent(new CustomEvent('kiban-consent-ready', { detail: getConsent() })); } catch (e) {}
+  }
+
   function boot() {
     fetchConfig(function (err, res) {
       if (err || !res || !res.data) return;
+      bannerEnabled = res.data.enabled !== false;
+      if (bannerEnabled) validateStoredChoice(res.data);
+      markReady();
       initSilktide(res.data);
     });
   }
@@ -392,10 +447,14 @@
     /** true only if the visitor explicitly accepted this category ('marketing', 'analytics', 'preferences'). */
     hasConsentFor: function (category) {
       if (category === 'necessary') return true;
+      // Banner off or not validated yet → no consent (nothing may load)
+      if (!ready || !bannerEnabled) return false;
       var c = getConsent();
       return !!(c && c.categories && c.categories[category] === true);
     },
     getVisitorId: getVisitorId,
+    /** true once the stored choice was checked against the CMS config. */
+    isReady: function () { return ready; },
     reset: function () {
       localStorage.removeItem(CONSENT_KEY);
       // Also reset Silktide's state if available

@@ -1,4 +1,4 @@
-# kibanCMS — Meta Conversions API (CAPI)
+# kibanCMS — Marketing: Meta Pixel, Conversions API e Google
 
 > Envia conversões para a Meta a partir do servidor, além do Pixel no browser.
 > Recupera conversões perdidas por bloqueadores e browsers com proteção de
@@ -56,6 +56,59 @@ Limites: só são apanhados os pedidos feitos com `fetch` no browser. Formulári
 enviados a partir do servidor do site (Server Actions, route handlers) ou com
 `XMLHttpRequest` precisam do código manual abaixo. Para esses, a CAPI continua a
 funcionar, mas o consentimento tem de ser enviado pelo site; sem ele, nada é enviado.
+
+### Eventos automáticos
+
+| O visitante… | Meta (Pixel + CAPI) | Google (GA4 / Ads) |
+|---|---|---|
+| envia um formulário | `Lead` | `generate_lead` |
+| subscreve a newsletter | `CompleteRegistration` | `sign_up` |
+| começa um checkout / reserva | `InitiateCheckout` | `begin_checkout` |
+| clica em WhatsApp, `tel:` ou `mailto:` | `Contact` (browser + servidor) | `contact` (com `method`) |
+| paga (webhook Stripe) | `Purchase` (+ `Schedule` se for reserva) | — (importar do GA4 se preciso) |
+
+Para o Tag Manager, cada evento também vai para o `dataLayer` como `kiban_lead`,
+`kiban_signup`, `kiban_checkout` ou `kiban_contact` (com `kiban_event_id`).
+
+## Google: Analytics, Ads e Tag Manager (Consent Mode v2)
+
+SEO Settings → **Google Analytics ID** (`G-…`), **Google Ads ID** (`AW-…`) e/ou
+**Google Tag Manager** (`GTM-…`). Com *Install Google tags automatically* ligado
+(vem ligado por omissão), o script dos widgets:
+
+1. define o Consent Mode v2 com tudo **recusado** por omissão;
+2. atualiza-o conforme o banner: *Analíticos* → `analytics_storage`;
+   *Marketing* → `ad_storage`, `ad_user_data`, `ad_personalization`;
+3. **Modo básico** (por omissão, recomendado): o GA4 só carrega depois de
+   aceitar *Analíticos*, o Google Ads depois de aceitar *Marketing*.
+   **Modo avançado**: as tags carregam logo e enviam sinais sem cookies até
+   haver consentimento, o que deixa o Google estimar conversões de quem recusa.
+   Decisão legal do cliente.
+
+Se o site já tem o seu próprio `gtag`/GTM, o Kiban não carrega nada em
+duplicado e só mantém o Consent Mode sincronizado com o banner.
+
+## Validade do consentimento
+
+Add-ons → Cookie Notice → **Validade do consentimento**:
+
+- **Voltar a perguntar ao fim de** 12 meses (por omissão; 6 ou 13 opcional).
+- O banner volta a aparecer **sozinho** quando se liga/desliga uma categoria.
+- **Pedir consentimento a todos outra vez**: para mudanças de política.
+- **Apagar registos com mais de** 24 meses (por omissão). Nunca apaga registos
+  mais novos do que a validade do consentimento + 1 mês.
+- **Exportar registo (CSV)**: data, escolha por categoria, IP e browser.
+
+Enquanto o banner não validou a escolha guardada (ou se estiver desligado),
+`KibanCookieNotice.hasConsentFor()` responde `false` e nada carrega. Quando fica
+pronto dispara o evento `kiban-consent-ready`.
+
+## Dashboard
+
+O cartão **Marketing** no dashboard mostra a percentagem de visitantes que
+aceitam, personalizam ou rejeitam cookies (últimos 30 dias), as conversões do
+mês (contactos, newsletter, encomendas pagas) e avisa quando algo impede o
+Pixel ou o Google de carregar.
 
 ## RGPD — modo manual (sites sem o script dos widgets)
 

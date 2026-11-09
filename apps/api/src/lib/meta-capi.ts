@@ -23,7 +23,7 @@ import { getSingletonContent } from './sitemap.js';
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || 'v21.0';
 
-export type CapiEventName = 'Lead' | 'CompleteRegistration' | 'Purchase';
+export type CapiEventName = 'Lead' | 'CompleteRegistration' | 'Purchase' | 'Contact' | 'Schedule';
 
 export interface CapiConfig {
   enabled: boolean;
@@ -277,15 +277,28 @@ export function sendPurchase(opts: {
   name?: string;
   orderId?: string;
   contentName?: string;
+  /** Also send Schedule (a booking was confirmed by this payment). */
+  schedule?: boolean;
 }): void {
   const t = opts.stored;
   if (!t) return;
   const { firstName, lastName } = splitName(opts.name);
+  const user = { email: opts.email, phone: opts.phone, firstName, lastName, ip: t.ip, userAgent: t.ua };
+  if (opts.schedule) {
+    // Meta deduplicates on event_name + event_id, so sharing the id is fine
+    sendCapiEvent({
+      name: 'Schedule',
+      eventId: opts.eventId,
+      tracking: t,
+      user,
+      custom: opts.contentName ? { content_name: opts.contentName } : undefined,
+    }).catch(() => {});
+  }
   sendCapiEvent({
     name: 'Purchase',
     eventId: opts.eventId,
     tracking: t,
-    user: { email: opts.email, phone: opts.phone, firstName, lastName, ip: t.ip, userAgent: t.ua },
+    user,
     custom: {
       value: Math.round(opts.amountCents) / 100,
       currency: String(opts.currency || 'eur').toUpperCase(),

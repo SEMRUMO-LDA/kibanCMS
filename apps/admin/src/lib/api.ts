@@ -12,6 +12,13 @@ import { supabase, getTenantId } from './supabase';
 
 const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api/v1';
 
+export interface MarketingOverview {
+  consent: { visitors: number; all: number; rejected: number; custom: number; marketing: number; analytics: number; available: boolean; banner: boolean; offered: string[] };
+  conversions: { since: string; leads: number | null; signups: number | null; orders: number | null };
+  meta: { pixelId: string | null; pixelAutoload: boolean; capiEnabled: boolean; capiConfigured: boolean; sentSinceRestart: number; skippedNoConsent: number; lastSentAt: string | null; lastError: string | null; lastErrorAt: string | null };
+  google: { analytics: string | null; ads: string | null; tagManager: string | null; autoload: boolean; consentMode: 'basic' | 'advanced' };
+}
+
 interface ApiResponse<T = any> {
   data: T;
   meta?: any;
@@ -175,6 +182,39 @@ class ApiClient {
       summary: { error: number; warn: number; ok: number };
       checkedAt: string;
     }>('GET', '/site-health');
+  }
+
+  // ── Marketing ──
+  async getMarketingOverview() {
+    return this.request<MarketingOverview>('GET', '/marketing/overview');
+  }
+
+  /** Downloads the cookie consent log as CSV (admins). */
+  async downloadConsentsCsv(): Promise<{ error: string | null }> {
+    const token = await this.getToken();
+    if (!token) return { error: 'Not authenticated' };
+    try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      const tenantId = getTenantId();
+      if (tenantId) headers['X-Tenant'] = tenantId;
+      const res = await fetch(`${API_BASE}/marketing/consents.csv`, { headers });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        return { error: json?.error?.message || `HTTP ${res.status}` };
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cookie-consents-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message };
+    }
   }
 
   async getSiteConnection() {

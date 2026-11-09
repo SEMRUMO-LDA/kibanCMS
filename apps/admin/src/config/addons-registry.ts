@@ -125,6 +125,12 @@ const seo: AddonDefinition = {
         // Analytics
         { id: 'google_analytics', name: 'google_analytics', label: 'Google Analytics ID', type: 'text', placeholder: 'G-XXXXXXXXXX' },
         { id: 'google_tag_manager', name: 'google_tag_manager', label: 'Google Tag Manager', type: 'text', placeholder: 'GTM-XXXXXXX' },
+        { id: 'google_ads_id', name: 'google_ads_id', label: 'Google Ads ID', type: 'text', placeholder: 'AW-123456789', helpText: 'Optional. Google Ads conversion ID (Google Ads → Goals → Conversions → Tag setup)' },
+        { id: 'google_autoload', name: 'google_autoload', label: 'Install Google tags automatically', type: 'boolean', defaultValue: true, helpText: "The Kiban widgets script installs Google Analytics / Ads / Tag Manager with Consent Mode v2, following the visitor's cookie choice. Turn off if the site installs them itself." },
+        { id: 'google_consent_mode', name: 'google_consent_mode', label: 'Google Consent Mode', type: 'select', options: [
+          { label: 'Basic — load Google only after consent (recommended, GDPR)', value: 'basic' },
+          { label: 'Advanced — load before consent, cookieless pings until the visitor accepts', value: 'advanced' },
+        ], helpText: 'Advanced lets Google model conversions of visitors who refuse cookies, but sends cookieless data before consent — only if the client accepts that legal choice' },
         { id: 'facebook_pixel', name: 'facebook_pixel', label: 'Facebook Pixel ID', type: 'text', placeholder: '1234567890' },
         { id: 'meta_pixel_autoload', name: 'meta_pixel_autoload', label: 'Install Pixel automatically', type: 'boolean', defaultValue: true, helpText: 'The Kiban widgets script installs the Pixel on the site — only after the visitor accepts marketing cookies. Turn off if the site installs its own Pixel.' },
         { id: 'meta_capi_enabled', name: 'meta_capi_enabled', label: 'Meta Conversions API (CAPI)', type: 'boolean', helpText: 'Send Lead, CompleteRegistration and Purchase from the server (needs the Pixel ID above)' },

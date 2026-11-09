@@ -115,6 +115,10 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           facebook_pixel: clean(c.facebook_pixel),
           // widgets loader installs the Pixel (consent-gated) unless turned off
           facebook_pixel_autoload: !(c.meta_pixel_autoload === false || c.meta_pixel_autoload === 'false'),
+          // widgets loader installs GA4 / Ads / GTM with Consent Mode v2 unless turned off
+          google_ads: clean(c.google_ads_id),
+          google_autoload: !(c.google_autoload === false || c.google_autoload === 'false'),
+          google_consent_mode: c.google_consent_mode === 'advanced' ? 'advanced' : 'basic',
         },
         indexing: {
           robots_txt: clean(c.robots_txt),

@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { api, type MarketingOverview } from '../../lib/api';
 
 interface CookieConfig {
   enabled: boolean;
@@ -28,6 +29,10 @@ interface CookieConfig {
   primaryColor: string;
   backgroundColor: string;
   textColor: string;
+  // Consent lifecycle (GDPR)
+  consentVersion: number;
+  consentMaxAgeMonths: number;
+  consentRetentionMonths: number;
 }
 
 interface ConsentRecord {
@@ -59,6 +64,9 @@ const DEFAULT_CONFIG: CookieConfig = {
   primaryColor: '#533BE2',
   backgroundColor: '#FFFFFF',
   textColor: '#253B48',
+  consentVersion: 1,
+  consentMaxAgeMonths: 12,
+  consentRetentionMonths: 24,
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -209,6 +217,9 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [overview, setOverview] = useState<MarketingOverview['consent'] | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -232,29 +243,54 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
         .limit(50);
 
       if (consentData) setConsents(consentData);
+      const { data: ov } = await api.getMarketingOverview();
+      if (ov) setOverview(ov.consent);
       setLoading(false);
     }
     load();
   }, [supabase, addonId]);
 
-  const handleSave = async () => {
+  const persist = async (next: CookieConfig): Promise<boolean> => {
     setSaving(true);
     setSaveError(null);
     const { error } = await supabase
       .from('addon_configs')
-      .upsert({ addon_id: addonId, config }, { onConflict: 'addon_id' });
+      .upsert({ addon_id: addonId, config: next }, { onConflict: 'addon_id' });
     setSaving(false);
     if (error) {
       setSaveError(`${error.code || 'error'}: ${error.message}${error.details ? ` (${error.details})` : ''}`);
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!(await persist(config))) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const totalConsents = consents.length;
-  const accepted = consents.filter(c => c.consent_given).length;
-  const declined = totalConsents - accepted;
+  const handleAskAgain = async () => {
+    if (!window.confirm('Todos os visitantes voltam a ver o banner e têm de escolher outra vez. Usa isto quando mudas os cookies ou a política. Continuar?')) return;
+    const next = { ...config, consentVersion: (Number(config.consentVersion) || 1) + 1 };
+    if (await persist(next)) {
+      setConfig(next);
+      setNotice('Feito: os visitantes vão voltar a ver o banner (até 5 minutos para chegar a todos).');
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    const { error } = await api.downloadConsentsCsv();
+    setExporting(false);
+    if (error) setSaveError(`Exportação falhou — ${error}`);
+  };
+
+  // Last 30 days, latest choice per visitor (falls back to the 50 most recent rows)
+  const totalConsents = overview ? overview.visitors : consents.length;
+  const accepted = overview ? overview.all + overview.custom : consents.filter(c => c.consent_given).length;
+  const declined = overview ? overview.rejected : totalConsents - accepted;
+  const pct = (n: number) => (totalConsents ? ` (${Math.round((n / totalConsents) * 100)}%)` : '');
 
   if (loading) return <p>Loading cookie settings...</p>;
 
@@ -267,21 +303,63 @@ export function CookieSettingsPage({ supabase, addonId = 'cookie-notice' }: Cook
 
       {/* Stats */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Consent Overview</h3>
+        <h3 style={styles.sectionTitle}>Consentimentos {overview ? '— últimos 30 dias' : ''}</h3>
         <div style={styles.statsGrid}>
           <div style={styles.statCard}>
             <p style={styles.statNumber}>{totalConsents}</p>
-            <p style={styles.statLabel}>Total Responses</p>
+            <p style={styles.statLabel}>Visitantes que responderam</p>
           </div>
           <div style={styles.statCard}>
             <p style={{ ...styles.statNumber, color: '#16a34a' }}>{accepted}</p>
-            <p style={styles.statLabel}>Accepted</p>
+            <p style={styles.statLabel}>Aceitaram{pct(accepted)}{overview && overview.custom ? ` · ${overview.custom} parcialmente` : ''}</p>
           </div>
           <div style={styles.statCard}>
             <p style={{ ...styles.statNumber, color: '#dc2626' }}>{declined}</p>
-            <p style={styles.statLabel}>Declined</p>
+            <p style={styles.statLabel}>Rejeitaram{pct(declined)}</p>
           </div>
         </div>
+        <div style={{ marginTop: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button type="button" style={{ ...styles.btnSave, background: '#fff', color: '#374151', border: '1px solid #d1d5db' }} onClick={handleExport} disabled={exporting}>
+            {exporting ? 'A exportar…' : 'Exportar registo (CSV)'}
+          </button>
+        </div>
+        <p style={{ fontSize: '12px', color: '#6b7280', margin: '8px 0 0' }}>
+          Prova de consentimento (RGPD): data, escolha por categoria, IP e browser de cada resposta.
+        </p>
+      </div>
+
+      {/* Consent lifecycle */}
+      <div style={styles.section}>
+        <h3 style={styles.sectionTitle}>Validade do consentimento</h3>
+        <p style={styles.sectionSubtitle}>As autoridades de proteção de dados recomendam voltar a perguntar ao fim de 12 meses (no máximo 13).</p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div style={styles.field}>
+            <label style={styles.label}>Voltar a perguntar ao fim de</label>
+            <select style={styles.select} value={config.consentMaxAgeMonths}
+              onChange={e => setConfig(c => ({ ...c, consentMaxAgeMonths: Number(e.target.value) }))}>
+              <option value={6}>6 meses</option>
+              <option value={12}>12 meses (recomendado)</option>
+              <option value={13}>13 meses</option>
+            </select>
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Apagar registos de consentimento com mais de</label>
+            <select style={styles.select} value={config.consentRetentionMonths}
+              onChange={e => setConfig(c => ({ ...c, consentRetentionMonths: Number(e.target.value) }))}>
+              <option value={24}>24 meses (recomendado)</option>
+              <option value={36}>36 meses</option>
+              <option value={60}>5 anos</option>
+              <option value={0}>Nunca apagar</option>
+            </select>
+          </div>
+        </div>
+        <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }}>
+          O banner também volta a aparecer sozinho quando ligas ou desligas uma categoria de cookies.
+        </p>
+        <button type="button" style={{ ...styles.btnSave, background: '#fff', color: '#b45309', border: '1px solid #fcd34d' }} onClick={handleAskAgain} disabled={saving}>
+          Pedir consentimento a todos outra vez
+        </button>
+        {notice && <p style={{ fontSize: '13px', color: '#15803d', margin: '8px 0 0' }}>{notice}</p>}
       </div>
 
       {/* Settings */}

@@ -28,6 +28,7 @@ import couponsRouter from './routes/coupons.js';
 import affiliatesRouter from './routes/affiliates.js';
 import emailRouter from './routes/email.js';
 import siteHealthRouter from './routes/site-health.js';
+import { marketingAdminRouter, trackHandler } from './routes/marketing.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
@@ -315,6 +316,9 @@ app.use('/api/v1/channel-manager', (req, res, next) => {
 }, channelManagerRouter);
 app.use('/api/v1/affiliates', adminLimiter, validateJWT, requireAdmin, affiliatesRouter); // Affiliates — admin-only (commission management).
 app.use('/api/v1/email', adminLimiter, validateJWT, requireAdmin, emailRouter);
+const trackLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false }); // own bucket: clicks must not eat the forms quota
+app.post('/api/v1/marketing/track', trackLimiter, validateApiKey, trackHandler); // Contact clicks from the widgets script → Meta CAPI (consent-gated)
+app.use('/api/v1/marketing', adminLimiter, validateJWT, requireEditor, marketingAdminRouter); // Dashboard marketing card + consent CSV (admin)
 app.use('/api/v1/site-health', adminLimiter, validateJWT, requireAdmin, siteHealthRouter); // Settings → Health + Connect site (admin only) // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, requireEditor, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
