@@ -113,6 +113,8 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           google_analytics: clean(c.google_analytics),
           google_tag_manager: clean(c.google_tag_manager),
           facebook_pixel: clean(c.facebook_pixel),
+          // widgets loader installs the Pixel (consent-gated) unless turned off
+          facebook_pixel_autoload: !(c.meta_pixel_autoload === false || c.meta_pixel_autoload === 'false'),
         },
         indexing: {
           robots_txt: clean(c.robots_txt),

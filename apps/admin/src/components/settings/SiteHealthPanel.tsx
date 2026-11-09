@@ -220,8 +220,22 @@ export function describeCheck(c: Check, locale: 'pt' | 'en'): Described {
     }
 
     case 'meta_capi': {
-      const title = L('Meta Conversions API', 'Meta Conversions API');
-      if (!f.enabled) return { title, message: L('Desligada (Conteúdo → SEO Settings).', 'Off (Content → SEO Settings).') };
+      const title = L('Meta Pixel e Conversions API', 'Meta Pixel & Conversions API');
+      if (f.pixelBlocked) return {
+        title,
+        message: !f.cookieBanner
+          ? L('O Pixel está configurado mas o banner de cookies está desligado: sem consentimento de marketing, o Pixel nunca carrega.',
+              'The Pixel is set up but the cookie banner is off: without marketing consent the Pixel never loads.')
+          : L('O Pixel está configurado mas o banner de cookies não mostra a categoria Marketing: ninguém pode dar consentimento, por isso o Pixel nunca carrega.',
+              'The Pixel is set up but the cookie banner has no Marketing category: nobody can consent, so the Pixel never loads.'),
+        action: L('Add-ons → Cookie Notice: ativa o banner e a categoria "Marketing".', 'Add-ons → Cookie Notice: enable the banner and the "Marketing" category.'),
+      };
+      const pixelLine = f.pixelId
+        ? (f.pixelAutoload
+            ? L(`Pixel ${f.pixelId} instalado pelo Kiban após consentimento de marketing.`, `Pixel ${f.pixelId} installed by Kiban after marketing consent.`)
+            : L(`Pixel ${f.pixelId} (instalado pelo próprio site).`, `Pixel ${f.pixelId} (installed by the site).`))
+        : L('Sem Pixel ID.', 'No Pixel ID.');
+      if (!f.enabled) return { title, message: `${pixelLine} ${L('Conversions API desligada (Conteúdo → SEO Settings).', 'Conversions API off (Content → SEO Settings).')}` };
       if (!f.configured) return {
         title,
         message: L('Ligada, mas falta o Pixel ID ou o token de acesso — nenhum evento é enviado.', 'On, but the Pixel ID or access token is missing — no events are sent.'),
@@ -237,10 +251,10 @@ export function describeCheck(c: Check, locale: 'pt' | 'en'): Described {
       );
       if (c.status === 'error') return {
         title,
-        message: `${base} ${L('Último erro', 'Last error')}: ${f.lastError}`,
+        message: `${pixelLine} ${base} ${L('Último erro', 'Last error')}: ${f.lastError}`,
         action: L('Confirma o token e o Pixel ID; o token pode ter expirado.', 'Check the token and Pixel ID; the token may have expired.'),
       };
-      return { title, message: base };
+      return { title, message: `${pixelLine} ${base}` };
     }
 
     case 'domain': {

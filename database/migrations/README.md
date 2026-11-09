@@ -14,7 +14,7 @@ Each client (tenant) has its own Supabase project. Every tenant must have
 | `008_security_hardening.sql` | Role-escalation fix, API-key RPC, cookie-consent table, `media` bucket + upload policies, webhook/snapshot policies, indexes | Yes |
 | `009_schema_status.sql` | `kiban_schema_status()` used by Settings → Health. **Bump its `schema_version` (and `EXPECTED_SCHEMA_VERSION` in the API) with every new migration** — the latest definition lives in the newest migration. | Yes |
 | `010_addons_improvements.sql` | Translation cache table, lead status/notes fields on form submissions, sitemap collections field on SEO settings, schema status v10 | Yes |
-| `011_meta_capi_fields.sql` | Meta Conversions API fields on SEO settings (form fields only) | Yes |
+| `011_meta_capi_fields.sql` | Meta Pixel autoload + Conversions API fields on SEO settings (form fields only) | Yes |
 
 ## New tenant
 

@@ -27,6 +27,7 @@
   var srcUrl = new URL(scriptTag.src, window.location.href);
   var BASE_URL = srcUrl.origin;
   var CONSENT_KEY = 'kiban_cookie_consent';
+  var offeredCategories = ['necessary'];
   var VISITOR_KEY = 'kiban_visitor_id';
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
 
@@ -135,6 +136,7 @@
 
   function buildSilktideConfig(config) {
     var cats = config.cookieTypes || {};
+    offeredCategories = ['necessary'].concat(['analytics', 'marketing', 'preferences'].filter(function (k) { return !!cats[k]; }));
 
     // Build consent types array
     var consentTypes = [
@@ -253,7 +255,10 @@
       // ── Callbacks: sync consent to Supabase ──
       onAcceptAll: function () {
         clearTimeout(categoryTimer);
-        var accepted = { necessary: true, analytics: true, marketing: true, preferences: true };
+        // Only categories the banner actually showed: "Accept all" on a
+        // banner without a Marketing category is not informed consent for
+        // marketing (and would let the Meta Pixel load).
+        var accepted = { necessary: true, analytics: !!cats.analytics, marketing: !!cats.marketing, preferences: !!cats.preferences };
         categoryState = accepted;
         sendConsentToServer(true, accepted);
       },
@@ -382,6 +387,8 @@
   window.KibanCookieNotice = {
     hasConsent: function () { return !!getConsent(); },
     getConsent: getConsent,
+    /** Categories this banner offers (set by the CMS). */
+    getOfferedCategories: function () { return offeredCategories.slice(); },
     /** true only if the visitor explicitly accepted this category ('marketing', 'analytics', 'preferences'). */
     hasConsentFor: function (category) {
       if (category === 'necessary') return true;
