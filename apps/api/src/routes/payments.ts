@@ -12,6 +12,7 @@ import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
 import { requireAdmin, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 import { setBookingsStatus, extendBookingHold } from '../lib/booking-capacity.js';
+import { trackingToStore, trackingToMetadata, trackingFromMetadata, sendPurchase } from '../lib/meta-capi.js';
 
 const router: Router = Router();
 
@@ -277,6 +278,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
     if (image_url) lineItemImages = [image_url];
 
+    const capiMeta = trackingToMetadata(await trackingToStore(req, req.body));
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       // Omit payment_method_types to auto-detect all enabled methods
@@ -304,6 +306,8 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
         source: 'kibanCMS',
         tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         ...(product_slug && { product_slug }),
+        // Meta Purchase event data — only present with marketing consent
+        ...(capiMeta ? { capi: capiMeta } : {}),
       },
     });
 
@@ -581,6 +585,18 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
 
           logger.info('Order confirmed via payment', { orderId, sessionId: session.id });
 
+          // Meta Conversions API — Purchase (only if consent was captured at checkout)
+          sendPurchase({
+            stored: orderContent.tracking,
+            eventId: `order_${orderId}`,
+            amountCents: session.amount_total || 0,
+            currency: session.currency || orderContent.currency || 'eur',
+            email: orderContent.customer_email || session.customer_details?.email,
+            phone: orderContent.customer_phone,
+            name: orderContent.customer_name,
+            orderId: orderContent.order_number || orderId,
+          });
+
           // Confirm related bookings + fire booking emails
           const bookingIds: string[] = (() => {
             try { return JSON.parse(orderContent.related_booking_ids || '[]'); } catch { return []; }
@@ -715,6 +731,18 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
 
           logger.info('Booking confirmed via payment', { bookingId, sessionId: session.id });
 
+          sendPurchase({
+            stored: content.tracking,
+            eventId: `booking_${bookingId}`,
+            amountCents: session.amount_total || 0,
+            currency: session.currency || content.currency || 'eur',
+            email: content.customer_email,
+            phone: content.customer_phone,
+            name: content.customer_name,
+            orderId: bookingId,
+            contentName: content.resource_title,
+          });
+
           // Send customer confirmation + admin notification (non-blocking)
           sendBookingConfirmation({ ...content, booking_status: 'confirmed' }).catch(err =>
             logger.warn('Booking confirmation email failed', { bookingId, error: err.message })
@@ -755,6 +783,16 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
           stripe_session_id: session.id,
           paid_at: new Date().toISOString(),
         };
+
+        sendPurchase({
+          stored: trackingFromMetadata(session.metadata?.capi),
+          eventId: `pay_${session.id}`,
+          amountCents: paymentData.amount,
+          currency: paymentData.currency,
+          email: paymentData.customer_email,
+          name: paymentData.customer_name,
+          contentName: paymentData.product_name,
+        });
 
         if (paymentData.customer_email) {
           sendPaymentReceipt(paymentData).catch(err =>

@@ -25,6 +25,7 @@ import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
+import { trackingToStore } from '../lib/meta-capi.js';
 import {
   loadCoupon,
   validateCoupon,
@@ -617,6 +618,9 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       meta: r.meta,
     }));
 
+    // For the Meta Purchase event (only kept with marketing consent)
+    const capiTracking = await trackingToStore(req, body);
+
     const { data: order, error: orderErr } = await supabase
       .from('entries')
       .insert({
@@ -637,6 +641,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
           coupon_code: couponMeta?.code || '',
           metadata: body.metadata ? JSON.stringify(body.metadata) : '',
           related_booking_ids: '[]',
+          ...(capiTracking ? { tracking: capiTracking } : {}),
         },
         status: 'published',
         published_at: new Date().toISOString(),

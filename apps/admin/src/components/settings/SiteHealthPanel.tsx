@@ -219,6 +219,30 @@ export function describeCheck(c: Check, locale: 'pt' | 'en'): Described {
       return { title, message };
     }
 
+    case 'meta_capi': {
+      const title = L('Meta Conversions API', 'Meta Conversions API');
+      if (!f.enabled) return { title, message: L('Desligada (Conteúdo → SEO Settings).', 'Off (Content → SEO Settings).') };
+      if (!f.configured) return {
+        title,
+        message: L('Ligada, mas falta o Pixel ID ou o token de acesso — nenhum evento é enviado.', 'On, but the Pixel ID or access token is missing — no events are sent.'),
+        action: L('Conteúdo → SEO Settings → Facebook Pixel ID e CAPI Access Token.', 'Content → SEO Settings → Facebook Pixel ID and CAPI Access Token.'),
+      };
+      const consent = f.consentMode === 'always'
+        ? L('envia sempre (base legal do cliente)', 'always sends (client legal basis)')
+        : L('só com consentimento de marketing', 'only with marketing consent');
+      const last = fmtDate(f.lastSentAt, pt) || L('ainda nenhum desde o último arranque', 'none since the last restart');
+      const base = L(
+        `Ativa, ${consent}. Último evento: ${last}${f.lastEvent ? ` (${f.lastEvent})` : ''}. Enviados: ${f.sent}; sem consentimento (não enviados): ${f.skippedNoConsent}.${f.testMode ? ' Modo de teste ligado.' : ''}`,
+        `On, ${consent}. Last event: ${last}${f.lastEvent ? ` (${f.lastEvent})` : ''}. Sent: ${f.sent}; without consent (not sent): ${f.skippedNoConsent}.${f.testMode ? ' Test mode on.' : ''}`,
+      );
+      if (c.status === 'error') return {
+        title,
+        message: `${base} ${L('Último erro', 'Last error')}: ${f.lastError}`,
+        action: L('Confirma o token e o Pixel ID; o token pode ter expirado.', 'Check the token and Pixel ID; the token may have expired.'),
+      };
+      return { title, message: base };
+    }
+
     case 'domain': {
       const title = L('Endereço da API', 'API address');
       const origins = (f.origins as string[] || []).join(', ');

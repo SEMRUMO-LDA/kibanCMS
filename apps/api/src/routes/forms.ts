@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { sendFormNotification, sendFormAutoReply } from '../lib/email.js';
 import { checkSpam, captchaFailed } from '../lib/spam-protection.js';
+import { readTracking, sendCapiEvent, splitName } from '../lib/meta-capi.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -276,6 +277,15 @@ router.post('/submit', async (req: AuthRequest, res: Response) => {
     fireFormNotifications(cleanFormName, content, entry.id).catch(err =>
       logger.warn('Form notification dispatch failed', { error: err.message })
     );
+
+    // Meta Conversions API — only with marketing consent (see lib/meta-capi.ts)
+    sendCapiEvent({
+      name: 'Lead',
+      eventId: `lead_${entry.id}`,
+      tracking: readTracking(req.body),
+      user: { email: cleanEmail, phone: cleanPhone, ...splitName(cleanName), ip: req.ip, userAgent: req.get('user-agent') },
+      custom: { content_name: cleanFormName },
+    }).catch(() => {});
 
     // Return minimal response (don't leak internal data to public frontends)
     res.status(201).json({

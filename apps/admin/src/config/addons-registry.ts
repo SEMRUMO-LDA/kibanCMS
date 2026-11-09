@@ -126,6 +126,13 @@ const seo: AddonDefinition = {
         { id: 'google_analytics', name: 'google_analytics', label: 'Google Analytics ID', type: 'text', placeholder: 'G-XXXXXXXXXX' },
         { id: 'google_tag_manager', name: 'google_tag_manager', label: 'Google Tag Manager', type: 'text', placeholder: 'GTM-XXXXXXX' },
         { id: 'facebook_pixel', name: 'facebook_pixel', label: 'Facebook Pixel ID', type: 'text', placeholder: '1234567890' },
+        { id: 'meta_capi_enabled', name: 'meta_capi_enabled', label: 'Meta Conversions API (CAPI)', type: 'boolean', helpText: 'Send Lead, CompleteRegistration and Purchase from the server (needs the Pixel ID above)' },
+        { id: 'meta_capi_access_token', name: 'meta_capi_access_token', label: 'CAPI Access Token', type: 'text', helpText: 'Events Manager → your Pixel → Settings → Conversions API → Generate access token. Never shown to the site.' },
+        { id: 'meta_capi_test_event_code', name: 'meta_capi_test_event_code', label: 'CAPI Test Event Code', type: 'text', placeholder: 'TEST12345', helpText: 'Optional — to validate in Events Manager → Test events. Remove when live.' },
+        { id: 'meta_capi_consent_mode', name: 'meta_capi_consent_mode', label: 'CAPI Consent', type: 'select', options: [
+          { label: 'Only with marketing consent (recommended, GDPR)', value: 'required' },
+          { label: 'Always send (client has another legal basis)', value: 'always' },
+        ], helpText: 'Default: an event is only sent when the visitor accepted marketing cookies' },
         // Indexing
         { id: 'robots_txt', name: 'robots_txt', label: 'robots.txt', type: 'textarea', placeholder: 'User-agent: *\nAllow: /', helpText: 'Controls search engine crawling' },
         { id: 'noindex_default', name: 'noindex_default', label: 'No-index by Default', type: 'boolean', helpText: 'Block search engines from indexing (useful for staging)' },

@@ -21,6 +21,7 @@ import { validateCoupon, ensureStripeCoupon, recordPendingRedemption, loadCoupon
 import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
+import { trackingToStore } from '../lib/meta-capi.js';
 
 const router: Router = Router();
 
@@ -720,6 +721,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
 
     const bookingSlug = `booking-${Date.now().toString(36)}`;
     const expiry = checkoutExpiry();
+    const capiTracking = await trackingToStore(req, req.body); // Meta Purchase (consent-gated)
     const { data: booking, error: insertError } = await supabase
       .from('entries')
       .insert({
@@ -743,6 +745,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
           // Seat is released if not paid by then (Stripe session expires too)
           checkout_expires_at: expiry.iso,
           source: (metadata && metadata.source) || 'direct',
+          ...(capiTracking ? { tracking: capiTracking } : {}),
           metadata: metadata || {},
           notes: notes || '',
         },

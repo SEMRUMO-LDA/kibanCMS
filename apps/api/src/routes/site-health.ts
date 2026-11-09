@@ -18,6 +18,7 @@ import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { PRIVATE_COLLECTIONS } from './entries.js';
 import { normalizeFormName } from './forms.js';
+import { getCapiConfig, getCapiStatus } from '../lib/meta-capi.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -28,7 +29,7 @@ export const EXPECTED_SCHEMA_VERSION = 10;
 export type CheckStatus = 'ok' | 'warn' | 'error' | 'info';
 
 export interface HealthCheck {
-  id: 'database' | 'email_provider' | 'email_recipients' | 'api_key_usage' | 'media_bucket' | 'stripe' | 'forms' | 'domain';
+  id: 'database' | 'email_provider' | 'email_recipients' | 'api_key_usage' | 'media_bucket' | 'stripe' | 'forms' | 'domain' | 'meta_capi';
   status: CheckStatus;
   facts: Record<string, unknown>;
 }
@@ -254,6 +255,22 @@ router.get('/', async (req: AuthRequest, res: Response) => {
         id: 'forms',
         status: disabled.length || drafts.length || unmatched.length ? 'warn' : 'info',
         facts: { installed: forms.exists, lastSubmissionAt: forms.latest, disabled, drafts, unmatched },
+      };
+    }),
+
+    safe('meta_capi', async () => {
+      const cfg = await getCapiConfig();
+      const s = getCapiStatus();
+      const configured = !!(cfg.pixelId && cfg.accessToken);
+      const failing = !!s.lastErrorAt && (!s.lastSentAt || s.lastErrorAt > s.lastSentAt);
+      return {
+        id: 'meta_capi',
+        status: !cfg.enabled ? 'info' : !configured ? 'warn' : failing ? 'error' : 'ok',
+        facts: {
+          enabled: cfg.enabled, configured, consentMode: cfg.consentMode, testMode: !!cfg.testEventCode,
+          sent: s.sent, skippedNoConsent: s.skippedNoConsent, lastSentAt: s.lastSentAt || null, lastEvent: s.lastEvent || null,
+          lastError: failing ? s.lastError : null,
+        },
       };
     }),
 

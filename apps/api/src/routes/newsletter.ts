@@ -5,6 +5,7 @@ import { sendNewsletterWelcome, sendNewsletterAdminNotification } from '../lib/e
 import { brevoUpsertContact, buildBrevoAttributes, BrevoError, type BrevoConfig } from '../lib/brevo.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { checkSpam, captchaFailed } from '../lib/spam-protection.js';
+import { readTracking, sendCapiEvent, splitName, sha256 } from '../lib/meta-capi.js';
 
 const router: Router = Router();
 
@@ -227,6 +228,15 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
         baseContent,
       });
     }
+
+    // Meta Conversions API — only with marketing consent (see lib/meta-capi.ts)
+    sendCapiEvent({
+      name: 'CompleteRegistration',
+      eventId: `sub_${sha256(cleanEmail).slice(0, 24)}`,
+      tracking: readTracking(req.body),
+      user: { email: cleanEmail, ...splitName(cleanName), ip: req.ip, userAgent: req.get('user-agent') },
+      custom: { content_name: 'newsletter' },
+    }).catch(() => {});
 
     res.status(201).json({
       success: true,

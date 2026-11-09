@@ -17,6 +17,7 @@ const RESERVED_KEYS = new Set([
   'coupon_code',
   'discount_cents',
   'source',
+  'capi', // Meta CAPI consent/tracking — set by the server only
 ]);
 
 /** Returns the client metadata without server-controlled keys. */

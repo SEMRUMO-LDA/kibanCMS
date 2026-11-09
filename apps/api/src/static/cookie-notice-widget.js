@@ -71,8 +71,11 @@
       visitor_id: getVisitorId(),
       consent_given: given,
       categories: categories,
+      updated_at: new Date().toISOString(),
     };
     saveConsent(data);
+    // Let the site react (e.g. load the Meta Pixel only after marketing consent)
+    try { window.dispatchEvent(new CustomEvent('kiban-consent-change', { detail: data })); } catch (e) {}
 
     var xhr = new XMLHttpRequest();
     xhr.open('POST', BASE_URL + '/api/v1/cookie-notice/consent');
@@ -181,6 +184,41 @@
       descriptionHtml += '<p><a href="' + config.policyUrl + '" target="_blank" rel="noopener">Política de Cookies</a></p>';
     }
 
+    // Per-category choices (made in "Preferences") used to be lost: only
+    // Accept all / Reject all were saved and logged. Track each category and
+    // record the combined choice (debounced: Silktide fires one callback per
+    // category when the visitor saves).
+    var stored = (getConsent() || {}).categories || {};
+    var categoryState = {
+      necessary: true,
+      analytics: !!stored.analytics,
+      marketing: !!stored.marketing,
+      preferences: !!stored.preferences,
+    };
+    var categoryTimer = null;
+    function setCategory(id, value) {
+      categoryState[id] = value;
+      clearTimeout(categoryTimer);
+      categoryTimer = setTimeout(function () {
+        var next = {
+          necessary: true,
+          analytics: !!categoryState.analytics,
+          marketing: !!categoryState.marketing,
+          preferences: !!categoryState.preferences,
+        };
+        // Accept all / Reject all also fire the per-category callbacks: don't
+        // log the same choice twice.
+        var prev = (getConsent() || {}).categories;
+        if (prev && JSON.stringify(prev) === JSON.stringify(next)) return;
+        sendConsentToServer(next.analytics || next.marketing || next.preferences, next);
+      }, 300);
+    }
+    consentTypes.forEach(function (t) {
+      if (t.required) return;
+      t.onAccept = function () { setCategory(t.id, true); };
+      t.onReject = function () { setCategory(t.id, false); };
+    });
+
     // Build Silktide init options
     var silktideOpts = {
       consentTypes: consentTypes,
@@ -214,11 +252,15 @@
 
       // ── Callbacks: sync consent to Supabase ──
       onAcceptAll: function () {
+        clearTimeout(categoryTimer);
         var accepted = { necessary: true, analytics: true, marketing: true, preferences: true };
+        categoryState = accepted;
         sendConsentToServer(true, accepted);
       },
       onRejectAll: function () {
+        clearTimeout(categoryTimer);
         var rejected = { necessary: true, analytics: false, marketing: false, preferences: false };
+        categoryState = rejected;
         sendConsentToServer(false, rejected);
       },
     };
@@ -340,6 +382,13 @@
   window.KibanCookieNotice = {
     hasConsent: function () { return !!getConsent(); },
     getConsent: getConsent,
+    /** true only if the visitor explicitly accepted this category ('marketing', 'analytics', 'preferences'). */
+    hasConsentFor: function (category) {
+      if (category === 'necessary') return true;
+      var c = getConsent();
+      return !!(c && c.categories && c.categories[category] === true);
+    },
+    getVisitorId: getVisitorId,
     reset: function () {
       localStorage.removeItem(CONSENT_KEY);
       // Also reset Silktide's state if available
