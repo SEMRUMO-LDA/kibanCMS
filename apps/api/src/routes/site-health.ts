@@ -19,6 +19,7 @@ import { tenantStore } from '../middleware/tenant.js';
 import { PRIVATE_COLLECTIONS } from './entries.js';
 import { normalizeFormName } from './forms.js';
 import { getCapiConfig, getCapiStatus } from '../lib/meta-capi.js';
+import { getSingletonContent } from '../lib/sitemap.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
@@ -263,10 +264,22 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       const s = getCapiStatus();
       const configured = !!(cfg.pixelId && cfg.accessToken);
       const failing = !!s.lastErrorAt && (!s.lastSentAt || s.lastErrorAt > s.lastSentAt);
+
+      // Pixel installed by the widgets script needs the cookie banner WITH a
+      // Marketing category — otherwise nobody can consent and it never loads.
+      const seo = await getSingletonContent('seo-settings');
+      const pixelAutoload = !!cfg.pixelId && !(seo.meta_pixel_autoload === false || seo.meta_pixel_autoload === 'false');
+      const { data: cookieRow } = await supabase.from('addon_configs').select('config').eq('addon_id', 'cookie-notice').maybeSingle();
+      const cookieCfg = (cookieRow?.config as Record<string, any>) || {};
+      const cookieBanner = cookieCfg.enabled !== false;
+      const marketingOffered = !!cookieCfg.cookieTypes?.marketing;
+      const pixelBlocked = pixelAutoload && (!cookieBanner || !marketingOffered);
+
       return {
         id: 'meta_capi',
-        status: !cfg.enabled ? 'info' : !configured ? 'warn' : failing ? 'error' : 'ok',
+        status: pixelBlocked ? 'warn' : !cfg.enabled ? 'info' : !configured ? 'warn' : failing ? 'error' : 'ok',
         facts: {
+          pixelId: cfg.pixelId || null, pixelAutoload, cookieBanner, marketingOffered, pixelBlocked,
           enabled: cfg.enabled, configured, consentMode: cfg.consentMode, testMode: !!cfg.testEventCode,
           sent: s.sent, skippedNoConsent: s.skippedNoConsent, lastSentAt: s.lastSentAt || null, lastEvent: s.lastEvent || null,
           lastError: failing ? s.lastError : null,

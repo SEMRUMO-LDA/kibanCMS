@@ -129,9 +129,149 @@
         || Date.now() - bootTime >= REVEAL_TIMEOUT_MS;
   }
 
+
+  // ── Meta Pixel + conversion tracking (SEO add-on) ───────────────────
+  // Makes the Pixel and the Conversions API work on every site that loads
+  // this script, without site code changes. GDPR: the Pixel is injected
+  // ONLY after the visitor accepted marketing cookies in the Kiban banner,
+  // and conversions carry the consent flag the server checks before sending
+  // anything to Meta.
+  var pixel = { id: null, loadedByKiban: false };
+
+  function hasMarketingConsent() {
+    var cn = window.KibanCookieNotice;
+    return !!(cn && typeof cn.hasConsentFor === 'function' && cn.hasConsentFor('marketing'));
+  }
+
+  function readCookie(name) {
+    var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : undefined;
+  }
+
+  function newEventId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (_) {}
+    return 'ev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function buildTracking() {
+    return {
+      marketing_consent: hasMarketingConsent(),
+      event_id: newEventId(),
+      fbp: readCookie('_fbp'),
+      fbc: readCookie('_fbc') || fbcFromUrl(),
+      source_url: location.href.slice(0, 500),
+    };
+  }
+
+  // A click from a Meta ad lands with ?fbclid=…; fbc must then be sent even
+  // before the Pixel had a chance to write the _fbc cookie.
+  function fbcFromUrl() {
+    try {
+      var id = new URL(location.href).searchParams.get('fbclid');
+      return id ? 'fb.1.' + Date.now() + '.' + id : undefined;
+    } catch (_) { return undefined; }
+  }
+
+  function loadPixel() {
+    if (!pixel.id || !hasMarketingConsent()) return;
+    if (window.fbq) return; // the site installs its own Pixel — never double-load
+    /* eslint-disable */
+    !function (f, b, e, v, n, t, s) { if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0'; n.queue = []; t = b.createElement(e); t.async = !0;
+      t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s); }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    /* eslint-enable */
+    pixel.loadedByKiban = true;
+    window.fbq('init', pixel.id);
+    window.fbq('track', 'PageView');
+    // Single-page sites: count route changes as page views too
+    var push = history.pushState;
+    history.pushState = function () {
+      var r = push.apply(this, arguments);
+      try { window.fbq('track', 'PageView'); } catch (_) {}
+      return r;
+    };
+    window.addEventListener('popstate', function () { try { window.fbq('track', 'PageView'); } catch (_) {} });
+  }
+
+  function fetchSeoConfig(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', BASE_URL + '/api/v1/seo');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+    xhr.onload = function () {
+      if (xhr.status !== 200) return;
+      try {
+        var a = (JSON.parse(xhr.responseText).data || {}).analytics || {};
+        callback(a);
+      } catch (_) {}
+    };
+    xhr.send();
+  }
+
+  function initPixel() {
+    fetchSeoConfig(function (a) {
+      var id = String(a.facebook_pixel || '').replace(/\D/g, '');
+      if (!id || a.facebook_pixel_autoload === false) return;
+      pixel.id = id;
+      loadPixel();
+      window.addEventListener('kiban-consent-change', loadPixel);
+    });
+  }
+
+  // Conversions sent by the site to this CMS get `tracking` added
+  // automatically (consent, event_id, _fbp/_fbc, page) unless the site
+  // already sends it. On success, the matching Pixel event fires with the
+  // same event_id so Meta deduplicates it against the server event.
+  var TRACKED_PATHS = [
+    { re: /\/api\/v1\/forms\/submit(?:\?|$)/, pixelEvent: 'Lead' },
+    { re: /\/api\/v1\/newsletter\/subscribe(?:\?|$)/, pixelEvent: 'CompleteRegistration' },
+    { re: /\/api\/v1\/checkout\/create-session(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
+    { re: /\/api\/v1\/bookings(?:\/v2)?\/checkout(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
+    { re: /\/api\/v1\/payments\/create-session(?:\?|$)/, pixelEvent: 'InitiateCheckout' },
+  ];
+
+  function installConversionTracking() {
+    if (!window.fetch || window.fetch.__kibanTracking) return;
+    var originalFetch = window.fetch;
+    var wrapped = function (input, init) {
+      try {
+        var url = typeof input === 'string' ? input : (input && input.url) || '';
+        var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        var match = null;
+        if (method === 'POST' && url.indexOf(BASE_URL + '/api/v1/') === 0) {
+          for (var i = 0; i < TRACKED_PATHS.length; i++) {
+            if (TRACKED_PATHS[i].re.test(url)) { match = TRACKED_PATHS[i]; break; }
+          }
+        }
+        if (match && init && typeof init.body === 'string') {
+          var body = JSON.parse(init.body);
+          if (body && typeof body === 'object' && !Array.isArray(body) && !body.tracking) {
+            var t = buildTracking();
+            body.tracking = t;
+            var newInit = {};
+            for (var k in init) newInit[k] = init[k];
+            newInit.body = JSON.stringify(body);
+            return originalFetch.call(this, input, newInit).then(function (res) {
+              try {
+                if (res && res.ok && t.marketing_consent && window.fbq) {
+                  window.fbq('track', match.pixelEvent, {}, { eventID: t.event_id });
+                }
+              } catch (_) {}
+              return res;
+            });
+          }
+        }
+      } catch (_) { /* never break the site's request */ }
+      return originalFetch.apply(this, arguments);
+    };
+    wrapped.__kibanTracking = true;
+    window.fetch = wrapped;
+  }
+
   // ── Boot ─────────────────────────────────────────────────────────────
   function boot() {
     bootTime = Date.now();
+    initPixel();
     // Kick the cluster config fetch first so its accent colour lands on
     // :root before any widget renders. The script-tag fetches don't wait
     // for it — we don't want a missing config to block the page either.
@@ -193,6 +333,8 @@
       stackTimer = setTimeout(arrangeStack, 50);
     }
   }
+
+  installConversionTracking();
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);

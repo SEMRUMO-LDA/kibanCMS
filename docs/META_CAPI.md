@@ -29,7 +29,35 @@ Conteúdo → **SEO Settings**:
 **Settings → Saúde → Meta Conversions API** mostra se está configurada, o último
 evento enviado, quantos não foram enviados por falta de consentimento e o último erro.
 
-## RGPD — o que o site TEM de fazer
+## Modo automático (todos os sites com os widgets do Kiban)
+
+Se o site carrega o script dos widgets (`/widgets/loader.js` com `data-tenant`),
+**não é preciso mexer no código do site**:
+
+1. **Pixel instalado automaticamente** a partir do *Facebook Pixel ID* das SEO
+   Settings, **só depois de o visitante aceitar cookies de Marketing** no banner
+   do Kiban (e logo que aceite, sem recarregar a página). Envia `PageView`, também
+   nas mudanças de página em sites SPA.
+2. **Conversões rastreadas automaticamente**: os pedidos `fetch` do browser para
+   a API do Kiban (`forms/submit`, `newsletter/subscribe`, checkout, reservas,
+   pagamentos) recebem o objeto `tracking` (consentimento, `event_id`, `_fbp`, `_fbc`).
+   Quando o pedido corre bem, o Pixel dispara `Lead` / `CompleteRegistration` /
+   `InitiateCheckout` com o **mesmo `event_id`**, e a Meta deduplica com a CAPI.
+3. Se o site **já tem o seu próprio Pixel** (`window.fbq` existe), o Kiban não
+   instala outro, mas continua a acrescentar o `tracking` às conversões.
+
+Requisitos:
+- Add-ons → **Cookie Notice** ligado, **com a categoria "Marketing"**. Sem isto o
+  Pixel nunca carrega, e Settings → Saúde avisa.
+- SEO Settings → *Install Pixel automatically* ligado (vem ligado por omissão).
+  Desliga-o se o site instala o Pixel por conta própria.
+
+Limites: só são apanhados os pedidos feitos com `fetch` no browser. Formulários
+enviados a partir do servidor do site (Server Actions, route handlers) ou com
+`XMLHttpRequest` precisam do código manual abaixo. Para esses, a CAPI continua a
+funcionar, mas o consentimento tem de ser enviado pelo site; sem ele, nada é enviado.
+
+## RGPD — modo manual (sites sem o script dos widgets)
 
 ### 1. Só carregar o Pixel depois do consentimento de marketing
 
@@ -95,5 +123,8 @@ enviado, ou `order_<order_id>`).
 
 - As escolhas feitas em **Preferências** (por categoria) passam a ser guardadas e
   registadas no log de consentimentos — antes só "Aceitar todos" / "Rejeitar" eram.
+- "Aceitar todos" só aceita as categorias que o banner mostra (antes aceitava
+  também categorias escondidas, como Marketing).
 - `KibanCookieNotice.hasConsentFor('marketing' | 'analytics' | 'preferences')`
+- `KibanCookieNotice.getOfferedCategories()`
 - Evento `kiban-consent-change` sempre que o visitante muda a escolha.

@@ -12,6 +12,8 @@ DECLARE
 BEGIN
     FOR _item IN
         SELECT * FROM (VALUES
+            ('{"id": "meta_pixel_autoload", "name": "meta_pixel_autoload", "label": "Install Pixel automatically", "type": "boolean", "defaultValue": true,
+               "helpText": "The Kiban widgets script installs the Pixel on the site — only after the visitor accepts marketing cookies. Turn off if the site installs its own Pixel."}'::jsonb),
             ('{"id": "meta_capi_enabled", "name": "meta_capi_enabled", "label": "Meta Conversions API (CAPI)", "type": "boolean",
                "helpText": "Send Lead, CompleteRegistration and Purchase from the server (needs the Pixel ID above)"}'::jsonb),
             ('{"id": "meta_capi_access_token", "name": "meta_capi_access_token", "label": "CAPI Access Token", "type": "text",
