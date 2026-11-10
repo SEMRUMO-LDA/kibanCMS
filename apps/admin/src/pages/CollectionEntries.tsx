@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { api } from '../lib/api';
-import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera, Copy } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera, Copy, ChevronLeft, ChevronRight } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { useToast } from '../components/Toast';
 import { SnapshotManager } from '../components/SnapshotManager';
@@ -752,6 +752,24 @@ const ViewFieldGrid = styled.div`
   }
 `;
 
+const Pagination = styled.div`
+  display: flex; justify-content: center; align-items: center; gap: ${spacing[3]};
+  padding: ${spacing[6]} 0;
+  button {
+    padding: ${spacing[2]} ${spacing[3]}; background: ${colors.white};
+    border: 1px solid ${colors.gray[300]}; border-radius: ${borders.radius.md};
+    cursor: pointer; display: flex; align-items: center; gap: ${spacing[1]};
+    font-size: ${typography.fontSize.sm}; font-family: ${typography.fontFamily.sans};
+    &:hover { background: ${colors.gray[50]}; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+    svg { width: 16px; height: 16px; }
+  }
+  span { font-size: ${typography.fontSize.sm}; color: ${colors.gray[500]}; }
+`;
+
+// Rows per page. Lists used to stop silently at the API default of 100.
+const PAGE_SIZE = 50;
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -773,37 +791,55 @@ export const CollectionEntries = () => {
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<string>('');
   const [viewEntry, setViewEntry] = useState<Entry | null>(null);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Collection name once per collection
+  useEffect(() => {
+    if (!collectionSlug) return;
+    let active = true;
+    api.getCollection(collectionSlug).then(({ data }) => { if (active && data) setCollectionName(data.name); });
+    return () => { active = false; };
+  }, [collectionSlug]);
+
+  // Search and status filter are applied by the SERVER, so they cover every
+  // entry of the collection — not just the rows on this page. Typing is
+  // debounced; changing a filter goes back to the first page.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+  useEffect(() => { setPage(0); setSelectedEntries(new Set()); }, [debouncedSearch, filterStatus, collectionSlug]);
 
   useEffect(() => {
-    async function loadData() {
-      if (!collectionSlug) return;
-
+    if (!collectionSlug) return;
+    let active = true;
+    (async () => {
       try {
         setLoading(true);
         setError(null);
-
-        // Get collection name
-        const { data: colData } = await api.getCollection(collectionSlug);
-        if (colData) setCollectionName(colData.name);
-
-        // Get entries via API
-        const { data: entriesData, error: entriesErr, meta } = await api.getEntries(collectionSlug);
+        const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) };
+        if (debouncedSearch) params.search = debouncedSearch;
+        if (filterStatus !== 'all') params.status = filterStatus;
+        const { data: entriesData, error: entriesErr, meta } = await api.getEntries(collectionSlug, params);
+        if (!active) return; // a newer request (or another collection) owns the screen now
         if (entriesErr) throw new Error(entriesErr);
-
         setEntries(entriesData || []);
+        setTotal(meta?.pagination?.total ?? (entriesData || []).length);
         if (meta?.collection?.name) setCollectionName(meta.collection.name);
       } catch (err: any) {
+        if (!active) return;
         console.error('Error loading entries:', err);
         setError(err.message || 'Failed to load entries');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    }
-
-    loadData();
-    const timeout = setTimeout(() => setLoading(false), 10000);
-    return () => clearTimeout(timeout);
-  }, [collectionSlug]);
+    })();
+    const timeout = setTimeout(() => { if (active) setLoading(false); }, 10000);
+    return () => { active = false; clearTimeout(timeout); };
+  }, [collectionSlug, page, debouncedSearch, filterStatus]);
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to delete "${title || 'this entry'}"? This action cannot be undone.`)) return;
@@ -816,6 +852,7 @@ export const CollectionEntries = () => {
       if (error) throw new Error(error);
 
       setEntries(prev => prev.filter(e => e.id !== id));
+      setTotal(t => Math.max(0, t - 1));
     } catch (err: any) {
       toast.error('Failed to delete: ' + (err.message || 'Unknown error'));
     }
@@ -829,7 +866,8 @@ export const CollectionEntries = () => {
       const { data, error } = await api.duplicateEntry(collectionSlug, entry.slug);
       if (error) throw new Error(error);
       // Insert the new draft at the top so the user sees it immediately
-      if (data) setEntries(prev => [data, ...prev]);
+      if (data) setTotal(t => t + 1);
+      setEntries(prev => [data, ...prev]);
       toast.success(`Duplicated as "${data?.title || 'new entry'}" — opening editor`);
       // Jump straight into the editor so the user can rename / publish
       if (data?.id) navigate(`/content/${collectionSlug}/edit/${data.id}`);
@@ -886,6 +924,7 @@ export const CollectionEntries = () => {
 
       if (action === 'delete') {
         setEntries(prev => prev.filter(e => !doneIds.has(e.id)));
+        setTotal(t => Math.max(0, t - doneIds.size));
       } else {
         setEntries(prev => prev.map(e => (doneIds.has(e.id) ? { ...e, status: action } : e)));
       }
@@ -912,7 +951,9 @@ export const CollectionEntries = () => {
     return matchesSearch && matchesStatus;
   };
 
-  const filteredEntries = entries.filter(matchesFilters);
+  // The server already applied search + status to this page; matchesFilters
+  // is still used by the CSV export, which walks every page.
+  const filteredEntries = entries;
 
   /**
    * Exports EVERY entry of the collection that matches the current filters —
@@ -1025,7 +1066,7 @@ export const CollectionEntries = () => {
           </BackButton>
           <TitleSection>
             <h1>{collectionName || collectionSlug}</h1>
-            <p>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</p>
+            <p>{total} {total === 1 ? 'entry' : 'entries'}{totalPages > 1 ? ` · page ${page + 1} of ${totalPages}` : ''}</p>
           </TitleSection>
         </HeaderLeft>
         <div style={{ display: 'flex', gap: spacing[3], alignItems: 'center' }}>
@@ -1037,7 +1078,7 @@ export const CollectionEntries = () => {
             <Upload size={18} />
             Import CSV
           </CodeButton>
-          {entries.length > 0 && (
+          {total > 0 && (
             <CodeButton onClick={handleExportCSV} disabled={exporting}>
               {exporting ? <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={18} />}
               {exporting ? 'Exporting…' : 'Export CSV'}
@@ -1203,6 +1244,18 @@ export const CollectionEntries = () => {
             </tbody>
           </Table>
         </TableContainer>
+      )}
+
+      {totalPages > 1 && (
+        <Pagination>
+          <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0 || loading}>
+            <ChevronLeft /> Previous
+          </button>
+          <span>{page * PAGE_SIZE + 1}–{Math.min(total, (page + 1) * PAGE_SIZE)} of {total}</span>
+          <button type="button" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1 || loading}>
+            Next <ChevronRight />
+          </button>
+        </Pagination>
       )}
 
       {viewEntry && (

@@ -290,7 +290,7 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       if (search && typeof search === 'string') {
         // `,()"` are PostgREST filter syntax: strip them so a search term can't append conditions
         const escaped = escapeIlike(search.replace(/[,()"\\]/g, ' ').trim().slice(0, 100));
-        query = query.or(`title.ilike.%${escaped}%,excerpt.ilike.%${escaped}%`);
+        query = query.or(`title.ilike.%${escaped}%,excerpt.ilike.%${escaped}%,slug.ilike.%${escaped}%`);
       }
 
       if (tags && typeof tags === 'string') {

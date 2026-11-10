@@ -22,6 +22,8 @@ import {
   FileVideo,
   FileAudio,
   Loader,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
 import { api } from '../lib/api';
@@ -412,6 +414,23 @@ const LoadingContainer = styled.div`
 // COMPONENT
 // ============================================
 
+const Pagination = styled.div`
+  display: flex; justify-content: center; align-items: center; gap: ${spacing[3]};
+  padding: ${spacing[6]} 0;
+  button {
+    padding: ${spacing[2]} ${spacing[3]}; background: ${colors.white};
+    border: 1px solid ${colors.gray[300]}; border-radius: ${borders.radius.md};
+    cursor: pointer; display: flex; align-items: center; gap: ${spacing[1]};
+    font-size: ${typography.fontSize.sm}; font-family: ${typography.fontFamily.sans};
+    &:hover { background: ${colors.gray[50]}; }
+    &:disabled { opacity: 0.4; cursor: not-allowed; }
+    svg { width: 16px; height: 16px; }
+  }
+  span { font-size: ${typography.fontSize.sm}; color: ${colors.gray[500]}; }
+`;
+
+const MEDIA_PAGE_SIZE = 60;
+
 export const Media = () => {
   const { user } = useAuth();
   const { t } = useI18n();
@@ -424,30 +443,45 @@ export const Media = () => {
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<MediaType>('all');
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const totalPages = Math.max(1, Math.ceil(total / MEDIA_PAGE_SIZE));
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Search and type filter run on the SERVER (the library used to stop at the
+  // first 50 files); typing is debounced and a filter change goes to page 1.
   useEffect(() => {
-    loadMedia();
-    const timeout = setTimeout(() => setLoading(false), 10000);
-    return () => clearTimeout(timeout);
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+  useEffect(() => { setPage(0); }, [debouncedSearch, filterType]);
 
-  const loadMedia = async () => {
+  const loadMedia = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: apiData, error: apiError } = await api.getMedia();
+      const params: Record<string, string> = { limit: String(MEDIA_PAGE_SIZE), offset: String(page * MEDIA_PAGE_SIZE) };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filterType !== 'all') params.type = filterType;
+      const { data: apiData, error: apiError, meta } = await api.getMedia(params);
       if (apiError) throw new Error(apiError);
-      const data = apiData;
       // API already returns URLs
-      setMedia(data || []);
+      setMedia(apiData || []);
+      setTotal(meta?.pagination?.total ?? (apiData || []).length);
     } catch (error: any) {
       console.error('Error loading media:', error);
       toast.error('Failed to load media files');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, debouncedSearch, filterType]);
+
+  useEffect(() => {
+    loadMedia();
+    const timeout = setTimeout(() => setLoading(false), 10000);
+    return () => clearTimeout(timeout);
+  }, [loadMedia]);
 
   const handleFileSelect = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -510,6 +544,7 @@ export const Media = () => {
       if (error) throw new Error(error);
 
       setMedia(prev => prev.filter(m => m.id !== id));
+      setTotal(t => Math.max(0, t - 1));
       toast.success('File deleted successfully');
     } catch (error: any) {
       toast.error('Failed to delete file: ' + error.message);
@@ -543,20 +578,8 @@ export const Media = () => {
     handleFileSelect(e.dataTransfer.files);
   }, []);
 
-  const filteredMedia = media.filter(item => {
-    const displayName = item.original_name || item.filename;
-    const matchesSearch = displayName.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (filterType === 'all') return matchesSearch;
-
-    const type = item.mime_type.split('/')[0];
-    if (filterType === 'image') return matchesSearch && type === 'image';
-    if (filterType === 'video') return matchesSearch && type === 'video';
-    if (filterType === 'audio') return matchesSearch && type === 'audio';
-    if (filterType === 'document') return matchesSearch && !['image', 'video', 'audio'].includes(type);
-
-    return matchesSearch;
-  });
+  // The server already applied search + type to this page
+  const filteredMedia = media;
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' B';
@@ -703,6 +726,18 @@ export const Media = () => {
             </MediaCard>
           ))}
         </Grid>
+      )}
+
+      {totalPages > 1 && (
+        <Pagination>
+          <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0 || loading}>
+            <ChevronLeft /> Previous
+          </button>
+          <span>{page * MEDIA_PAGE_SIZE + 1}–{Math.min(total, (page + 1) * MEDIA_PAGE_SIZE)} of {total}</span>
+          <button type="button" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages - 1 || loading}>
+            Next <ChevronRight />
+          </button>
+        </Pagination>
       )}
     </Container>
   );
