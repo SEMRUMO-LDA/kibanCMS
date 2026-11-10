@@ -123,6 +123,9 @@
   // ── Fetch CMS config ────────────────────────────────────────────────
 
   function fetchConfig(callback) {
+    // Loaded through the universal loader: the bootstrap already carries our config
+    var pre = window.KibanWidgets && typeof window.KibanWidgets.getConfig === 'function' ? window.KibanWidgets.getConfig('cookie-notice') : undefined;
+    if (pre !== undefined) { callback(null, { data: pre }); return; }
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/cookie-notice/config');
     setAuthHeaders(xhr);

@@ -39,6 +39,10 @@
   var srcUrl = new URL(scriptTag.src, window.location.href);
   var BASE_URL = srcUrl.origin;
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
+  // Everything from /widgets/bootstrap (enabled list, cluster, analytics,
+  // each widget's config). Widgets read their config from here instead of
+  // making their own request — see KibanWidgets.getConfig().
+  var bootstrapData = null;
 
   // ── Widget registry ─────────────────────────────────────────────────
   // Maps addon_id → widget script path (relative to BASE_URL)
@@ -49,7 +53,23 @@
     'i18n':             '/api/v1/i18n/widget.js',
   };
 
-  // ── Fetch enabled widgets ───────────────────────────────────────────
+  // ── Fetch everything in one request ────────────────────────────────
+  function fetchBootstrap(callback) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', BASE_URL + '/api/v1/widgets/bootstrap');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+    xhr.timeout = 15000;
+    xhr.onload = function () {
+      if (xhr.status === 200) {
+        try { callback(null, JSON.parse(xhr.responseText)); } catch (e) { callback(e); }
+      } else { callback(new Error('HTTP ' + xhr.status)); }
+    };
+    xhr.onerror = xhr.ontimeout = function () { callback(new Error('Network error')); };
+    xhr.send();
+  }
+
+  // ── Fetch enabled widgets (fallback when the bootstrap is unavailable) ──
   function fetchEnabledWidgets(callback) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/widgets/enabled');
@@ -85,7 +105,10 @@
   // ── Inject widget script ────────────────────────────────────────────
   function injectWidget(widgetPath) {
     var script = document.createElement('script');
-    script.src = BASE_URL + widgetPath;
+    // Versioned URL → the server lets browsers cache it for a year; the
+    // version changes with every deploy, so fixes still land within minutes.
+    var version = bootstrapData && bootstrapData.version;
+    script.src = BASE_URL + widgetPath + (version ? '?v=' + encodeURIComponent(version) : '');
     script.setAttribute('data-api-key', API_KEY);
     if (TENANT_ID) script.setAttribute('data-tenant', TENANT_ID);
     script.async = true;
@@ -401,8 +424,9 @@
     xhr.send();
   }
 
-  function initMarketing() {
-    fetchSeoConfig(function (a) {
+  function initMarketing(analytics) {
+    var apply = function (a) {
+      a = a || {};
       var id = String(a.facebook_pixel || '').replace(/\D/g, '');
       if (id && a.facebook_pixel_autoload !== false) pixel.id = id;
       initGoogle(a);
@@ -412,7 +436,8 @@
       onConsent();
       window.addEventListener('kiban-consent-change', onConsent);
       window.addEventListener('kiban-consent-ready', onConsent);
-    });
+    };
+    if (analytics) apply(analytics); else fetchSeoConfig(apply);
   }
 
   // Conversions sent by the site to this CMS get `tracking` added
@@ -464,22 +489,34 @@
   }
 
   // ── Boot ─────────────────────────────────────────────────────────────
+  function startWidgets(enabledAddons) {
+    expectedRegistrations = enabledAddons.length;
+    enabledAddons.forEach(function (addonId) {
+      var widgetPath = WIDGET_MAP[addonId];
+      if (widgetPath) injectWidget(widgetPath);
+    });
+  }
+
   function boot() {
     bootTime = Date.now();
-    initMarketing();
-    // Kick the cluster config fetch first so its accent colour lands on
-    // :root before any widget renders. The script-tag fetches don't wait
-    // for it — we don't want a missing config to block the page either.
-    fetchClusterConfig(function (err, res) {
-      if (!err && res && res.data) applyClusterConfig(res.data);
-    });
-    fetchEnabledWidgets(function (err, res) {
-      if (err || !res || !res.data) return;
-      var enabledAddons = res.data;
-      expectedRegistrations = enabledAddons.length;
-      enabledAddons.forEach(function (addonId) {
-        var widgetPath = WIDGET_MAP[addonId];
-        if (widgetPath) injectWidget(widgetPath);
+    fetchBootstrap(function (err, res) {
+      var b = !err && res && res.data ? res.data : null;
+      if (b) {
+        bootstrapData = b;
+        // Cluster first so its accent colour lands on :root before any widget renders
+        if (b.cluster) applyClusterConfig(b.cluster);
+        initMarketing(b.analytics || {});
+        startWidgets(b.enabled || []);
+        return;
+      }
+      // Bootstrap unavailable (network hiccup, older server): the individual
+      // endpoints still exist, each widget then fetches its own config.
+      initMarketing(null);
+      fetchClusterConfig(function (err2, res2) {
+        if (!err2 && res2 && res2.data) applyClusterConfig(res2.data);
+      });
+      fetchEnabledWidgets(function (err3, res3) {
+        if (!err3 && res3 && res3.data) startWidgets(res3.data);
       });
     });
     // Some widgets register late (Silktide pulls its bundle from a CDN,
@@ -1428,6 +1465,9 @@
   window.KibanWidgets = {
     getBaseUrl: function () { return BASE_URL; },
     getApiKey: function () { return API_KEY; },
+    /** Config pre-fetched by the bootstrap for a widget ('cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'); undefined when the widget must fetch its own. */
+    getConfig: function (id) { return bootstrapData && bootstrapData.configs ? bootstrapData.configs[id] : undefined; },
+    getVersion: function () { return bootstrapData ? bootstrapData.version : null; },
     register: function (id, opts) {
       if (!id || !opts || !opts.selector) return;
       stackItems[id] = {

@@ -106,6 +106,9 @@
 
   // ── Fetch config ──
   function fetchConfig(callback) {
+    // Loaded through the universal loader: the bootstrap already carries our config
+    var pre = window.KibanWidgets && typeof window.KibanWidgets.getConfig === 'function' ? window.KibanWidgets.getConfig('whatsapp-widget') : undefined;
+    if (pre !== undefined) { callback(pre || null); return; }
     var xhr = new XMLHttpRequest();
     xhr.open('GET', BASE_URL + '/api/v1/whatsapp-widget/config');
     setAuthHeaders(xhr);
