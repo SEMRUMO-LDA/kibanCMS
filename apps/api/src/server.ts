@@ -29,8 +29,12 @@ import affiliatesRouter from './routes/affiliates.js';
 import emailRouter from './routes/email.js';
 import siteHealthRouter from './routes/site-health.js';
 import { marketingAdminRouter, trackHandler } from './routes/marketing.js';
+import {
+  buildBootstrap, WIDGET_STATIC_DIR, WIDGETS_VERSION,
+  getEnabledWidgets, getClusterConfig, getAddonConfig, getWhatsAppConfig, DEFAULT_CLUSTER_CONFIG,
+} from './lib/widgets-bootstrap.js';
 import i18nRouter from './routes/i18n.js';
-import newsletterRouter from './routes/newsletter.js';
+import newsletterRouter, { newsletterConfirmHandler, newsletterUnsubscribeLinkHandler } from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
 import { channelManagerRouter } from './routes/channel-manager.js';
 import authRouter from './routes/auth.js';
@@ -306,6 +310,10 @@ app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
 app.use('/api/v1/forms', formsLimiter, validateAny, formsRouter); // API Key (submit) + JWT (admin listing), stricter rate limit
+// Signed one-click links opened from emails (no API key): confirm a
+// subscription, unsubscribe. Registered before the API-key router.
+app.get('/api/v1/newsletter/confirm', formsLimiter, (req, res, next) => newsletterConfirmHandler(req, res).catch(next));
+app.get('/api/v1/newsletter/unsubscribe', formsLimiter, (req, res, next) => newsletterUnsubscribeLinkHandler(req, res).catch(next));
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
 app.use('/api/v1/brevo', adminLimiter, validateJWT, requireAdmin, brevoRouter); // Brevo admin endpoints — JWT only
 // Stripe webhook — mounted as a direct POST handler (not via router) so the
@@ -360,132 +368,69 @@ app.use('/api/v1/marketing', adminLimiter, validateJWT, requireEditor, marketing
 app.use('/api/v1/site-health', adminLimiter, validateJWT, requireAdmin, siteHealthRouter); // Settings → Health + Connect site (admin only) // Email diagnostics — admin only (test send).
 app.use('/api/v1/snapshots', validateJWT, requireEditor, snapshotsRouter); // Snapshots — admin only (JWT)
 // i18n widget — public static JS file (no auth)
-app.get('/api/v1/i18n/widget.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  // Short TTL + must-revalidate so widget bug fixes reach users within minutes,
-  // not hours. The widget is small (~12KB) so the bandwidth hit is negligible.
-  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-  // Production: __dirname = /app/apps/api/dist → static at /app/apps/api/static
-  // Development: __dirname = apps/api/src → static at apps/api/src/static
-  const staticPath = NODE_ENV === 'production'
-    ? path.join(__dirname, '../static/i18n-widget.js')
-    : path.join(__dirname, 'static/i18n-widget.js');
-  res.sendFile(staticPath);
-});
+app.get('/api/v1/i18n/widget.js', (req, res) => sendWidgetScript(req, res, 'i18n-widget.js'));
 app.use('/api/v1/i18n', validateAny, i18nRouter); // i18n — JWT (admin) + API Key (frontend)
 app.use('/api/v1/redirects', redirectsRouter); // Public — no auth needed
 
 // ── Universal Widget Loader ────────────────────────────────────────
 // Single script tag that auto-loads all enabled widget add-ons.
 // Usage: <script src="https://your-cms.com/api/v1/widgets/loader.js" data-api-key="KEY"></script>
-app.get('/api/v1/widgets/loader.js', (req, res) => {
+//
+// Widget scripts: the loader injects them with `?v=<build hash>`, so those
+// URLs never change content and can be cached for a year. Unversioned URLs
+// (the loader itself, hand-written embeds) keep a 5-minute TTL.
+function sendWidgetScript(req: express.Request, res: express.Response, file: string) {
   res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-  const staticPath = NODE_ENV === 'production'
-    ? path.join(__dirname, '../static/widgets-loader.js')
-    : path.join(__dirname, 'static/widgets-loader.js');
-  res.sendFile(staticPath);
+  res.setHeader('Cache-Control', req.query.v
+    ? 'public, max-age=31536000, immutable'
+    : 'public, max-age=300, must-revalidate');
+  res.sendFile(path.join(WIDGET_STATIC_DIR, file));
+}
+app.get('/api/v1/widgets/loader.js', (req, res) => sendWidgetScript(req, res, 'widgets-loader.js'));
+
+// One request with everything the loader and the widgets need (enabled list,
+// cluster layout, analytics ids, each widget's config). Replaces eight.
+app.get('/api/v1/widgets/bootstrap', validateApiKey, async (req, res) => {
+  try {
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const data = await buildBootstrap(`${protocol}://${req.headers.host || 'localhost'}`);
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    logger.error('Widgets bootstrap failed', { error: err.message });
+    res.status(500).json({ error: { message: 'Failed to load widgets configuration', status: 500 } });
+  }
+});
+app.get('/api/v1/widgets/version', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ data: { version: WIDGETS_VERSION }, timestamp: new Date().toISOString() });
 });
 
-// Which widget add-ons are enabled — called by the loader to decide what to inject.
-// Returns an array of addon_id strings for add-ons that have widgets AND are enabled.
-//
-// Mirrors the admin's "installed/enabled" semantics in apps/admin/src/pages/Addons.tsx:
-//   - Settings-based widgets (cookie-notice, accessibility) are installed by default
-//     and only excluded when addon_configs has an explicit `enabled:false`.
-//   - Collection-based widgets (whatsapp-widget, i18n) are installed only if their
-//     defining collection exists; enabled state then comes from a collection entry
-//     (whatsapp-widget) or addon_configs (i18n).
-const SETTINGS_WIDGET_ADDON_IDS = ['cookie-notice', 'accessibility'];
-
+// The individual endpoints stay for hand-written embeds and older cached loaders.
 app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
   try {
-    const { data: configs } = await supabaseImport
-      .from('addon_configs')
-      .select('addon_id, config')
-      .in('addon_id', [...SETTINGS_WIDGET_ADDON_IDS, 'i18n']);
-
-    const explicitlyDisabled = new Set(
-      (configs || [])
-        .filter(row => row.config?.enabled === false)
-        .map(row => row.addon_id)
-    );
-
-    const enabled: string[] = SETTINGS_WIDGET_ADDON_IDS.filter(id => !explicitlyDisabled.has(id));
-
-    // WhatsApp widget — installed if its collection exists; enabled state lives in
-    // a published entry with slug='config'.
-    const { data: waCol } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
-    if (waCol) {
-      const { data: entry } = await supabaseImport
-        .from('entries')
-        .select('content')
-        .eq('collection_id', waCol.id)
-        .eq('slug', 'config')
-        .eq('status', 'published')
-        .maybeSingle();
-      if (entry?.content?.enabled) enabled.push('whatsapp-widget');
-    }
-
-    // i18n — installed if its config collection exists; enabled unless addon_configs
-    // explicitly disables it.
-    const { data: i18nCol } = await supabaseImport.from('collections').select('id').eq('slug', 'i18n-config').maybeSingle();
-    if (i18nCol && !explicitlyDisabled.has('i18n')) {
-      enabled.push('i18n');
-    }
-
     res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
-    res.json({ data: enabled, timestamp: new Date().toISOString() });
+    res.json({ data: await getEnabledWidgets(), timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: [], timestamp: new Date().toISOString() });
   }
 });
-
-// ── Widget Cluster Config ──────────────────────────────────────────
-// Persists which widgets the loader should collapse into the floating
-// cluster, plus an optional accent colour that gets piped into the
-// `--kiban-widget-tint` CSS variable. Read public (loader needs it),
-// written by the admin UI directly via Supabase.
-const DEFAULT_CLUSTER_CONFIG = {
-  accentColor: null as string | null,
-  includedWidgets: ['cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'],
-  // 'corner' = round trigger in the corner; 'edge' = discreet side tab
-  layout: 'corner' as 'corner' | 'edge',
-  edgeSide: 'right' as 'left' | 'right',
-};
-
 app.get('/api/v1/widgets/cluster-config', validateApiKey, async (_req, res) => {
   try {
-    const { data } = await supabaseImport
-      .from('addon_configs')
-      .select('config')
-      .eq('addon_id', 'widget-cluster')
-      .maybeSingle();
-    const cfg = { ...DEFAULT_CLUSTER_CONFIG, ...(data?.config || {}) };
     res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
-    res.json({ data: cfg, timestamp: new Date().toISOString() });
+    res.json({ data: await getClusterConfig(), timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: DEFAULT_CLUSTER_CONFIG, timestamp: new Date().toISOString() });
   }
 });
 
 // Cookie Notice widget — public static JS file (no auth)
-app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-  const staticPath = NODE_ENV === 'production'
-    ? path.join(__dirname, '../static/cookie-notice-widget.js')
-    : path.join(__dirname, 'static/cookie-notice-widget.js');
-  res.sendFile(staticPath);
-});
+app.get('/api/v1/cookie-notice/widget.js', (req, res) => sendWidgetScript(req, res, 'cookie-notice-widget.js'));
 // Cookie Notice config — API Key auth (frontend reads config)
-app.get('/api/v1/cookie-notice/config', validateApiKey, async (req, res) => {
+app.get('/api/v1/cookie-notice/config', validateApiKey, async (_req, res) => {
   try {
-    const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'cookie-notice').single();
-    // No row = installed but never configured → default to enabled (matches admin logic)
-    const config = data?.config || { enabled: true };
     res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
-    res.json({ data: config, timestamp: new Date().toISOString() });
+    res.json({ data: await getAddonConfig('cookie-notice'), timestamp: new Date().toISOString() });
   } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
 // Cookie Notice consent — API Key auth (frontend sends consent)
@@ -507,54 +452,24 @@ app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
 });
 
 // WhatsApp Widget — public static JS file (no auth, served to any origin)
-app.get('/api/v1/whatsapp-widget/widget.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  // 5-min cache + must-revalidate so config changes propagate quickly
-  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-  const staticPath = NODE_ENV === 'production'
-    ? path.join(__dirname, '../static/whatsapp-widget.js')
-    : path.join(__dirname, 'static/whatsapp-widget.js');
-  res.sendFile(staticPath);
-});
+app.get('/api/v1/whatsapp-widget/widget.js', (req, res) => sendWidgetScript(req, res, 'whatsapp-widget.js'));
 // WhatsApp Widget config — API Key auth (frontend reads config)
-// Reads the single entry with slug 'config' from the 'whatsapp-widget' collection.
 app.get('/api/v1/whatsapp-widget/config', validateApiKey, async (_req, res) => {
   try {
-    const { data: col } = await supabaseImport.from('collections').select('id').eq('slug', 'whatsapp-widget').maybeSingle();
-    if (!col) return res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
-
-    const { data: entry } = await supabaseImport
-      .from('entries')
-      .select('content')
-      .eq('collection_id', col.id)
-      .eq('slug', 'config')
-      .eq('status', 'published')
-      .maybeSingle();
-
-    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant'); // 1-min CDN cache
-    res.json({ data: entry?.content || { enabled: false }, timestamp: new Date().toISOString() });
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data: await getWhatsAppConfig(), timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
   }
 });
 
 // Accessibility widget — public static JS file (no auth)
-app.get('/api/v1/accessibility/widget.js', (req, res) => {
-  res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-  const staticPath = NODE_ENV === 'production'
-    ? path.join(__dirname, '../static/accessibility-widget.js')
-    : path.join(__dirname, 'static/accessibility-widget.js');
-  res.sendFile(staticPath);
-});
+app.get('/api/v1/accessibility/widget.js', (req, res) => sendWidgetScript(req, res, 'accessibility-widget.js'));
 // Accessibility config — API Key auth (frontend reads config)
-app.get('/api/v1/accessibility/config', validateApiKey, async (req, res) => {
+app.get('/api/v1/accessibility/config', validateApiKey, async (_req, res) => {
   try {
-    const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'accessibility').single();
-    // No row = installed but never configured → default to enabled (matches admin logic)
-    const config = data?.config || { enabled: true };
     res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
-    res.json({ data: config, timestamp: new Date().toISOString() });
+    res.json({ data: await getAddonConfig('accessibility'), timestamp: new Date().toISOString() });
   } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
 

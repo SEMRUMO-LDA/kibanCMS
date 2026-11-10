@@ -16,6 +16,7 @@ import { logger } from './logger.js';
 import { expireUnpaidBookingsForCurrentTenant } from './booking-capacity.js';
 import { purgeOldConsentsForCurrentTenant } from '../routes/marketing.js';
 import { hasSoftDelete } from './soft-delete.js';
+import { getSingletonContent } from './sitemap.js';
 import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
@@ -149,7 +150,41 @@ async function processCurrentTenant(): Promise<void> {
     } catch (err: any) {
       logger.warn('Log retention purge failed', { tenant: tenantId, error: err?.message });
     }
+    try {
+      await purgeOldLeadsForCurrentTenant();
+    } catch (err: any) {
+      logger.warn('Lead retention purge failed', { tenant: tenantId, error: err?.message });
+    }
   }
+}
+
+/**
+ * Form submissions older than Settings → "Guardar leads durante" go to the
+ * Trash (hard-deleted 30 days later by the Trash sweep). 0 / unset = keep.
+ */
+async function purgeOldLeadsForCurrentTenant(): Promise<void> {
+  const site = await getSingletonContent('site-settings');
+  const months = Number(site.leads_retention_months);
+  if (!Number.isFinite(months) || months <= 0) return;
+
+  const { data: col } = await supabase.from('collections').select('id').eq('slug', 'form-submissions').maybeSingle();
+  if (!col) return;
+  const cutoff = new Date();
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
+
+  const live = await hasSoftDelete();
+  let q = supabase.from('entries').select('id').eq('collection_id', col.id).lt('created_at', cutoff.toISOString()).limit(500);
+  if (live) q = q.is('deleted_at', null);
+  const { data: rows, error } = await q;
+  if (error) throw new Error(error.message);
+  if (!rows || rows.length === 0) return;
+
+  const ids = rows.map(r => r.id);
+  const { error: delErr } = live
+    ? await supabase.from('entries').update({ deleted_at: new Date().toISOString() }).in('id', ids)
+    : await supabase.from('entries').delete().in('id', ids);
+  if (delErr) throw new Error(delErr.message);
+  logger.info('Old form submissions removed (retention)', { count: ids.length, months, trashed: live });
 }
 
 // Webhook delivery payloads hold full entries (leads, bookings) and the audit

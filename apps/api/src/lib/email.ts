@@ -19,6 +19,8 @@ import {
   bookingConfirmationTemplate,
   bookingAdminNotificationTemplate,
   newsletterWelcomeTemplate,
+  newsletterConfirmTemplate,
+  newsletterUnsubscribeConfirmTemplate,
   newsletterAdminNotificationTemplate,
   paymentReceiptTemplate,
   paymentAdminNotificationTemplate,
@@ -285,15 +287,32 @@ export async function sendBookingAdminNotification(
  */
 export async function sendNewsletterWelcome(
   email: string,
+  unsubscribeUrl?: string,
 ): Promise<void> {
   if (!email) return;
 
   const config = await getEmailConfig();
   if (!config) return;
 
-  const { subject, html } = newsletterWelcomeTemplate(email, config.defaultFromName);
+  const { subject, html } = newsletterWelcomeTemplate(email, config.defaultFromName, unsubscribeUrl);
 
   await sendEmail({ to: email, subject, html });
+}
+
+/** Double opt-in: asks the subscriber to confirm. Returns null when no email provider is configured. */
+export async function sendNewsletterConfirmation(email: string, confirmUrl: string): Promise<{ id: string } | null> {
+  const config = await getEmailConfig();
+  if (!config) return null;
+  const { subject, html } = newsletterConfirmTemplate(email, config.defaultFromName, confirmUrl);
+  return sendEmail({ to: email, subject, html });
+}
+
+/** Unsubscribe requested without a signed link: confirm it by email. Returns null when no provider is configured. */
+export async function sendNewsletterUnsubscribeConfirm(email: string, unsubscribeUrl: string): Promise<{ id: string } | null> {
+  const config = await getEmailConfig();
+  if (!config) return null;
+  const { subject, html } = newsletterUnsubscribeConfirmTemplate(email, config.defaultFromName, unsubscribeUrl);
+  return sendEmail({ to: email, subject, html });
 }
 
 /**

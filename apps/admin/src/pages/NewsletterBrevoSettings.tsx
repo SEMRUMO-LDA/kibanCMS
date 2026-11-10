@@ -144,6 +144,8 @@ interface BrevoList { id: number; name: string; totalSubscribers?: number }
 
 interface NewsletterConfig {
   enabled: boolean;
+  /** Kiban confirmation email before a subscriber becomes active (GDPR proof of consent) */
+  double_opt_in: boolean;
   sync_mode: 'realtime' | 'manual';
   brevo_api_key: string;
   brevo_list_id: string; // stored as string to keep <select> happy
@@ -154,6 +156,7 @@ interface NewsletterConfig {
 
 const DEFAULTS: NewsletterConfig = {
   enabled: true,
+  double_opt_in: true,
   sync_mode: 'realtime',
   brevo_api_key: '',
   brevo_list_id: '',
@@ -511,6 +514,25 @@ export const NewsletterBrevoSettings = () => {
           </Field>
 
           <Field>
+            <label>{t('Consent (GDPR)', 'Consentimento (RGPD)')}</label>
+            <div className="check-row">
+              <input
+                type="checkbox"
+                id="kiban-doi"
+                checked={config.double_opt_in}
+                onChange={e => update('double_opt_in', e.target.checked)}
+              />
+              <label htmlFor="kiban-doi" style={{ margin: 0 }}>
+                {t('Ask subscribers to confirm by email (double opt-in)', 'Pedir confirmação por email (dupla confirmação)')}
+              </label>
+            </div>
+            <p className="help">{t(
+              'The subscriber only becomes active after clicking the link we email them. Proof of consent, and nobody can subscribe someone else\'s address. Every email carries a signed unsubscribe link.',
+              'O subscritor só fica ativo depois de clicar no link que lhe enviamos. É a prova de consentimento, e ninguém pode inscrever o email de outra pessoa. Todos os emails levam um link assinado para cancelar.'
+            )}</p>
+          </Field>
+
+          <Field>
             <label>&nbsp;</label>
             <div className="check-row">
               <input
@@ -520,7 +542,7 @@ export const NewsletterBrevoSettings = () => {
                 onChange={e => update('brevo_double_opt_in', e.target.checked)}
               />
               <label htmlFor="brevo-doi" style={{ margin: 0 }}>
-                {t('Double opt-in (advanced)', 'Double opt-in (avançado)')}
+                {t('Brevo double opt-in (advanced)', 'Double opt-in do Brevo (avançado)')}
               </label>
             </div>
             <p className="help">{t(

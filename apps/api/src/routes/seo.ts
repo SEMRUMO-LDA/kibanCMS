@@ -40,17 +40,15 @@ function emptyConfig() {
   };
 }
 
-router.get('/', async (req: AuthRequest, res: Response) => {
-  try {
-    // req.tenantId is never set — resolve from the request's tenant context,
-    // otherwise every tenant shares one cache slot and gets another site's SEO.
+/** Public SEO settings payload, cached 60 s per tenant. Also feeds the widgets bootstrap. */
+export async function loadSeoConfig(): Promise<any> {
+    // Resolve the tenant from the request context, otherwise every tenant
+    // shares one cache slot and gets another site's SEO.
     const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
     const cached = cache.get(tenantId);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
-      return res.json({ data: cached.data, timestamp: new Date().toISOString() });
-    }
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
 
-    const { data: seoData, fromCache: fromRedis } = await withFallbackCache(`seo:settings`, async () => {
+    const { data: seoData } = await withFallbackCache(`seo:settings`, async () => {
       const { data: col, error: colErr } = await supabase
         .from('collections')
         .select('id')
@@ -141,8 +139,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
 
     cache.set(tenantId, { data: seoData, fetchedAt: Date.now() });
+    return seoData;
+}
 
-    res.json({ data: seoData, timestamp: new Date().toISOString() });
+router.get('/', async (_req: AuthRequest, res: Response) => {
+  try {
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data: await loadSeoConfig(), timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching SEO settings', { error: error.message });
     res.status(500).json({

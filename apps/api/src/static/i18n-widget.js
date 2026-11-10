@@ -748,13 +748,21 @@
     // rendering batches into one translate pass.
     startMutationObserver();
 
-    fetchJSON(BASE_URL + '/api/v1/i18n/widget', function (err, res) {
+    // Loaded through the universal loader: the bootstrap already carries
+    // widget settings + languages; standalone embeds fetch them.
+    var pre = window.KibanWidgets && typeof window.KibanWidgets.getConfig === 'function' ? window.KibanWidgets.getConfig('i18n') : undefined;
+    var getWidget = pre ? function (cb) { cb(null, { data: pre.widget || { enabled: false } }); }
+                        : function (cb) { fetchJSON(BASE_URL + '/api/v1/i18n/widget', cb); };
+    var getLanguages = pre ? function (cb) { pre.languages ? cb(null, { data: pre.languages }) : cb(new Error('i18n not configured')); }
+                           : function (cb) { fetchJSON(BASE_URL + '/api/v1/i18n/languages', cb); };
+
+    getWidget(function (err, res) {
       if (!err && res && res.data) {
         config.position = res.data.position || config.position;
         config.style = res.data.style || config.style;
       }
 
-      fetchJSON(BASE_URL + '/api/v1/i18n/languages', function (err, res) {
+      getLanguages(function (err, res) {
         if (err || !res || !res.data) return;
 
         defaultLang = res.data.default || 'pt';

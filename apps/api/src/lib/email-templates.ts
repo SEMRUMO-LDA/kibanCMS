@@ -208,17 +208,64 @@ export function bookingAdminNotificationTemplate(
 export function newsletterWelcomeTemplate(
   email: string,
   siteName: string,
+  unsubscribeUrl?: string,
 ): { subject: string; html: string } {
   const body = `
     <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Olá,</p>
     <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Obrigado por subscrever a newsletter da <strong>${escapeHtml(siteName)}</strong>.</p>
     <p style="margin:0 0 20px;font-size:15px;color:#2c2c2c;">A partir de agora vai receber as últimas novidades, promoções e conteúdos exclusivos no email <strong>${escapeHtml(email)}</strong>.</p>
     <p style="margin:0;font-size:14px;color:#888;">Se esta subscrição não foi feita por si, pode ignorar este email.</p>
+    ${unsubscribeUrl ? `<p style="margin:12px 0 0;font-size:13px;color:#999;">Pode cancelar a subscrição a qualquer momento: <a href="${escapeHtml(unsubscribeUrl)}" style="color:#666;">cancelar subscrição</a>.</p>` : ''}
     <p style="margin:12px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
   `;
 
   return {
     subject: `Bem-vindo à newsletter — ${siteName}`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Newsletter double opt-in: confirm subscription ──
+
+function ctaButton(href: string, label: string): string {
+  return `<p style="margin:0 0 20px;"><a href="${escapeHtml(href)}" style="display:inline-block;padding:12px 22px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px;">${escapeHtml(label)}</a></p>
+    <p style="margin:0 0 16px;font-size:12px;color:#999;word-break:break-all;">Se o botão não funcionar, copie este endereço para o browser:<br>${escapeHtml(href)}</p>`;
+}
+
+export function newsletterConfirmTemplate(
+  email: string,
+  siteName: string,
+  confirmUrl: string,
+): { subject: string; html: string } {
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Olá,</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#2c2c2c;">Recebemos um pedido para subscrever a newsletter da <strong>${escapeHtml(siteName)}</strong> com o email <strong>${escapeHtml(email)}</strong>. Confirme para começar a receber as novidades:</p>
+    ${ctaButton(confirmUrl, 'Confirmar subscrição')}
+    <p style="margin:0;font-size:14px;color:#888;">Se não fez este pedido, ignore este email — sem confirmação não receberá nada. O link é válido durante 7 dias.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `;
+  return {
+    subject: `Confirme a sua subscrição — ${siteName}`,
+    html: layout(body, siteName),
+  };
+}
+
+// ── Newsletter: confirm unsubscribe (signed link) ──
+
+export function newsletterUnsubscribeConfirmTemplate(
+  email: string,
+  siteName: string,
+  unsubscribeUrl: string,
+): { subject: string; html: string } {
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;">Olá,</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#2c2c2c;">Recebemos um pedido para cancelar a subscrição da newsletter da <strong>${escapeHtml(siteName)}</strong> para <strong>${escapeHtml(email)}</strong>. Confirme com um clique:</p>
+    ${ctaButton(unsubscribeUrl, 'Cancelar subscrição')}
+    <p style="margin:0;font-size:14px;color:#888;">Se não fez este pedido, ignore este email e continuará a receber a newsletter.</p>
+    <p style="margin:12px 0 0;font-size:14px;color:#888;">— ${escapeHtml(siteName)}</p>
+  `;
+  return {
+    subject: `Confirme o cancelamento da subscrição — ${siteName}`,
     html: layout(body, siteName),
   };
 }

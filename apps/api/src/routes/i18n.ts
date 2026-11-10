@@ -131,30 +131,50 @@ async function getCollectionFields(slug: string): Promise<any[]> {
 // Returns available languages for frontends
 // ============================================
 
+/** Languages a frontend can offer, or null when i18n is not configured. Also feeds the widgets bootstrap. */
+export async function publicI18nLanguages(): Promise<{ default: string; available: Array<{ code: string; name: string; flag: string }> } | null> {
+  const config = await getI18nConfig();
+  if (!config) return null;
+  const defaultLang = SUPPORTED_LANGUAGES.find(l => l.code === config.defaultLanguage);
+  return {
+    default: config.defaultLanguage,
+    available: [
+      { code: config.defaultLanguage, name: config.defaultLanguageName, flag: defaultLang?.flag || config.defaultLanguage },
+      ...config.enabledLanguages.map(l => {
+        const supported = SUPPORTED_LANGUAGES.find(s => s.code === l.code);
+        return { code: l.code, name: l.name, flag: supported?.flag || l.code };
+      }),
+    ],
+  };
+}
+
+/** Language-switcher widget settings (enabled:false when off). Also feeds the widgets bootstrap. */
+export async function publicI18nWidget(baseUrl: string): Promise<Record<string, any>> {
+  const config = await getI18nConfig();
+  if (!config || !config.widgetEnabled) return { enabled: false };
+  return {
+    enabled: true,
+    position: config.widgetPosition,
+    style: config.widgetStyle,
+    default_language: config.defaultLanguage,
+    languages: [
+      { code: config.defaultLanguage, name: config.defaultLanguageName },
+      ...config.enabledLanguages,
+    ],
+    embed_code: `<script src="${baseUrl}/api/v1/i18n/widget.js" data-api-key="YOUR_API_KEY"></script>`,
+  };
+}
+
 router.get('/languages', async (req: AuthRequest, res: Response) => {
   try {
-    const config = await getI18nConfig();
-    if (!config) {
+    const data = await publicI18nLanguages();
+    if (!data) {
       return res.status(404).json({
         error: { message: 'i18n not configured', status: 404, timestamp: new Date().toISOString() }
       });
     }
-
-    const defaultLang = SUPPORTED_LANGUAGES.find(l => l.code === config.defaultLanguage);
-
-    res.json({
-      data: {
-        default: config.defaultLanguage,
-        available: [
-          { code: config.defaultLanguage, name: config.defaultLanguageName, flag: defaultLang?.flag || config.defaultLanguage },
-          ...config.enabledLanguages.map(l => {
-            const supported = SUPPORTED_LANGUAGES.find(s => s.code === l.code);
-            return { code: l.code, name: l.name, flag: supported?.flag || l.code };
-          }),
-        ],
-      },
-      timestamp: new Date().toISOString(),
-    });
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data, timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching i18n languages', { error: error.message });
     res.status(500).json({
@@ -170,32 +190,10 @@ router.get('/languages', async (req: AuthRequest, res: Response) => {
 
 router.get('/widget', async (req: AuthRequest, res: Response) => {
   try {
-    const config = await getI18nConfig();
-    if (!config || !config.widgetEnabled) {
-      return res.json({
-        data: { enabled: false },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
     const host = req.headers.host || 'localhost';
     const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const baseUrl = `${protocol}://${host}`;
-
-    res.json({
-      data: {
-        enabled: true,
-        position: config.widgetPosition,
-        style: config.widgetStyle,
-        default_language: config.defaultLanguage,
-        languages: [
-          { code: config.defaultLanguage, name: config.defaultLanguageName },
-          ...config.enabledLanguages,
-        ],
-        embed_code: `<script src="${baseUrl}/api/v1/i18n/widget.js" data-api-key="YOUR_API_KEY"></script>`,
-      },
-      timestamp: new Date().toISOString(),
-    });
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data: await publicI18nWidget(`${protocol}://${host}`), timestamp: new Date().toISOString() });
   } catch (error: any) {
     logger.error('Error fetching widget config', { error: error.message });
     res.status(500).json({
