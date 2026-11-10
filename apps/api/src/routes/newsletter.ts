@@ -1,7 +1,12 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import { sendNewsletterWelcome, sendNewsletterAdminNotification } from '../lib/email.js';
+import { sendNewsletterWelcome, sendNewsletterAdminNotification, sendNewsletterConfirmation, sendNewsletterUnsubscribeConfirm } from '../lib/email.js';
+import { signLink, verifyLink } from '../lib/signed-links.js';
+import { getSingletonContent } from '../lib/sitemap.js';
+import { trackingToStore, type StoredTracking } from '../lib/meta-capi.js';
+import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
+import { resolveTenantById, getDefaultTenant } from '../config/tenants.js';
 import { brevoUpsertContact, buildBrevoAttributes, BrevoError, type BrevoConfig } from '../lib/brevo.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { checkSpam, captchaFailed } from '../lib/spam-protection.js';
@@ -33,6 +38,122 @@ async function loadBrevoConfig(): Promise<BrevoConfig | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Newsletter settings that are ours (not Brevo's). Double opt-in is ON unless
+ * the admin turned it off: without a confirmation the site has no proof of
+ * consent, and anyone could subscribe somebody else's address.
+ */
+async function loadNewsletterSettings(): Promise<{ doubleOptIn: boolean }> {
+  try {
+    const { data } = await supabase.from('addon_configs').select('config').eq('addon_id', 'newsletter').maybeSingle();
+    const cfg = (data?.config as Record<string, any>) || {};
+    return { doubleOptIn: cfg.double_opt_in !== false };
+  } catch {
+    return { doubleOptIn: true };
+  }
+}
+
+const LINK_TTL_CONFIRM = 7 * 24 * 3600;
+const LINK_TTL_UNSUBSCRIBE = 90 * 24 * 3600;
+
+type LinkPayload = { t: 'confirm' | 'unsub'; e: string; email: string; tenant: string };
+
+/** Signed one-click URL back to this API (the email client follows it; no API key involved). */
+function buildLinkUrl(req: Request, kind: 'confirm' | 'unsub', entryId: string, email: string): string {
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+  const base = `${proto}://${req.headers.host || 'localhost'}`;
+  const tenant = tenantStore.getStore()?.tenant?.id || 'default';
+  const token = signLink<LinkPayload>({ t: kind, e: entryId, email, tenant }, kind === 'confirm' ? LINK_TTL_CONFIRM : LINK_TTL_UNSUBSCRIBE);
+  return `${base}/api/v1/newsletter/${kind === 'confirm' ? 'confirm' : 'unsubscribe'}?token=${encodeURIComponent(token)}`;
+}
+
+function htmlPage(title: string, message: string, siteUrl: string): string {
+  const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const back = siteUrl ? `<p><a href="${esc(siteUrl)}" style="color:#1a1a1a;">Voltar ao site</a></p>` : '';
+  return `<!DOCTYPE html><html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
+<body style="margin:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#2c2c2c;">
+<div style="max-width:520px;margin:64px auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 12px rgba(0,0,0,.06);">
+<h1 style="font-size:20px;margin:0 0 12px;">${esc(title)}</h1><p style="font-size:15px;line-height:1.6;margin:0 0 16px;">${esc(message)}</p>${back}</div></body></html>`;
+}
+
+/**
+ * Runs `fn` in the tenant named by a signed link. Links are opened from an
+ * email client — no X-Tenant header, no Origin — so the host-based resolver
+ * would land on the default tenant.
+ */
+async function runInLinkTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  const tenant = resolveTenantById(tenantId) || getDefaultTenant();
+  if (!tenant) return fn();
+  const clients = getOrCreateClients(tenant);
+  return tenantStore.run({ tenant, ...clients }, fn);
+}
+
+async function findSubscriberById(entryId: string): Promise<{ id: string; content: Record<string, any> } | null> {
+  const { data: col } = await supabase.from('collections').select('id').eq('slug', 'newsletter-subscribers').maybeSingle();
+  if (!col) return null;
+  const { data } = await supabase.from('entries').select('id, content').eq('id', entryId).eq('collection_id', col.id).maybeSingle();
+  return data ? (data as any) : null;
+}
+
+/** GET /api/v1/newsletter/confirm?token=… (public — mounted in server.ts before the API-key router). */
+export async function newsletterConfirmHandler(req: Request, res: Response): Promise<void> {
+  const payload = verifyLink<LinkPayload>(req.query.token);
+  if (!payload || payload.t !== 'confirm') {
+    res.status(400).type('html').send(htmlPage('Link inválido ou expirado', 'Este link de confirmação já não é válido. Volte a subscrever a newsletter no site para receber um novo.', ''));
+    return;
+  }
+  await runInLinkTenant(payload.tenant, async () => {
+    const site = await getSingletonContent('site-settings');
+    const siteUrl = String(site.site_url || '');
+    const row = await findSubscriberById(payload.e);
+    if (!row || String(row.content.email || '').toLowerCase() !== payload.email.toLowerCase()) {
+      res.status(404).type('html').send(htmlPage('Subscrição não encontrada', 'Não encontrámos esta subscrição. Volte a subscrever no site.', siteUrl));
+      return;
+    }
+    const now = new Date().toISOString();
+    const alreadyConfirmed = row.content.confirmed === true && row.content.is_active === true;
+    if (!alreadyConfirmed) {
+      const content = { ...row.content, is_active: true, confirmed: true, confirmed_at: now };
+      await supabase.from('entries').update({ content }).eq('id', row.id);
+      const unsubscribeUrl = buildLinkUrl(req, 'unsub', row.id, payload.email);
+      sendNewsletterWelcome(payload.email, unsubscribeUrl).catch(err => logger.warn('Newsletter welcome email failed', { error: err.message }));
+      sendNewsletterAdminNotification(payload.email, String(row.content.source || '')).catch(() => {});
+      await syncSubscriberToBrevo({ entryId: row.id, email: payload.email, name: String(row.content.name || ''), source: String(row.content.source || ''), tags: String(row.content.tags || ''), baseContent: content });
+      const stored = row.content.tracking as StoredTracking | undefined;
+      if (stored) {
+        sendCapiEvent({
+          name: 'CompleteRegistration',
+          eventId: `sub_${sha256(payload.email).slice(0, 24)}`,
+          tracking: stored,
+          user: { email: payload.email, ...splitName(String(row.content.name || '')), ip: stored.ip, userAgent: stored.ua },
+          custom: { content_name: 'newsletter' },
+        }).catch(() => {});
+      }
+      logger.info('Newsletter subscription confirmed', { email: payload.email });
+    }
+    res.type('html').send(htmlPage('Subscrição confirmada', `Obrigado! O email ${payload.email} passa a receber a newsletter.`, siteUrl));
+  });
+}
+
+/** GET /api/v1/newsletter/unsubscribe?token=… (public — the link in every newsletter email). */
+export async function newsletterUnsubscribeLinkHandler(req: Request, res: Response): Promise<void> {
+  const payload = verifyLink<LinkPayload>(req.query.token);
+  if (!payload || payload.t !== 'unsub') {
+    res.status(400).type('html').send(htmlPage('Link inválido ou expirado', 'Este link já não é válido. Use o link de cancelamento do email mais recente que recebeu.', ''));
+    return;
+  }
+  await runInLinkTenant(payload.tenant, async () => {
+    const site = await getSingletonContent('site-settings');
+    const siteUrl = String(site.site_url || '');
+    const row = await findSubscriberById(payload.e);
+    if (row && String(row.content.email || '').toLowerCase() === payload.email.toLowerCase() && row.content.is_active !== false) {
+      await supabase.from('entries').update({ content: { ...row.content, is_active: false, unsubscribed_at: new Date().toISOString() } }).eq('id', row.id);
+      logger.info('Newsletter unsubscribed via signed link', { email: payload.email });
+    }
+    res.type('html').send(htmlPage('Subscrição cancelada', `O email ${payload.email} deixa de receber a newsletter.`, siteUrl));
+  });
 }
 
 /**
@@ -158,20 +279,35 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
       .filter('content->>email', 'eq', cleanEmail)
       .limit(1);
 
+    const { doubleOptIn } = await loadNewsletterSettings();
+
     if (existing && existing.length > 0) {
       // Already subscribed — return success (don't reveal to frontend).
-      // Someone who unsubscribed and signs up again is re-activated.
+      // Someone who unsubscribed (or never confirmed) and signs up again:
+      // with double opt-in they get a fresh confirmation link, otherwise
+      // they are re-activated.
       const row = existing[0] as { id: string; content: Record<string, any> };
       if (row.content?.is_active === false) {
-        await supabase
-          .from('entries')
-          .update({ content: { ...row.content, is_active: true, resubscribed_at: new Date().toISOString() } })
-          .eq('id', row.id);
-        logger.info('Newsletter re-subscription', { email: cleanEmail });
+        const lastSent = Date.parse(String(row.content.confirmation_sent_at || ''));
+        const recentlySent = Number.isFinite(lastSent) && Date.now() - lastSent < 10 * 60_000;
+        const sent = doubleOptIn && !recentlySent
+          ? await sendNewsletterConfirmation(cleanEmail, buildLinkUrl(req, 'confirm', row.id, cleanEmail))
+          : null;
+        if (sent) {
+          await supabase.from('entries').update({ content: { ...row.content, confirmation_sent_at: new Date().toISOString() } }).eq('id', row.id);
+          return res.status(200).json({ success: true, data: { subscribed: true, pending_confirmation: true }, timestamp: new Date().toISOString() });
+        }
+        if (!doubleOptIn) {
+          await supabase
+            .from('entries')
+            .update({ content: { ...row.content, is_active: true, resubscribed_at: new Date().toISOString() } })
+            .eq('id', row.id);
+          logger.info('Newsletter re-subscription', { email: cleanEmail });
+        }
       }
       return res.status(200).json({
         success: true,
-        data: { subscribed: true },
+        data: { subscribed: true, ...(doubleOptIn && row.content?.is_active === false ? { pending_confirmation: true } : {}) },
         timestamp: new Date().toISOString(),
       });
     }
@@ -179,12 +315,16 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
     const timestamp = new Date().toISOString();
     const slug = `sub-${cleanEmail.replace(/[^a-z0-9]/g, '-').slice(0, 30)}-${Date.now().toString(36)}`;
 
-    const baseContent = {
+    const baseContent: Record<string, any> = {
       email: cleanEmail,
       name: cleanName,
       source: cleanSource,
       subscribed_at: timestamp,
-      is_active: true,
+      // Double opt-in: inactive until the confirmation link is clicked
+      is_active: !doubleOptIn,
+      confirmed: !doubleOptIn,
+      confirmed_at: doubleOptIn ? '' : timestamp,
+      confirmation_sent_at: '',
       tags: '',
       // Brevo sync metadata — populated by syncSubscriberToBrevo below
       synced_to_brevo: false,
@@ -214,10 +354,29 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
       throw insertError;
     }
 
-    logger.info('Newsletter subscription', { email: cleanEmail, source: cleanSource });
+    logger.info('Newsletter subscription', { email: cleanEmail, source: cleanSource, doubleOptIn });
+
+    if (doubleOptIn && entry?.id) {
+      // Keep the Meta tracking (only with marketing consent) for the
+      // CompleteRegistration event sent when the subscriber confirms.
+      const stored = await trackingToStore(req, req.body);
+      const sent = await sendNewsletterConfirmation(cleanEmail, buildLinkUrl(req, 'confirm', entry.id, cleanEmail));
+      if (sent) {
+        await supabase.from('entries').update({
+          content: { ...baseContent, confirmation_sent_at: new Date().toISOString(), ...(stored ? { tracking: stored } : {}) },
+        }).eq('id', entry.id);
+        return res.status(201).json({ success: true, data: { subscribed: true, pending_confirmation: true }, timestamp });
+      }
+      // No email provider configured for this tenant: a confirmation can't be
+      // sent, so the subscription is activated at once (and logged).
+      logger.warn('Newsletter double opt-in skipped — no email provider configured', { email: cleanEmail });
+      Object.assign(baseContent, { is_active: true, confirmed: true, confirmed_at: timestamp });
+      await supabase.from('entries').update({ content: baseContent }).eq('id', entry.id);
+    }
 
     // Fire emails (non-blocking): welcome to subscriber + notification to admin
-    sendNewsletterWelcome(cleanEmail).catch(err =>
+    const unsubscribeUrl = entry?.id ? buildLinkUrl(req, 'unsub', entry.id, cleanEmail) : undefined;
+    sendNewsletterWelcome(cleanEmail, unsubscribeUrl).catch(err =>
       logger.warn('Newsletter welcome email failed', { email: cleanEmail, error: err.message })
     );
     sendNewsletterAdminNotification(cleanEmail, cleanSource || '').catch(err =>
@@ -302,19 +461,32 @@ router.post('/unsubscribe', async (req: AuthRequest, res: Response) => {
       .filter('content->>email', 'eq', cleanEmail)
       .limit(1);
 
+    // Anyone holding the public API key could unsubscribe anyone, so the
+    // address owner confirms by email (signed link). Direct removal only when
+    // this tenant has no email provider at all.
+    let pendingConfirmation = false;
     if (entries && entries.length > 0) {
       const entry = entries[0];
       const content = entry.content as Record<string, any>;
-      await supabase
-        .from('entries')
-        .update({ content: { ...content, is_active: false } })
-        .eq('id', entry.id);
+      if (content.is_active !== false) {
+        const sent = await sendNewsletterUnsubscribeConfirm(cleanEmail, buildLinkUrl(req, 'unsub', entry.id, cleanEmail));
+        if (sent) {
+          pendingConfirmation = true;
+        } else {
+          await supabase
+            .from('entries')
+            .update({ content: { ...content, is_active: false, unsubscribed_at: new Date().toISOString() } })
+            .eq('id', entry.id);
+        }
+      }
     }
 
-    // Always return success (don't reveal if email existed)
+    // Never reveal whether the email existed
     res.json({
       success: true,
-      data: { unsubscribed: true },
+      data: pendingConfirmation
+        ? { unsubscribed: false, pending_confirmation: true, message: 'Enviámos um email para confirmar o cancelamento.' }
+        : { unsubscribed: true },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

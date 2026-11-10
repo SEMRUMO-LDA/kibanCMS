@@ -34,7 +34,7 @@ import {
   getEnabledWidgets, getClusterConfig, getAddonConfig, getWhatsAppConfig, DEFAULT_CLUSTER_CONFIG,
 } from './lib/widgets-bootstrap.js';
 import i18nRouter from './routes/i18n.js';
-import newsletterRouter from './routes/newsletter.js';
+import newsletterRouter, { newsletterConfirmHandler, newsletterUnsubscribeLinkHandler } from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
 import { channelManagerRouter } from './routes/channel-manager.js';
 import authRouter from './routes/auth.js';
@@ -310,6 +310,10 @@ app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
 app.use('/api/v1/forms', formsLimiter, validateAny, formsRouter); // API Key (submit) + JWT (admin listing), stricter rate limit
+// Signed one-click links opened from emails (no API key): confirm a
+// subscription, unsubscribe. Registered before the API-key router.
+app.get('/api/v1/newsletter/confirm', formsLimiter, (req, res, next) => newsletterConfirmHandler(req, res).catch(next));
+app.get('/api/v1/newsletter/unsubscribe', formsLimiter, (req, res, next) => newsletterUnsubscribeLinkHandler(req, res).catch(next));
 app.use('/api/v1/newsletter', formsLimiter, validateApiKey, newsletterRouter); // Same rate limit as forms
 app.use('/api/v1/brevo', adminLimiter, validateJWT, requireAdmin, brevoRouter); // Brevo admin endpoints — JWT only
 // Stripe webhook — mounted as a direct POST handler (not via router) so the

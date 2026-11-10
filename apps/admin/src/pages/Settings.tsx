@@ -177,6 +177,8 @@ interface SiteSettings {
   ai_search_bots: string;
   ai_training_bots: string;
   business_type: string;
+  // Privacy (GDPR)
+  leads_retention_months: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -195,6 +197,7 @@ const DEFAULTS: SiteSettings = {
   ai_search_bots: 'allow',
   ai_training_bots: 'allow',
   business_type: 'Organization',
+  leads_retention_months: '0',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -442,6 +445,24 @@ export const Settings = () => {
               <Field><label>{locale === 'pt' ? 'URL do Site' : 'Site URL'}</label><input value={settings.site_url} onChange={e => update('site_url', e.target.value)} placeholder="https://example.com" /></Field>
               <Field><label>{locale === 'pt' ? 'Fuso Horário' : 'Timezone'}</label><select value={settings.timezone} onChange={e => update('timezone', e.target.value)}><option value="Europe/Lisbon">Europe/Lisbon</option><option value="Europe/London">Europe/London</option><option value="Europe/Paris">Europe/Paris</option><option value="America/New_York">America/New York</option><option value="America/Sao_Paulo">America/São Paulo</option><option value="UTC">UTC</option></select></Field>
               <Field><label>Maintenance Mode</label><select value={settings.maintenance_mode} onChange={e => update('maintenance_mode', e.target.value)}><option value="false">Off</option><option value="true">On</option></select></Field>
+            </Grid>
+          </Section>
+
+          <Section>
+            <h2>{locale === 'pt' ? 'Privacidade (RGPD)' : 'Privacy (GDPR)'}</h2>
+            <Grid>
+              <Field>
+                <label>{locale === 'pt' ? 'Guardar contactos de formulários durante' : 'Keep form submissions for'}</label>
+                <select value={settings.leads_retention_months} onChange={e => update('leads_retention_months', e.target.value)}>
+                  <option value="0">{locale === 'pt' ? 'Sempre (não apagar)' : 'Forever (never delete)'}</option>
+                  <option value="12">{locale === 'pt' ? '12 meses' : '12 months'}</option>
+                  <option value="24">{locale === 'pt' ? '24 meses (recomendado)' : '24 months (recommended)'}</option>
+                  <option value="36">{locale === 'pt' ? '36 meses' : '36 months'}</option>
+                </select>
+                <p className="help">{locale === 'pt'
+                  ? 'Submissões mais antigas vão automaticamente para a Lixeira (apagadas 30 dias depois). Exporta o CSV antes se precisares de um histórico.'
+                  : 'Older submissions are moved to the Trash automatically (deleted 30 days later). Export the CSV first if you need a history.'}</p>
+              </Field>
             </Grid>
           </Section>
         </>

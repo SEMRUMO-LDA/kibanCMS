@@ -186,6 +186,13 @@ Retorna sempre sucesso — nao revela se o email ja existia (privacidade).
 
 ### POST /unsubscribe
 
+> Desde Nov 2026: em vez de cancelar logo, envia ao subscritor um email com um
+> link assinado para confirmar o cancelamento (resposta
+> `{ unsubscribed: false, pending_confirmation: true }`). Assim ninguém com a
+> chave pública do site consegue cancelar a subscrição de outra pessoa. Se o
+> tenant não tiver email configurado, cancela diretamente como antes.
+
+
 **Body:**
 ```json
 {
@@ -283,3 +290,33 @@ Se por alguma razao houver duplicados, pode ter sido criado manualmente no admin
 ### Rate limit atingido
 Limite de 20 subscricoes por 15 minutos por IP.
 Normal em uso real. Se precisar de mais, ajustar `formsLimiter` em `server.ts`.
+
+## Dupla confirmação (double opt-in) e links assinados
+
+Ligado por omissão em **Add-ons → Newsletter → Consentimento (RGPD)**.
+
+1. `POST /subscribe` cria o subscritor **inativo** (`is_active: false`,
+   `confirmed: false`) e envia um email com um link de confirmação assinado
+   (válido 7 dias). A resposta traz `pending_confirmation: true`.
+2. Ao clicar, `GET /api/v1/newsletter/confirm?token=…` ativa a subscrição,
+   regista `confirmed_at`, envia o email de boas-vindas, notifica o admin,
+   sincroniza com o Brevo e dispara o evento Meta `CompleteRegistration`
+   (só se houve consentimento de marketing no momento da subscrição).
+3. Todos os emails levam um link `GET /api/v1/newsletter/unsubscribe?token=…`
+   (assinado, válido 90 dias) que cancela com um clique.
+
+Sem email configurado no tenant, a subscrição é ativada de imediato (fica
+registado no log). Para o site mostrar a mensagem certa:
+
+```js
+const { data } = await res.json();
+if (data.pending_confirmation) show('Verifique o seu email para confirmar a subscrição.');
+else show('Subscrição feita!');
+```
+
+## Retenção de contactos de formulários
+
+Settings → Geral → **Privacidade (RGPD)** → "Guardar contactos de formulários
+durante". As submissões mais antigas vão para a Lixeira uma vez por dia e são
+apagadas 30 dias depois. Exporta o CSV da coleção antes, se precisares de
+histórico.

@@ -76,6 +76,9 @@ const newsletter: AddonDefinition = {
         { id: 'source', name: 'source', label: 'Source', type: 'text', helpText: 'Where did they subscribe from?', placeholder: 'homepage, blog, footer' },
         { id: 'subscribed_at', name: 'subscribed_at', label: 'Subscribed At', type: 'date', required: true },
         { id: 'is_active', name: 'is_active', label: 'Active', type: 'boolean' },
+        { id: 'confirmed', name: 'confirmed', label: 'Confirmed (double opt-in)', type: 'boolean', helpText: 'True once the subscriber clicked the confirmation link' },
+        { id: 'confirmed_at', name: 'confirmed_at', label: 'Confirmed At', type: 'date' },
+        { id: 'unsubscribed_at', name: 'unsubscribed_at', label: 'Unsubscribed At', type: 'date' },
         { id: 'tags', name: 'tags', label: 'Tags', type: 'text', placeholder: 'vip, early-adopter' },
         // Brevo sync metadata
         { id: 'synced_to_brevo', name: 'synced_to_brevo', label: 'Synced to Brevo', type: 'boolean', helpText: 'True when contact was successfully pushed to Brevo' },
