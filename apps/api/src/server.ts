@@ -39,6 +39,9 @@ import brevoRouter from './routes/brevo.js';
 import { channelManagerRouter } from './routes/channel-manager.js';
 import authRouter from './routes/auth.js';
 import snapshotsRouter from './routes/snapshots.js';
+import {
+  inlineEditRouter, createSessionHandler, validateEditToken, applyPendingHandler, discardPendingHandler,
+} from './routes/inline-edit.js';
 import { supabase as supabaseImport } from './lib/supabase.js';
 import { validateApiKey, validateJWT, validateAny, configureCors, apiKeyReadOnly, requireAdmin, requireEditor } from './middleware/auth.js';
 import { logger } from './lib/logger.js';
@@ -128,7 +131,7 @@ app.use(cors({
   credentials: false, // bearer tokens, never cookies
   maxAge: 86400, // cache preflights for a day: the widgets make several XHRs per page
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Tenant'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Tenant', 'X-Kiban-Edit'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
   preflightContinue: false,
   optionsSuccessStatus: 204,
@@ -165,6 +168,8 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // they neither starve nor get starved by the general one.
 const WIDGET_BOOT_RE = /^\/api\/v1\/(widgets\/|seo(?:\?|$)|(?:cookie-notice|accessibility|whatsapp-widget)\/(?:config|widget\.js)|i18n\/(?:widget(?:\.js)?|languages)(?:\?|$))/;
 const WEBHOOK_RE = /^\/api\/v1\/(payments|channel-manager)\/webhook/;
+// Inline editing: one resolve per page plus one save per edit — its own bucket (below)
+const INLINE_EDIT_RE = /^\/api\/v1\/inline-edit\//;
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -177,7 +182,14 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => WIDGET_BOOT_RE.test(req.originalUrl) || WEBHOOK_RE.test(req.originalUrl),
+  skip: (req) => WIDGET_BOOT_RE.test(req.originalUrl) || WEBHOOK_RE.test(req.originalUrl) || INLINE_EDIT_RE.test(req.originalUrl),
+});
+const inlineEditLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { message: 'Too many editing requests, slow down a little.', status: 429 } },
 });
 const widgetLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -336,6 +348,13 @@ app.use('/api/v1/preview', (req, res, next) => {
 }, previewRouter);
 // Trash — admin-only soft-delete management
 app.use('/api/v1/trash', validateJWT, trashRouter);
+// Inline editing ("Editar no site"). The admin creates a session (JWT) and
+// approves pending changes (JWT, editor+); the overlay on the live site uses
+// the signed session token (X-Kiban-Edit). See docs/INLINE_EDITING.md.
+app.post('/api/v1/inline-edit/session', inlineEditLimiter, validateJWT, (req, res, next) => createSessionHandler(req, res).catch(next));
+app.post('/api/v1/inline-edit/pending/:id/apply', inlineEditLimiter, validateJWT, requireEditor, (req, res, next) => applyPendingHandler(req, res).catch(next));
+app.post('/api/v1/inline-edit/pending/:id/discard', inlineEditLimiter, validateJWT, requireEditor, (req, res, next) => discardPendingHandler(req, res).catch(next));
+app.use('/api/v1/inline-edit', inlineEditLimiter, validateEditToken, inlineEditRouter);
 // SEO settings — public to API-key holders so frontends can render meta tags.
 // robots.txt, sitemap.xml and llms.txt are fully public: search engines and AI
 // crawlers don't authenticate, and they only contain published content.
@@ -387,6 +406,8 @@ function sendWidgetScript(req: express.Request, res: express.Response, file: str
   res.sendFile(path.join(WIDGET_STATIC_DIR, file));
 }
 app.get('/api/v1/widgets/loader.js', (req, res) => sendWidgetScript(req, res, 'widgets-loader.js'));
+// Inline editing overlay — the loader injects it only when an editing token is present
+app.get('/api/v1/widgets/edit-overlay.js', (req, res) => sendWidgetScript(req, res, 'edit-overlay.js'));
 
 // One request with everything the loader and the widgets need (enabled list,
 // cluster layout, analytics ids, each widget's config). Replaces eight.

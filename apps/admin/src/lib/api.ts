@@ -563,6 +563,21 @@ class ApiClient {
   async channelGetLogPayload(id: string) {
     return this.request<any>('GET', `/channel-manager/log/${id}`);
   }
+
+  // ── Inline editing ("Editar no site") ──
+  async createInlineEditSession(path = '/') {
+    return this.request<{ token: string; expires_at: string; mode: string; save_mode: string; site_url: string; edit_url: string }>(
+      'POST', '/inline-edit/session', { path },
+    );
+  }
+
+  async applyInlinePending(entryId: string, indexes?: number[]) {
+    return this.request<any>('POST', `/inline-edit/pending/${entryId}/apply`, indexes ? { indexes } : {});
+  }
+
+  async discardInlinePending(entryId: string, indexes?: number[]) {
+    return this.request<any>('POST', `/inline-edit/pending/${entryId}/discard`, indexes ? { indexes } : {});
+  }
 }
 
 export const api = new ApiClient();

@@ -25,6 +25,7 @@ export const WIDGET_STATIC_DIR = candidates.find(d => existsSync(path.join(d, 'w
 
 export const WIDGET_FILES = [
   'widgets-loader.js', 'cookie-notice-widget.js', 'accessibility-widget.js', 'whatsapp-widget.js', 'i18n-widget.js',
+  'edit-overlay.js',
 ] as const;
 
 /** Short hash of the widget scripts shipped with this build. */

@@ -32,7 +32,7 @@ export const PRIVATE_COLLECTIONS = new Set([
   'automations', 'post-tour-reviews',
 ]);
 
-const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails|credential|webhook_?url|dsn|smtp|service_?role)/i;
+export const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails|credential|webhook_?url|dsn|smtp|service_?role)/i;
 
 export function redactForPublic(entry: any): any {
   if (!entry) return entry;

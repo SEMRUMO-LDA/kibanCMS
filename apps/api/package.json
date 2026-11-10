@@ -12,7 +12,7 @@
     "start": "NODE_ENV=production node dist/server.js",
     "start:prod": "NODE_ENV=production node dist/server.js",
     "typecheck": "tsc --noEmit -p .",
-    "test": "node --import tsx --test src/__tests__/security.test.ts src/__tests__/site-health.test.ts src/__tests__/translation-cache.test.ts src/__tests__/sitemap.test.ts src/__tests__/spam-protection.test.ts src/__tests__/booking-capacity.test.ts src/__tests__/booking-reminders.test.ts src/__tests__/image-optimizer.test.ts src/__tests__/ai-visibility.test.ts src/__tests__/meta-capi.test.ts src/__tests__/marketing.test.ts src/__tests__/review-fixes.test.ts src/__tests__/widgets-bootstrap.test.ts src/__tests__/gdpr.test.ts",
+    "test": "node --import tsx --test src/__tests__/security.test.ts src/__tests__/site-health.test.ts src/__tests__/translation-cache.test.ts src/__tests__/sitemap.test.ts src/__tests__/spam-protection.test.ts src/__tests__/booking-capacity.test.ts src/__tests__/booking-reminders.test.ts src/__tests__/image-optimizer.test.ts src/__tests__/ai-visibility.test.ts src/__tests__/meta-capi.test.ts src/__tests__/marketing.test.ts src/__tests__/review-fixes.test.ts src/__tests__/widgets-bootstrap.test.ts src/__tests__/gdpr.test.ts src/__tests__/inline-edit.test.ts",
     "test:smoke": "node --import tsx --test src/__tests__/smoke.test.ts"
   },
   "dependencies": {

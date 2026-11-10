@@ -115,6 +115,43 @@
     document.head.appendChild(script);
   }
 
+  // ── Inline editing ("Editar no site") ──────────────────────────────
+  // The admin opens the site from Kiban with #kiban-edit=<signed token>. We
+  // keep the token in sessionStorage (so it survives navigation within the
+  // site), remove it from the URL and inject the overlay script. Visitors
+  // never have a token, so for them none of this runs or downloads anything.
+  var EDIT_TOKEN_KEY = 'kiban-edit-token';
+  function readEditToken() {
+    var m = /(?:^#|[&?])kiban-edit=([^&]+)/.exec(location.hash) || /[?&]kiban-edit=([^&]+)/.exec(location.search);
+    if (!m) {
+      try { return sessionStorage.getItem(EDIT_TOKEN_KEY); } catch (e) { return null; }
+    }
+    var token = m[1];
+    try { token = decodeURIComponent(token); } catch (e) { /* keep raw */ }
+    try { sessionStorage.setItem(EDIT_TOKEN_KEY, token); } catch (e) { /* private mode: single-page session only */ }
+    try {
+      var u = new URL(location.href);
+      var h = u.hash.replace(/kiban-edit=[^&]+/, '').replace(/[#&]+$/, '').replace(/^#&/, '#');
+      u.hash = h === '#' ? '' : h;
+      u.searchParams.delete('kiban-edit');
+      history.replaceState(history.state, '', u.toString());
+    } catch (e) { /* ignore */ }
+    return token;
+  }
+  function loadEditOverlay() {
+    if (window.__kibanEditOverlayRequested) return;
+    var token = readEditToken();
+    if (!token) return;
+    window.__kibanEditOverlayRequested = true;
+    var script = document.createElement('script');
+    var version = bootstrapData && bootstrapData.version;
+    script.src = BASE_URL + '/api/v1/widgets/edit-overlay.js' + (version ? '?v=' + encodeURIComponent(version) : '');
+    script.setAttribute('data-api-key', API_KEY);
+    if (TENANT_ID) script.setAttribute('data-tenant', TENANT_ID);
+    script.async = true;
+    document.head.appendChild(script);
+  }
+
   // Selectors of every widget we know how to clusterise. Used by the
   // pre-hide stylesheet below (we don't want the floating button to flash
   // for ~1s before the cluster forms), and by the arrange logic to know
@@ -507,11 +544,13 @@
         if (b.cluster) applyClusterConfig(b.cluster);
         initMarketing(b.analytics || {});
         startWidgets(b.enabled || []);
+        loadEditOverlay();
         return;
       }
       // Bootstrap unavailable (network hiccup, older server): the individual
       // endpoints still exist, each widget then fetches its own config.
       initMarketing(null);
+      loadEditOverlay();
       fetchClusterConfig(function (err2, res2) {
         if (!err2 && res2 && res2.data) applyClusterConfig(res2.data);
       });
@@ -1465,6 +1504,10 @@
   window.KibanWidgets = {
     getBaseUrl: function () { return BASE_URL; },
     getApiKey: function () { return API_KEY; },
+    getTenantId: function () { return TENANT_ID; },
+    /** Inline editing session token (admins only; null for visitors). */
+    getEditToken: function () { try { return sessionStorage.getItem(EDIT_TOKEN_KEY); } catch (e) { return null; } },
+    exitEditMode: function () { try { sessionStorage.removeItem(EDIT_TOKEN_KEY); } catch (e) { /* ignore */ } },
     /** Config pre-fetched by the bootstrap for a widget ('cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'); undefined when the widget must fetch its own. */
     getConfig: function (id) { return bootstrapData && bootstrapData.configs ? bootstrapData.configs[id] : undefined; },
     getVersion: function () { return bootstrapData ? bootstrapData.version : null; },

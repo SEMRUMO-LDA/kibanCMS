@@ -11,7 +11,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../sh
 import { EntryEditor, type EntryData } from '../components/EntryEditor';
 import { type FieldDefinition } from '../components/fields/FieldRenderer';
 import { api } from '../lib/api';
-import { ArrowLeft, Loader, Clock, Eye, Share2, Copy } from 'lucide-react';
+import { ArrowLeft, Loader, Clock, Eye, Share2, Copy, PenLine } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { RevisionHistory } from '../components/RevisionHistory';
 import { LivePreview } from '../components/LivePreview';
@@ -161,6 +161,63 @@ interface Entry {
   content: EntryData;
   status: 'draft' | 'published' | 'archived';
   version?: number;
+  meta?: Record<string, any> | null;
+}
+
+/** A change made on the live site ("Editar no site", beta) waiting for approval. */
+interface InlinePending {
+  field: string;
+  value: unknown;
+  lang: string | null;
+  previous: unknown;
+  by: string;
+  at: string;
+}
+
+const PendingBox = styled.div`
+  background: #faf5ff;
+  border: 1px solid #d8b4fe;
+  border-radius: ${borders.radius.xl};
+  padding: ${spacing[4]} ${spacing[5]};
+  margin-bottom: ${spacing[5]};
+  h3 { margin: 0 0 ${spacing[1]}; font-size: ${typography.fontSize.sm}; font-weight: 600; color: #6b21a8; display: flex; align-items: center; gap: ${spacing[2]}; }
+  p.hint { margin: 0 0 ${spacing[3]}; font-size: 12px; color: #7e22ce; }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: ${spacing[2]}; }
+  li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: ${spacing[3]}; align-items: center; background: ${colors.white}; border: 1px solid #e9d5ff; border-radius: ${borders.radius.lg}; padding: ${spacing[2.5]} ${spacing[3]}; font-size: ${typography.fontSize.sm}; }
+  .what { color: ${colors.gray[500]}; font-size: 12px; margin-bottom: 2px; }
+  .what b { color: ${colors.gray[800]}; font-weight: 600; }
+  .lang { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #ede9fe; color: #6d28d9; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+  .diff { display: flex; flex-wrap: wrap; gap: ${spacing[2]}; align-items: center; min-width: 0; }
+  .diff .old { color: ${colors.gray[400]}; text-decoration: line-through; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+  .diff .new { color: ${colors.gray[900]}; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+  .diff img { height: 36px; width: 56px; object-fit: cover; border-radius: 6px; border: 1px solid ${colors.gray[200]}; }
+  .who { color: ${colors.gray[400]}; font-size: 11px; margin-top: 2px; }
+  .row-actions { display: flex; gap: ${spacing[1.5]}; }
+  .actions { display: flex; gap: ${spacing[2]}; margin-top: ${spacing[3]}; justify-content: flex-end; }
+  button { font-family: inherit; font-size: 12px; font-weight: 600; border-radius: ${borders.radius.md}; padding: ${spacing[1.5]} ${spacing[3]}; cursor: pointer; border: 1px solid transparent; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.apply { background: #7c3aed; color: ${colors.white}; }
+  button.apply:hover:not(:disabled) { background: #6d28d9; }
+  button.reject { background: ${colors.white}; color: ${colors.gray[700]}; border-color: ${colors.gray[300]}; }
+  button.reject:hover:not(:disabled) { background: ${colors.gray[50]}; }
+`;
+
+const IMAGE_FIELD_RE = /\.(png|jpe?g|webp|gif|avif|svg)(\?.*)?$/i;
+
+function pendingLabel(field: string, fields: FieldDefinition[]): string {
+  if (field === 'title') return 'Título';
+  if (field === 'excerpt') return 'Resumo';
+  if (field === 'featured_image') return 'Imagem destacada';
+  const key = field.startsWith('content.') ? field.slice(8) : field;
+  const def = fields.find(f => (f as any).id === key);
+  return (def as any)?.name || key;
+}
+
+function PendingValue({ value }: { value: unknown }) {
+  if (value && typeof value === 'object' && typeof (value as any).url === 'string') value = (value as any).url;
+  if (typeof value === 'string' && /^https?:\/\//.test(value) && IMAGE_FIELD_RE.test(value)) return <img src={value} alt="" />;
+  if (value === null || value === undefined || value === '') return <span style={{ color: colors.gray[400] }}>(vazio)</span>;
+  return <span>{String(value)}</span>;
 }
 
 // Stable references. The editor re-initialises its form whenever
@@ -329,6 +386,33 @@ export function EntryEdit() {
     navigate(`/content/${collectionSlug}`);
   };
 
+  // ── Changes made on the live site (beta) awaiting approval ──
+  const [pendingBusy, setPendingBusy] = useState(false);
+  const inlinePending: InlinePending[] = Array.isArray(entry?.meta?.inline_pending) ? entry!.meta!.inline_pending : [];
+
+  const resolvePending = async (action: 'apply' | 'discard', indexes?: number[]) => {
+    if (!entry || pendingBusy) return;
+    if (isDirty) {
+      toast.error('Guarde primeiro as suas alterações — a aprovação recarrega a entrada.');
+      return;
+    }
+    setPendingBusy(true);
+    try {
+      const { error } = action === 'apply'
+        ? await api.applyInlinePending(entry.id, indexes)
+        : await api.discardInlinePending(entry.id, indexes);
+      if (error) throw new Error(error);
+      const { data: fresh, error: reloadErr } = await api.getEntryById(entry.id);
+      if (reloadErr || !fresh) throw new Error(reloadErr || 'Não foi possível recarregar a entrada');
+      setEntry(fresh);
+      toast.success(action === 'apply' ? 'Alterações do site aplicadas e guardadas.' : 'Alterações do site rejeitadas.');
+    } catch (err: any) {
+      toast.error(err.message || 'Operação falhou');
+    } finally {
+      setPendingBusy(false);
+    }
+  };
+
   const handleSharePreview = async () => {
     if (!entry) return;
     if (isDirty) {
@@ -431,6 +515,38 @@ export function EntryEdit() {
         }}>
           {saveStatus === 'saving' ? 'Saving...' : 'Saved'}
         </div>
+      )}
+
+      {isEditMode && entry && inlinePending.length > 0 && (
+        <PendingBox role="region" aria-label="Alterações feitas no site">
+          <h3><PenLine size={15} /> {inlinePending.length === 1 ? '1 alteração feita no site' : `${inlinePending.length} alterações feitas no site`} a aguardar aprovação</h3>
+          <p className="hint">Feitas com "Editar no site" (beta). Nada foi publicado ainda: aplique para as guardar na entrada ou rejeite.</p>
+          <ul>
+            {inlinePending.map((p, i) => (
+              <li key={`${p.field}-${p.lang || ''}-${i}`}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="what"><b>{pendingLabel(p.field, fields)}</b>{p.lang && <span className="lang">{p.lang.toUpperCase()}</span>}</div>
+                  <div className="diff">
+                    <span className="old"><PendingValue value={p.previous} /></span>
+                    <span aria-hidden="true">→</span>
+                    <span className="new"><PendingValue value={p.value} /></span>
+                  </div>
+                  <div className="who">{p.by} · {new Date(p.at).toLocaleString('pt-PT')}</div>
+                </div>
+                <div className="row-actions">
+                  <button type="button" className="reject" disabled={pendingBusy} onClick={() => resolvePending('discard', [i])}>Rejeitar</button>
+                  <button type="button" className="apply" disabled={pendingBusy} onClick={() => resolvePending('apply', [i])}>Aplicar</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {inlinePending.length > 1 && (
+            <div className="actions">
+              <button type="button" className="reject" disabled={pendingBusy} onClick={() => resolvePending('discard')}>Rejeitar todas</button>
+              <button type="button" className="apply" disabled={pendingBusy} onClick={() => resolvePending('apply')}>{pendingBusy ? 'A aplicar…' : 'Aplicar todas'}</button>
+            </div>
+          )}
+        </PendingBox>
       )}
 
       <EntryEditor
