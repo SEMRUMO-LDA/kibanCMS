@@ -10,8 +10,17 @@
   'use strict';
 
   // ── Config from script tag ──
-  var scripts = document.querySelectorAll('script[data-api-key]');
-  var scriptTag = scripts[scripts.length - 1];
+  // Our own tag: document.currentScript when available, else the tag whose src
+  // points at this script. The last `script[data-api-key]` on the page may be
+  // an unrelated embed — using it sent every request to a foreign origin.
+  var scriptTag = document.currentScript && document.currentScript.getAttribute('data-api-key') ? document.currentScript : null;
+  if (!scriptTag) {
+    var scripts = document.querySelectorAll('script[data-api-key]');
+    for (var si = scripts.length - 1; si >= 0; si--) {
+      if (/\/accessibility\/widget\.js/.test(scripts[si].src || '')) { scriptTag = scripts[si]; break; }
+    }
+    if (!scriptTag) scriptTag = scripts[scripts.length - 1];
+  }
   if (!scriptTag) return;
 
   var API_KEY = scriptTag.getAttribute('data-api-key');
@@ -58,13 +67,25 @@
     xhr.send();
   }
 
+  var baseFontPx = 0;
+
   // ── Apply CSS adjustments ──
   function applyToDOM() {
     var html = document.documentElement;
 
-    // Font size
-    var sizes = ['', '120%', '140%'];
-    html.style.fontSize = sizes[prefs.fontSize] || '';
+    // Font size — scale the site's own root size in px. A percentage compounds
+    // on sites using html{font-size:62.5%} (rem pattern) and grows every rem by 92%.
+    var scales = [0, 1.2, 1.4];
+    var scale = scales[prefs.fontSize] || 0;
+    if (scale) {
+      if (!baseFontPx) {
+        html.style.fontSize = '';
+        baseFontPx = parseFloat(getComputedStyle(html).fontSize) || 16;
+      }
+      html.style.fontSize = (baseFontPx * scale) + 'px';
+    } else {
+      html.style.fontSize = '';
+    }
 
     // High contrast
     html.classList.toggle('a11y-high-contrast', prefs.contrast);
@@ -75,10 +96,8 @@
     // Line spacing
     var spacings = ['', '1.8', '2.2'];
     html.style.setProperty('--a11y-line-height', spacings[prefs.lineSpacing] || '');
-    if (prefs.lineSpacing > 0) {
-      document.body.style.lineHeight = 'var(--a11y-line-height)';
-    } else {
-      document.body.style.lineHeight = '';
+    if (document.body) { // absent when embedded in <head>
+      document.body.style.lineHeight = prefs.lineSpacing > 0 ? 'var(--a11y-line-height)' : '';
     }
 
     // Large cursor
@@ -206,7 +225,7 @@
 
     // Custom CSS
     if (config.customCSS) {
-      html += '<style>' + config.customCSS + '</style>';
+      html += '<style>' + String(config.customCSS).replace(/<\/style/gi, '<\\/style') + '</style>'; // can't break out of the style block
     }
 
     panel.innerHTML = html;

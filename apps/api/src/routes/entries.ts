@@ -8,6 +8,7 @@ import { tenantStore } from '../middleware/tenant.js';
 import { autoTranslateEntryToAllLanguages } from './i18n.js';
 import { withFallbackCache, invalidateCachePattern } from '../lib/redis.js';
 import { isApiKeyRequest, type AuthRequest } from '../middleware/auth.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 import { entryJsonLd, getSiteContext } from '../lib/structured-data.js';
 
 const router: Router = Router();
@@ -31,7 +32,7 @@ export const PRIVATE_COLLECTIONS = new Set([
   'automations', 'post-tour-reviews',
 ]);
 
-const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails)/i;
+const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails|credential|webhook_?url|dsn|smtp|service_?role)/i;
 
 export function redactForPublic(entry: any): any {
   if (!entry) return entry;
@@ -55,38 +56,6 @@ function collectionNotFound(res: Response) {
 /** Escape special ILIKE characters to prevent pattern injection */
 function escapeIlike(str: string): string {
   return str.replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
-
-/**
- * Soft-delete availability probe.
- *
- * Migration 004 adds entries.deleted_at. Tenants that haven't run it yet
- * cannot be filtered with .is('deleted_at', null) — the query 500s with a
- * "column does not exist" error. We probe once per tenant, cache the result,
- * and only apply the filter when the column is known to exist.
- */
-const softDeleteAvailability = new Map<string, boolean>();
-
-async function hasSoftDelete(): Promise<boolean> {
-  const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
-  const cached = softDeleteAvailability.get(tenantId);
-  if (cached !== undefined) return cached;
-
-  const { error } = await supabase
-    .from('entries')
-    .select('deleted_at')
-    .limit(1);
-
-  const available = !error;
-  softDeleteAvailability.set(tenantId, available);
-
-  if (!available) {
-    logger.warn('Migration 004 not applied for tenant — Trash disabled', {
-      tenant: tenantId,
-      hint: 'Run database/migrations/004_soft_delete_trash.sql on this tenant\'s Supabase to enable Trash.',
-    });
-  }
-  return available;
 }
 
 // ============================================
@@ -148,6 +117,22 @@ function isAdminOrEditor(role: string | null): boolean {
   return ['super_admin', 'admin', 'editor'].includes(role || '');
 }
 
+/** Collections holding credentials (Stripe keys, DeepL key…): admins only. */
+const ADMIN_ONLY_COLLECTIONS = new Set(['stripe-config', 'i18n-config', 'addons-config']);
+
+/**
+ * Logged-in users: viewers/authors never see private collections (customer
+ * data, config); credential collections are admin-only. API keys are handled
+ * separately (never). Public collections are open to every role.
+ */
+async function canAccessPrivate(req: AuthRequest, collectionSlug: string): Promise<boolean> {
+  if (!PRIVATE_COLLECTIONS.has(collectionSlug)) return true;
+  if (!req.profileId) return false;
+  const role = await getUserRole(req.profileId);
+  if (ADMIN_ONLY_COLLECTIONS.has(collectionSlug)) return ['super_admin', 'admin'].includes(role || '');
+  return isAdminOrEditor(role);
+}
+
 // ============================================
 // ENTRY SELECT FIELDS
 // Single source of truth for what we select from entries.
@@ -204,11 +189,14 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: entry, error } = await supabase
+    const publicRead = isApiKeyRequest(req);
+    let byIdQuery = supabase
       .from('entries')
       .select(`${ENTRY_SELECT}, collection_id`)
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+    // Trashed entries are not public (admins still open them from the Trash page)
+    if (publicRead && await hasSoftDelete()) byIdQuery = byIdQuery.is('deleted_at', null);
+    const { data: entry, error } = await byIdQuery.single();
 
     if (error || !entry) {
       return res.status(404).json({
@@ -223,12 +211,11 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
       .eq('id', (entry as any).collection_id)
       .single();
 
-    const publicRead = isApiKeyRequest(req);
-    if (publicRead && (
+    if (
       !collection ||
-      PRIVATE_COLLECTIONS.has(collection.slug) ||
-      (entry as any).status !== 'published'
-    )) {
+      (publicRead && (PRIVATE_COLLECTIONS.has(collection.slug) || (entry as any).status !== 'published')) ||
+      (!publicRead && !(await canAccessPrivate(req, collection.slug)))
+    ) {
       return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });
@@ -266,6 +253,9 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
     if (publicRead && PRIVATE_COLLECTIONS.has(collectionSlug as string)) {
       return collectionNotFound(res);
     }
+    if (!publicRead && !(await canAccessPrivate(req, collectionSlug as string))) {
+      return collectionNotFound(res);
+    }
 
     const collection = await getCollection(collectionSlug as string);
     if (!collection) {
@@ -298,7 +288,8 @@ router.get('/:collection', async (req: AuthRequest, res: Response) => {
       }
 
       if (search && typeof search === 'string') {
-        const escaped = escapeIlike(search);
+        // `,()"` are PostgREST filter syntax: strip them so a search term can't append conditions
+        const escaped = escapeIlike(search.replace(/[,()"\\]/g, ' ').trim().slice(0, 100));
         query = query.or(`title.ilike.%${escaped}%,excerpt.ilike.%${escaped}%`);
       }
 
@@ -363,6 +354,9 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
 
     const publicRead = isApiKeyRequest(req);
     if (publicRead && PRIVATE_COLLECTIONS.has(collectionSlug as string)) {
+      return collectionNotFound(res);
+    }
+    if (!publicRead && !(await canAccessPrivate(req, collectionSlug as string))) {
       return collectionNotFound(res);
     }
 
@@ -489,6 +483,11 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
         error: { message: 'Forbidden: Insufficient permissions to create entries', status: 403, timestamp: new Date().toISOString() },
       });
     }
+    if (!(await canAccessPrivate(req, collectionSlug as string))) {
+      return res.status(403).json({
+        error: { message: 'Forbidden: this collection is managed by administrators', status: 403, timestamp: new Date().toISOString() },
+      });
+    }
 
     const collection = await getCollection(collectionSlug as string);
     if (!collection) {
@@ -519,6 +518,17 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
         error: { message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`, status: 400, timestamp: new Date().toISOString() },
       });
     }
+    // Scheduled entries go live at published_at (scheduled-publisher worker)
+    let publishedAt: string | null = entryStatus === 'published' ? new Date().toISOString() : null;
+    if (entryStatus === 'scheduled') {
+      const when = Date.parse(String(req.body.published_at || ''));
+      if (!Number.isFinite(when) || when <= Date.now()) {
+        return res.status(400).json({
+          error: { message: 'Scheduled entries need a future published_at date', status: 400, timestamp: new Date().toISOString() },
+        });
+      }
+      publishedAt = new Date(when).toISOString();
+    }
 
     const { data: entry, error } = await supabase
       .from('entries')
@@ -529,7 +539,7 @@ router.post('/:collection', async (req: AuthRequest, res: Response) => {
         content: content || {},
         excerpt: excerpt || null,
         status: entryStatus,
-        published_at: entryStatus === 'published' ? new Date().toISOString() : null,
+        published_at: publishedAt,
         author_id: authorId,
         tags: tags || [],
         meta: meta || {},
@@ -594,16 +604,23 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: existing } = await supabase
+    let existingQuery = supabase
       .from('entries')
-      .select('id, author_id, version')
+      .select('id, author_id, version, status')
       .eq('collection_id', collection.id)
-      .eq('slug', entrySlug)
-      .single();
+      .eq('slug', entrySlug);
+    if (await hasSoftDelete()) existingQuery = existingQuery.is('deleted_at', null);
+    const { data: existing } = await existingQuery.single();
 
     if (!existing) {
       return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    if (!(await canAccessPrivate(req, collectionSlug as string))) {
+      return res.status(403).json({
+        error: { message: 'Forbidden: this collection is managed by administrators', status: 403, timestamp: new Date().toISOString() },
       });
     }
 
@@ -645,7 +662,16 @@ router.put('/:collection/:slug', async (req: AuthRequest, res: Response) => {
         });
       }
       if (updateData.status === 'published') {
-        updateData.published_at = new Date().toISOString();
+        // The first publish stamps the date; later edits keep it (sorting, JSON-LD datePublished)
+        if (existing.status !== 'published') updateData.published_at = new Date().toISOString();
+      } else if (updateData.status === 'scheduled') {
+        const when = Date.parse(String(req.body.published_at || ''));
+        if (!Number.isFinite(when) || when <= Date.now()) {
+          return res.status(400).json({
+            error: { message: 'Scheduled entries need a future published_at date', status: 400, timestamp: new Date().toISOString() },
+          });
+        }
+        updateData.published_at = new Date(when).toISOString();
       }
     }
 
@@ -766,12 +792,13 @@ router.post('/:collection/:slug/duplicate', async (req: AuthRequest, res: Respon
       });
     }
 
-    const { data: source, error: srcErr } = await supabase
+    let sourceQuery = supabase
       .from('entries')
       .select('title, slug, content, meta, tags, featured_image')
       .eq('collection_id', collection.id)
-      .eq('slug', entrySlug)
-      .single();
+      .eq('slug', entrySlug);
+    if (await hasSoftDelete()) sourceQuery = sourceQuery.is('deleted_at', null);
+    const { data: source, error: srcErr } = await sourceQuery.single();
 
     if (srcErr || !source) {
       return res.status(404).json({
@@ -885,12 +912,14 @@ router.delete('/:collection/:slug', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: existing } = await supabase
+    let existingQuery = supabase
       .from('entries')
       .select('id, title, slug, author_id')
       .eq('collection_id', collection.id)
-      .eq('slug', entrySlug)
-      .single();
+      .eq('slug', entrySlug);
+    // Already in Trash → 404 (a second delete used to restart the 30-day clock)
+    if (await hasSoftDelete()) existingQuery = existingQuery.is('deleted_at', null);
+    const { data: existing } = await existingQuery.single();
 
     if (!existing) {
       return res.status(404).json({

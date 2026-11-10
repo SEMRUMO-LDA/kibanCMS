@@ -132,18 +132,25 @@ router.post('/:id/restore', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('entries')
       .update({ deleted_at: null })
       .eq('id', id);
 
+    // A live entry took the slug while this one sat in the Trash (migration
+    // 013 lets slugs be reused): restore under a new slug instead of failing.
+    let restoredSlug = existing.slug;
+    if (error && (error as any).code === '23505') {
+      restoredSlug = `${existing.slug}-restored-${Date.now().toString(36)}`;
+      ({ error } = await supabase.from('entries').update({ deleted_at: null, slug: restoredSlug }).eq('id', id));
+    }
     if (error) throw error;
 
-    audit(req, 'restore', 'entry', id, { title: existing.title });
+    audit(req, 'restore', 'entry', id, { title: existing.title, slug: restoredSlug });
     logger.info('Entry restored from trash', { id, title: existing.title });
 
     res.json({
-      data: { id, title: existing.title, slug: existing.slug },
+      data: { id, title: existing.title, slug: restoredSlug, renamed: restoredSlug !== existing.slug },
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {

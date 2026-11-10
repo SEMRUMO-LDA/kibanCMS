@@ -213,9 +213,11 @@ export const PostTourReviewsSettings = () => {
       };
 
       if (entryId) {
-        await api.updateEntry(COLLECTION_SLUG, ENTRY_SLUG, payload);
+        const { error: updateErr } = await api.updateEntry(COLLECTION_SLUG, ENTRY_SLUG, payload);
+        if (updateErr) throw new Error(updateErr);
       } else {
-        await api.createEntry(COLLECTION_SLUG, { ...payload, slug: ENTRY_SLUG });
+        const { error: createErr } = await api.createEntry(COLLECTION_SLUG, { ...payload, slug: ENTRY_SLUG });
+        if (createErr) throw new Error(createErr);
         const { data: entries } = await api.getEntries(COLLECTION_SLUG);
         const created = (entries || []).find((e: any) => e.slug === ENTRY_SLUG);
         if (created) setEntryId(created.id);

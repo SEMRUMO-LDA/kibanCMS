@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './features/auth/hooks/useAuth';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { I18nProvider } from './lib/i18n';
 import { Login } from './pages/Login';
 import { Onboarding } from './pages/Onboarding';
@@ -143,7 +144,9 @@ export default function App() {
     <I18nProvider>
       <AuthProvider>
         <ToastProvider>
-          <AppContent />
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
         </ToastProvider>
       </AuthProvider>
     </I18nProvider>

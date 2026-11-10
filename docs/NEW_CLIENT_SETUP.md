@@ -58,7 +58,7 @@ Se o script nao conseguiu correr o SQL automaticamente (precisa de `psql` ou Sup
 no Supabase SQL Editor do novo projecto corre **dois ficheiros, por esta ordem**:
 
 1. `database/migrations/CLEAN_RESET.sql` — schema base (so em projectos novos: apaga tudo)
-2. `database/UPGRADE_TENANT.sql` — migrations 002–011 numa transacao; termina com uma
+2. `database/UPGRADE_TENANT.sql` — migrations 002–013 numa transacao; termina com uma
    checklist em que tudo deve aparecer `true`
 
 ### Passo 5: Adicionar ao Railway
@@ -113,7 +113,7 @@ clients/
 scripts/
   new-client.sh       # Script de setup
 database/
-  UPGRADE_TENANT.sql  # Migrations 002–011 num so ficheiro (gerado)
+  UPGRADE_TENANT.sql  # Migrations 002–013 num so ficheiro (gerado)
   migrations/
     CLEAN_RESET.sql   # Schema base (so projectos novos)
     002…011_*.sql     # Migrations idempotentes (ver migrations/README.md)

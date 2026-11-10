@@ -31,7 +31,7 @@ evento enviado, quantos não foram enviados por falta de consentimento e o últi
 
 ## Modo automático (todos os sites com os widgets do Kiban)
 
-Se o site carrega o script dos widgets (`/widgets/loader.js` com `data-tenant`),
+Se o site carrega o script dos widgets (`/api/v1/widgets/loader.js` com `data-tenant`),
 **não é preciso mexer no código do site**:
 
 1. **Pixel instalado automaticamente** a partir do *Facebook Pixel ID* das SEO

@@ -57,7 +57,7 @@ Isto garante que o setup existente continua a funcionar sem mudancas.
 1. **Criar Supabase**: Novo projeto no Supabase dashboard
 2. **Correr schema** (ou usa `pnpm new-client`, que faz isto sozinho): no SQL Editor corre
    `database/migrations/CLEAN_RESET.sql` e depois `database/UPGRADE_TENANT.sql`
-   (migrations 002–011; termina com uma checklist em que tudo deve aparecer `true`).
+   (migrations 002–013; termina com uma checklist em que tudo deve aparecer `true`).
    Os ficheiros em `database/seeds/` sao especificos de um cliente — nao os corras noutros.
 3. **Desligar registos publicos**: Authentication → Sign In / Providers → Email →
    desliga "Allow new users to sign up". Os utilizadores entram por convite (Users → Invite).

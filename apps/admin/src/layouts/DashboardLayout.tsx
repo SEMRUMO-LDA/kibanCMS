@@ -508,6 +508,8 @@ export const DashboardLayout = () => {
   const [contentShortcuts, setContentShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const [shortcuts, setShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const { user, profile, signOut } = useAuth();
+  // Users / Affiliates are admin-only on the API: don't offer them to editors (they only got "Forbidden")
+  const isAdminRole = ['super_admin', 'admin'].includes(profile?.role);
 
   // Content shortcuts — collections that hold the operator's primary
   // content (tours, testimonials, blog posts) and deserve a top-level
@@ -701,7 +703,7 @@ export const DashboardLayout = () => {
                 <span>Orders</span>
               </NavItem>
             )}
-            {hasAffiliates && (
+            {hasAffiliates && isAdminRole && (
               <NavItem $active={location.pathname === '/affiliates' || location.pathname.startsWith('/affiliates/')} $collapsed={collapsed} onClick={() => handleNavigation('/affiliates')} role="button" tabIndex={0} title={collapsed ? 'Affiliates' : undefined}>
                 <Handshake size={20} />
                 <span>Affiliates</span>
@@ -739,9 +741,11 @@ export const DashboardLayout = () => {
 
           <NavSection>
             <NavLabel $collapsed={collapsed}>{t('nav.system')}</NavLabel>
-            <NavItem $active={location.pathname.startsWith('/users')} $collapsed={collapsed} onClick={() => handleNavigation('/users')} role="button" tabIndex={0} title={collapsed ? t('nav.users') : undefined}>
-              <Users size={20} /><span>{t('nav.users')}</span>
-            </NavItem>
+            {isAdminRole && (
+              <NavItem $active={location.pathname.startsWith('/users')} $collapsed={collapsed} onClick={() => handleNavigation('/users')} role="button" tabIndex={0} title={collapsed ? t('nav.users') : undefined}>
+                <Users size={20} /><span>{t('nav.users')}</span>
+              </NavItem>
+            )}
             <NavItem $active={location.pathname === '/activity'} $collapsed={collapsed} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0} title={collapsed ? t('nav.activity') : undefined}>
               <Activity size={20} /><span>{t('nav.activity')}</span>
             </NavItem>

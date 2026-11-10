@@ -9,7 +9,7 @@
 | Metodo | Descricao |
 |--------|-----------|
 | **JWT** | `Authorization: Bearer <token>` — usado nas rotas admin, requer JWT valido do Supabase |
-| **API Key** | `Authorization: <api-key>` — rotas publicas (entries, media, webhooks) |
+| **API Key** | `Authorization: Bearer <api-key>` — rotas publicas (entries, media, forms, checkout) |
 | **validateAny** | Aceita JWT ou API Key |
 | **Public** | Sem autenticacao (health, redirects) |
 

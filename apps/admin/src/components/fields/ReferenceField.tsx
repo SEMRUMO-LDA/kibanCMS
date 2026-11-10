@@ -151,7 +151,7 @@ export function ReferenceField({
               <div className="ref-title">{selectedEntry.title || selectedEntry.slug}</div>
               <div className="ref-meta">{referenceCollection} / {selectedEntry.slug}</div>
             </div>
-            <button onClick={handleClear} title="Remove reference" disabled={disabled}><X /></button>
+            <button type="button" onClick={handleClear} title="Remove reference" disabled={disabled}><X /></button>
           </Selected>
         ) : (
           <>

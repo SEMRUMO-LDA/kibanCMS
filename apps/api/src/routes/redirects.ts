@@ -44,7 +44,7 @@ router.get('/resolve', async (req: Request, res: Response) => {
         .select('id, content')
         .eq('collection_id', col.id)
         .eq('status', 'published')
-        .like('content->>from_path', `%${path}`);
+        .like('content->>from_path', `%${path.replace(/[%_\\]/g, (m) => '\\' + m)}`);
       match = (candidates || []).find((c: any) => {
         const fp = c.content?.from_path;
         if (typeof fp !== 'string' || !/^https?:\/\//i.test(fp)) return false;
@@ -80,7 +80,7 @@ router.get('/resolve', async (req: Request, res: Response) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    res.status(500).json({ error: { message: error.message, status: 500 } });
+    res.status(500).json({ error: { message: 'Failed to resolve redirect', status: 500 } });
   }
 });
 

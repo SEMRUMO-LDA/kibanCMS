@@ -11,6 +11,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
+import { PRIVATE_COLLECTIONS } from './entries.js';
 import { logger } from '../lib/logger.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { resolveTenantById } from '../config/tenants.js';
@@ -49,6 +50,14 @@ router.post('/token', async (req: AuthRequest, res: Response) => {
       .single();
 
     if (error || !entry) {
+      return res.status(404).json({
+        error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
+
+    // Previews are for content pages; private collections (orders, leads, config) have none
+    const { data: col } = await supabase.from('collections').select('slug').eq('id', entry.collection_id).maybeSingle();
+    if (!col || PRIVATE_COLLECTIONS.has(col.slug)) {
       return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() },
       });

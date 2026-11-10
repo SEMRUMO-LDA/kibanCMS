@@ -57,9 +57,13 @@ router.get('/', async (req: AuthRequest, res: Response) => {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false });
 
-    // Non-admins only see their own files and public files
-    const admin = req.profileId ? await isAdmin(req.profileId) : false;
-    if (!admin && req.profileId) {
+    // Public API keys only see public files (a key inherits its creator's
+    // profile id — that must not grant the creator's admin view). Logged-in
+    // non-admins see their own files and public files.
+    const admin = req.authType === 'jwt' && req.profileId ? await isAdmin(req.profileId) : false;
+    if (req.authType !== 'jwt') {
+      query = query.eq('is_public', true);
+    } else if (!admin && req.profileId) {
       query = query.or(`uploaded_by.eq.${req.profileId},is_public.eq.true`);
     }
 
@@ -74,7 +78,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     if (search && typeof search === 'string') {
-      const escaped = escapeIlike(search);
+      const escaped = escapeIlike(search.replace(/[,()"\\]/g, ' ').trim().slice(0, 100));
       query = query.or(`filename.ilike.%${escaped}%,original_name.ilike.%${escaped}%`);
     }
 
@@ -130,9 +134,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Non-admins can only see own files or public files
-    const admin = req.profileId ? await isAdmin(req.profileId) : false;
-    if (!admin && file.uploaded_by !== req.profileId && !file.is_public) {
+    // Non-admins can only see own files or public files (API keys: public only)
+    const admin = req.authType === 'jwt' && req.profileId ? await isAdmin(req.profileId) : false;
+    const own = req.authType === 'jwt' && file.uploaded_by === req.profileId;
+    if (!admin && !own && !file.is_public) {
       res.status(403).json({
         error: { message: 'Forbidden', status: 403, timestamp: new Date().toISOString() },
       });

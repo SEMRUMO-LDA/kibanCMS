@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { toApiFields, toEditorFields } from '../lib/field-schema';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { useToast } from '../components/Toast';
@@ -309,7 +310,7 @@ export const CollectionEdit = () => {
         setCollection({
           id: data.id, name: data.name, slug: data.slug,
           description: data.description || '', type: data.type,
-          fields: (data.fields || []).map((f: any, i: number) => ({ ...f, id: f.id || `field_${i}` })),
+          fields: toEditorFields(data.fields || []) as FieldDef[],
         });
       } catch (err: any) {
         setError(err.message);
@@ -349,7 +350,7 @@ export const CollectionEdit = () => {
     setSaving(true);
     try {
       const { error } = await api.updateCollection(slug!, {
-        name: collection.name, description: collection.description, type: collection.type, fields: collection.fields,
+        name: collection.name, description: collection.description, type: collection.type, fields: toApiFields(collection.fields),
       });
       if (error) throw new Error(error);
       navigate(`/content/${collection.slug}`);

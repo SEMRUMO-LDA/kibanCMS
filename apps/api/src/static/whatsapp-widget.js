@@ -79,12 +79,15 @@
     var range = parseHoursRange(config[key]);
     if (!range) return false;
     var minutes = now.getHours() * 60 + now.getMinutes();
-    return minutes >= range.open && minutes < range.close;
+    // Ranges that cross midnight (20:00–02:00) wrap around
+    return range.close > range.open
+      ? minutes >= range.open && minutes < range.close
+      : minutes >= range.open || minutes < range.close;
   }
 
   function buildWhatsAppUrl(phone, message) {
     // Strip non-digits but keep + for international
-    var clean = String(phone || '').replace(/[^0-9]/g, '');
+    var clean = String(phone || '').replace(/[^0-9]/g, '').replace(/^00/, ''); // wa.me takes country code without 00
     if (!clean) return null;
     var url = 'https://wa.me/' + clean;
     if (message) url += '?text=' + encodeURIComponent(message);
@@ -95,8 +98,9 @@
   function renderMarkdownLite(text) {
     var safe = escapeHtml(text);
     return safe.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (_, label, href) {
-      var safeHref = escapeHtml(href);
-      return '<a href="' + safeHref + '" target="_blank" rel="noopener">' + label + '</a>';
+      var raw = String(href).replace(/&amp;/g, '&'); // `safe` is already escaped
+      if (!/^(https?:\/\/|mailto:|tel:|\/|#)/i.test(raw)) return label; // no javascript: links
+      return '<a href="' + escapeHtml(raw) + '" target="_blank" rel="noopener">' + label + '</a>';
     });
   }
 

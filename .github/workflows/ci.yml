@@ -1,7 +1,7 @@
 name: CI
 
 # Runs on every PR and on pushes to main. Same toolchain as the Dockerfile
-# (Node 20, pnpm 8.14) so a green CI means the Railway build will pass too.
+# (Node 22, pnpm 8.14) so a green CI means the Railway build will pass too.
 on:
   pull_request:
   push:
@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install

@@ -45,6 +45,7 @@ async function deliverWebhook(delivery: WebhookDelivery, webhook: Webhook): Prom
 
     const response = await fetch(delivery.url, {
       method: 'POST',
+      redirect: 'manual', // never follow a redirect into an internal address
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': `sha256=${signature}`,
@@ -234,13 +235,18 @@ async function processAllTenants() {
 export function startWebhookWorker(intervalMs: number = 5000) {
   console.log('🔄 Starting webhook worker...');
 
-  // Process immediately
-  processAllTenants().catch(err => console.error(err));
-
-  // Then poll at interval
-  const interval = setInterval(() => {
-    processAllTenants().catch(err => console.error(err));
-  }, intervalMs);
+  // A pass can outlive the interval (retry back-off sleeps inside the loop);
+  // overlapping passes re-selected the same rows and POSTed them twice.
+  let inFlight = false;
+  const tick = () => {
+    if (inFlight) return;
+    inFlight = true;
+    processAllTenants()
+      .catch(err => console.error(err))
+      .finally(() => { inFlight = false; });
+  };
+  tick();
+  const interval = setInterval(tick, intervalMs);
 
   return () => {
     console.log('⏹️  Stopping webhook worker...');

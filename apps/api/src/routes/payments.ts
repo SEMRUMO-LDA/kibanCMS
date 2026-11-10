@@ -13,6 +13,7 @@ import { requireAdmin, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
 import { setBookingsStatus, extendBookingHold } from '../lib/booking-capacity.js';
 import { trackingToStore, trackingToMetadata, trackingFromMetadata, sendPurchase } from '../lib/meta-capi.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 
 const router: Router = Router();
 
@@ -144,22 +145,15 @@ async function findCouponByCode(code: string): Promise<{ id: string; content: Re
   if (!code) return null;
   const colId = await getCollectionId('coupons');
   if (!colId) return null;
-  const upper = code.toUpperCase();
-  const { data } = await supabase
-    .from('entries')
-    .select('id, content')
-    .eq('collection_id', colId)
-    .filter('content->>code', 'eq', upper)
-    .limit(1);
-  if (data && data.length > 0) return data[0] as any;
-  // Fallback: codes may have been stored as-typed. Try the literal value too.
-  const { data: alt } = await supabase
-    .from('entries')
-    .select('id, content')
-    .eq('collection_id', colId)
-    .filter('content->>code', 'eq', code)
-    .limit(1);
-  return (alt && alt.length > 0) ? (alt[0] as any) : null;
+  const live = await hasSoftDelete();
+  const byCode = async (value: string) => {
+    let q = supabase.from('entries').select('id, content').eq('collection_id', colId).filter('content->>code', 'eq', value).limit(1);
+    if (live) q = q.is('deleted_at', null); // a trashed coupon earns no commission
+    const { data } = await q;
+    return data && data.length > 0 ? (data[0] as any) : null;
+  };
+  // Codes may have been stored as-typed: try the upper-cased value, then the literal one
+  return (await byCode(code.toUpperCase())) || (await byCode(code));
 }
 
 // ============================================
@@ -281,6 +275,9 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
     const capiMeta = trackingToMetadata(await trackingToStore(req, req.body));
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // charge.refunded carries no session metadata: tenant_id on the
+      // PaymentIntent routes it to the right tenant.
+      payment_intent_data: { metadata: { tenant_id: tenantStore.getStore()?.tenant?.id || 'default' } },
       // Omit payment_method_types to auto-detect all enabled methods
       // (card, Apple Pay, Google Pay, SEPA, etc. per the Stripe dashboard).
       line_items: [
@@ -374,6 +371,8 @@ async function releaseUnpaidCheckout(session: any, reason: 'checkout_expired' | 
   }
   const coupon = session?.metadata?.coupon_code || orderContent?.coupon_code;
   if (coupon) {
+    // Per-order redemption (current) and per-booking ones (older orders)
+    if (orderId) cancelPendingRedemption(orderId, 'expired').catch(() => {});
     for (const id of bookingIds) {
       cancelPendingRedemption(id, 'expired').catch(err =>
         logger.warn('Failed to expire pending redemption', { bookingId: id, error: err.message })
@@ -628,12 +627,14 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
               logger.warn('Booking confirmation email failed', { bkId, error: err.message })
             );
 
-            // Coupon redemption per booking (matches existing contract)
-            if (orderContent.coupon_code) {
-              confirmRedemption(bkId, session.id).catch(err =>
-                logger.warn('Coupon redemption confirm failed', { bkId, error: err.message })
-              );
-            }
+          }
+
+          // Coupon: one redemption per order. Orders created before this
+          // change kept one record per booking — confirm those instead.
+          if (orderContent.coupon_code) {
+            confirmRedemption(orderId, session.id)
+              .then(async (done) => { if (!done) for (const bkId of bookingIds) await confirmRedemption(bkId, session.id); })
+              .catch(err => logger.warn('Coupon redemption confirm failed', { orderId, error: err.message }));
           }
 
           // Decrement product stock for product line items
@@ -697,7 +698,14 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
           // Done — skip legacy paths
           res.json({ received: true });
           return;
+        } else {
+          logger.error('Paid session references an order that does not exist', { orderId, sessionId: session.id });
         }
+        // Already finalised, underpaid or missing: never fall through to the
+        // legacy paths — they would email the customer again and send Meta a
+        // second Purchase on every Stripe retry.
+        res.json({ received: true });
+        return;
       }
 
       // ── LEGACY PATHS ──
@@ -774,6 +782,9 @@ async function processWebhook(req: Request, res: Response, sig: string): Promise
             }).catch(err => logger.warn('Affiliate accrual failed', { bookingId, error: err.message }));
           }
         }
+      } else if (existingTxn) {
+        // Stripe retry of a standalone payment we already processed
+        logger.info('Standalone payment already processed — skipping emails', { sessionId: session.id });
       } else {
         // Standalone payment (non-booking) — send receipt + admin notification
         const paymentData = {

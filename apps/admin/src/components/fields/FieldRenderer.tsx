@@ -42,6 +42,12 @@ export interface FieldDefinition {
   agencyVideoTitle?: string; // Video link label
 }
 
+/** Types the collection builder offers that render through an equivalent field. */
+const TYPE_ALIASES: Record<string, FieldDefinition['type']> = {
+  integer: 'number', switch: 'boolean', checkbox: 'boolean', datetime: 'date', time: 'text',
+  radio: 'select', tags: 'text', file: 'image', media: 'image', json: 'textarea', blocks: 'richtext', relation: 'reference',
+};
+
 interface FieldRendererProps {
   field: FieldDefinition;
   value: any;
@@ -59,7 +65,7 @@ export function FieldRenderer({
 }: FieldRendererProps) {
   const commonProps = {
     name: field.id,
-    label: field.name,
+    label: (field as any).label || field.name,
     required: field.required,
     agencyNote: field.agencyNote,
     agencyVideoUrl: field.agencyVideoUrl,
@@ -69,7 +75,7 @@ export function FieldRenderer({
     disabled,
   };
 
-  switch (field.type) {
+  switch (TYPE_ALIASES[field.type as string] || field.type) {
     case 'text':
       return (
         <TextField

@@ -15,6 +15,7 @@
 
 import { supabase } from './supabase.js';
 import { logger } from './logger.js';
+import { getAdminProfileId } from './system-author.js';
 
 type LedgerType = 'accrual' | 'reversal' | 'payout' | 'adjustment';
 type LedgerStatus = 'pending' | 'confirmed' | 'cancelled';
@@ -150,14 +151,21 @@ export async function accrueCommission(input: AccrualInput): Promise<string | nu
       created_at: now.toISOString(),
     };
 
+    // entries.title / author_id are NOT NULL — without them every ledger
+    // insert failed and no commission was ever recorded.
+    const authorId = await getAdminProfileId();
     const { data: inserted, error } = await supabase
       .from('entries')
       .insert({
         collection_id: ledgerColId,
+        title: `Commission ${input.couponCode} — ${input.orderId || input.bookingId || ''}`.trim(),
         slug: `accrual-${input.orderId || input.bookingId || Date.now()}`,
         content: ledgerContent,
+        status: 'published',
+        published_at: now.toISOString(),
+        author_id: authorId,
         tags: ['commission', 'accrual'],
-      })
+      } as any)
       .select('id')
       .single();
 
@@ -265,14 +273,19 @@ export async function reverseCommissionForCharge(input: ReversalInput): Promise<
         created_at: now.toISOString(),
       };
 
+      const authorId = await getAdminProfileId();
       const { error } = await supabase
         .from('entries')
         .insert({
           collection_id: ledgerColId,
+          title: `Commission reversal — ${accrualEntry.id}`,
           slug: `reversal-${accrualEntry.id}-${Date.now()}`,
           content: reversalContent,
+          status: 'published',
+          published_at: now.toISOString(),
+          author_id: authorId,
           tags: ['commission', 'reversal'],
-        });
+        } as any);
 
       if (error) {
         logger.error('Failed to write commission reversal', { error: error.message, accrualId: accrualEntry.id });
@@ -324,14 +337,19 @@ export async function recordPayout(input: PayoutInput): Promise<string | null> {
       created_at: now.toISOString(),
     };
 
+    const authorId = await getAdminProfileId();
     const { data: inserted, error } = await supabase
       .from('entries')
       .insert({
         collection_id: ledgerColId,
+        title: `Affiliate payout — ${input.affiliateId}`,
         slug: `payout-${input.affiliateId}-${Date.now()}`,
         content,
+        status: 'published',
+        published_at: now.toISOString(),
+        author_id: authorId,
         tags: ['commission', 'payout'],
-      })
+      } as any)
       .select('id')
       .single();
 

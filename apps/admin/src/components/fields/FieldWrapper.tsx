@@ -54,7 +54,7 @@ const AgencyNote = styled.div`
   .note-label { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; color: #2563eb; }
 `;
 
-const VideoLink = styled.button`
+const VideoLink = styled.button.attrs({ type: 'button' })`
   margin-top: ${spacing[2]};
   padding: ${spacing[2]} ${spacing[3]};
   background: #faf5ff;
@@ -146,7 +146,7 @@ export function FieldWrapper({
               <VideoContainer onClick={e => e.stopPropagation()}>
                 <div className="video-header">
                   <h4>{agencyVideoTitle || 'Tutorial'}</h4>
-                  <button onClick={() => setShowVideo(false)}><X size={18} /></button>
+                  <button type="button" onClick={() => setShowVideo(false)}><X size={18} /></button>
                 </div>
                 <iframe src={getEmbedUrl(agencyVideoUrl)} allowFullScreen />
               </VideoContainer>

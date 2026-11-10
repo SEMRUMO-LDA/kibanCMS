@@ -22,8 +22,16 @@ import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
 import { trackingToStore } from '../lib/meta-capi.js';
+import { getAdminProfileId } from '../lib/system-author.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 
 const router: Router = Router();
+
+/** Client-supplied metadata is stored as-is: cap it so a 50 MB body can't be parked in an entry. */
+function capClientObject(v: unknown, maxChars = 16_384): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  try { return JSON.stringify(v).length <= maxChars ? (v as Record<string, unknown>) : { _truncated: true }; } catch { return {}; }
+}
 
 // ── Stripe config (mirrors bookings.ts — could be extracted later) ──
 
@@ -118,16 +126,6 @@ async function getCollectionId(slug: string): Promise<string | null> {
     .from('collections')
     .select('id')
     .eq('slug', slug)
-    .single();
-  return data?.id || null;
-}
-
-async function getAdminProfileId(): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .in('role', ['super_admin', 'admin'])
-    .limit(1)
     .single();
   return data?.id || null;
 }
@@ -543,13 +541,15 @@ router.get('/resources/:slug/availability', async (req: AuthRequest, res: Respon
     const bookedBySlot: Record<string, number> = {};
     const bookingsColId = await getCollectionId('bookings');
     if (bookingsColId && candidateSlots.length > 0) {
-      const { data: bookings } = await supabase
+      let bookingsQuery = supabase
         .from('entries')
         .select('content')
         .eq('collection_id', bookingsColId)
-        .filter('content->>resource_slug', 'eq', slug)
+        .filter('content->>resource_slug', 'eq', String(resource.slug || slug))
         .filter('content->>date', 'eq', date)
         .filter('content->>booking_status', 'in', '("pending","confirmed")');
+      if (await hasSoftDelete()) bookingsQuery = bookingsQuery.is('deleted_at', null);
+      const { data: bookings } = await bookingsQuery;
 
       for (const b of bookings || []) {
         const c = b.content as Record<string, any>;
@@ -633,7 +633,16 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
 
     const primary = Number(party_size);
     const secondary = Number(party_size_secondary || 0);
+    // Whole, non-negative counts only: -1 or 0.5 would lower the price
+    if (!Number.isInteger(primary) || primary < 1 || !Number.isInteger(secondary) || secondary < 0 || primary + secondary > 500) {
+      return res.status(400).json({
+        error: { message: 'party_size must be a whole number of at least 1 (party_size_secondary at least 0)', status: 400, timestamp: new Date().toISOString() },
+      });
+    }
     const total = primary + secondary;
+    // Capacity and slot identity use the resource's canonical slug — the
+    // request may say "Rio-Arade" while the stored slug is "rio-arade".
+    const canonicalSlug: string = String(resource.slug || resource_slug);
 
     // For specific-date schedules, only accept (date, time) pairs that the
     // resource declared. Prevents off-calendar bookings being crafted by hand.
@@ -655,14 +664,16 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const { data: existing } = await supabase
+    let existingQuery = supabase
       .from('entries')
       .select('content')
       .eq('collection_id', bookingsColId)
-      .filter('content->>resource_slug', 'eq', resource_slug)
+      .filter('content->>resource_slug', 'eq', canonicalSlug)
       .filter('content->>date', 'eq', date)
       .filter('content->>time_slot', 'eq', time_slot)
       .filter('content->>booking_status', 'in', '("pending","confirmed")');
+    if (await hasSoftDelete()) existingQuery = existingQuery.is('deleted_at', null); // trashed bookings hold no seat
+    const { data: existing } = await existingQuery;
 
     let booked = 0;
     for (const b of existing || []) {
@@ -680,9 +691,11 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       });
     }
 
-    const totalCents =
+    // Stripe needs integer cents: 1 × 19.99 × 100 is 1998.9999999999998 in JS
+    const totalCents = Math.round(
       primary * (Number(resource.price) || 0) * 100 +
-      secondary * (Number(resource.price_secondary) || 0) * 100;
+      secondary * (Number(resource.price_secondary) || 0) * 100,
+    );
 
     if (totalCents < 50) {
       return res.status(400).json({
@@ -732,7 +745,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
           customer_name,
           customer_email,
           customer_phone: customer_phone || '',
-          resource_slug,
+          resource_slug: canonicalSlug,
           resource_title: resource.title,
           date,
           time_slot,
@@ -746,8 +759,8 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
           checkout_expires_at: expiry.iso,
           source: (metadata && metadata.source) || 'direct',
           ...(capiTracking ? { tracking: capiTracking } : {}),
-          metadata: metadata || {},
-          notes: notes || '',
+          metadata: capClientObject(metadata),
+          notes: String(notes || '').slice(0, 2000),
         },
         status: 'published',
         published_at: new Date().toISOString(),
@@ -761,7 +774,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
 
     // Insert-then-verify: if another buyer took the last seats in the
     // meantime, this booking is released (no overbooking).
-    if (!(await keepsSeat(bookingsColId, booking.id, { resource_slug, date, time_slot }, resource.capacity))) {
+    if (!(await keepsSeat(bookingsColId, booking.id, { resource_slug: canonicalSlug, date, time_slot }, resource.capacity))) {
       await releaseBooking(booking.id, 'sold_out_race');
       return res.status(409).json({
         error: {
@@ -848,8 +861,16 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     let stripeCouponId: string | null = null;
     if (couponValidation?.valid && couponValidation.coupon) {
       const loaded = await loadCoupon(couponValidation.coupon.code);
-      if (loaded) {
-        stripeCouponId = await ensureStripeCoupon(stripe, loaded.row, loaded.coupon);
+      const discount = couponValidation.discount_cents || 0;
+      if (loaded && discount > 0) {
+        stripeCouponId = await ensureStripeCoupon(stripe, loaded.row, loaded.coupon, discount, resource.currency);
+        if (!stripeCouponId) {
+          // Never charge full price for a checkout we told the customer was discounted
+          await releaseBooking(booking.id, 'coupon_failed');
+          return res.status(502).json({
+            error: { message: 'The coupon could not be applied. Please try again.', code: 'COUPON_APPLY_FAILED', status: 502, timestamp: new Date().toISOString() },
+          });
+        }
       }
     }
 
@@ -859,6 +880,9 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       // in the dashboard (card, Apple Pay, Google Pay, SEPA, Multibanco, etc.)
       mode: 'payment',
       customer_email,
+      // Charge/refund events carry no session metadata: tenant_id on the
+      // PaymentIntent is what routes charge.refunded to the right tenant.
+      payment_intent_data: { metadata: { tenant_id: tenantStore.getStore()?.tenant?.id || 'default', booking_id: booking.id } },
       line_items: [{
         price_data: {
           currency: resource.currency,
@@ -875,7 +899,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
         source: 'kibanCMS-bookings-v2',
         tenant_id: tenantStore.getStore()?.tenant?.id || 'default',
         booking_id: booking.id,
-        resource_slug,
+        resource_slug: canonicalSlug,
         date,
         time_slot,
         ...(couponValidation?.valid && couponValidation.coupon && {
@@ -931,7 +955,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     logger.error('Error creating booking', { error: error.message });
     res.status(500).json({
-      error: { message: error.message || 'Failed to create booking', status: 500, timestamp: new Date().toISOString() },
+      error: { message: 'Failed to create booking', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });
@@ -942,10 +966,19 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
 
 router.get('/:bookingId/status', async (req: AuthRequest, res: Response) => {
   try {
+    // Scoped to the bookings collection and projected: with a public API key
+    // this must never act as "fetch any entry by id" (stripe-config, leads…).
+    const bookingsColId = await getCollectionId('bookings');
+    if (!bookingsColId || !/^[0-9a-f-]{36}$/i.test(String(req.params.bookingId))) {
+      return res.status(404).json({
+        error: { message: 'Booking not found', status: 404, timestamp: new Date().toISOString() },
+      });
+    }
     const { data: entry, error } = await supabase
       .from('entries')
-      .select('id, title, slug, content, created_at, updated_at')
+      .select('id, content, created_at, updated_at')
       .eq('id', req.params.bookingId)
+      .eq('collection_id', bookingsColId)
       .single();
 
     if (error || !entry) {
@@ -953,7 +986,26 @@ router.get('/:bookingId/status', async (req: AuthRequest, res: Response) => {
         error: { message: 'Booking not found', status: 404, timestamp: new Date().toISOString() },
       });
     }
-    res.json({ data: entry, timestamp: new Date().toISOString() });
+    const c = (entry.content || {}) as Record<string, any>;
+    res.json({
+      data: {
+        id: entry.id,
+        booking_status: c.booking_status,
+        resource_slug: c.resource_slug,
+        resource_title: c.resource_title || c.tour_title || '',
+        date: c.date,
+        time_slot: c.time_slot,
+        party_size: c.party_size,
+        party_size_secondary: c.party_size_secondary,
+        total_participants: c.total_participants,
+        amount: c.amount,
+        currency: c.currency,
+        checkout_expires_at: c.checkout_expires_at,
+        created_at: entry.created_at,
+        updated_at: entry.updated_at,
+      },
+      timestamp: new Date().toISOString(),
+    });
   } catch (error: any) {
     logger.error('Error fetching booking', { error: error.message });
     res.status(500).json({

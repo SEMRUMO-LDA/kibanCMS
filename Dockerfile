@@ -3,7 +3,7 @@
 # ============================================
 
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY apps/admin/package.json ./apps/admin/
 RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # Stage 2: Build admin frontend
-FROM node:20-alpine AS admin-builder
+FROM node:22-alpine AS admin-builder
 RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
 WORKDIR /app
 
@@ -29,7 +29,7 @@ ENV NODE_OPTIONS="--max-old-space-size=512"
 RUN pnpm build
 
 # Stage 3: Build API
-FROM node:20-alpine AS api-builder
+FROM node:22-alpine AS api-builder
 RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
 WORKDIR /app
 
@@ -41,7 +41,7 @@ WORKDIR /app/apps/api
 RUN pnpm build:api
 
 # Stage 4: Production image
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 RUN corepack enable && corepack prepare pnpm@8.14.0 --activate
 
 WORKDIR /app
@@ -67,5 +67,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
+# Never run the API as root inside the container
+USER node
 WORKDIR /app/apps/api
 CMD ["node", "dist/server.js"]

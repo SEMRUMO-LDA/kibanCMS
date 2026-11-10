@@ -11,6 +11,7 @@ import { Router, type Request, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { getSingletonContent } from '../lib/sitemap.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 import { getCapiConfig, getCapiStatus, readTracking, sendCapiEvent } from '../lib/meta-capi.js';
 import { requireAdmin, type AuthRequest } from '../middleware/auth.js';
 
@@ -55,7 +56,7 @@ async function countEntries(slug: string, since: string, dateField: 'created_at'
   const { data: col } = await supabase.from('collections').select('id').eq('slug', slug).maybeSingle();
   if (!col) return null;
   let q = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', col.id).gte(dateField, since);
-  q = q.is('deleted_at', null);
+  if (await hasSoftDelete()) q = q.is('deleted_at', null);
   const { count, error } = await q;
   return error ? null : (count ?? 0);
 }

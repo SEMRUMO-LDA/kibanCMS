@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -166,6 +167,15 @@ export function RichTextField({ name, label, value, onChange, placeholder = 'Wri
     },
     editable: !disabled,
   });
+
+  // useEditor reads `content` once at mount. Restoring a revision (or any
+  // external reset) must reach the editor — otherwise the next keystroke
+  // overwrote the restored content with the stale HTML.
+  useEffect(() => {
+    if (!editor || editor.isFocused) return;
+    const next = value || '';
+    if (next !== editor.getHTML()) editor.commands.setContent(next, { emitUpdate: false });
+  }, [value, editor]);
 
   if (!editor) {
     return null;

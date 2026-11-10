@@ -16,6 +16,7 @@
 
 import { supabase } from './supabase.js';
 import { logger } from './logger.js';
+import { hasSoftDelete } from './soft-delete.js';
 
 // ── Types ──
 
@@ -109,11 +110,13 @@ export async function loadCoupon(code: string): Promise<{ row: any; coupon: Coup
 
   // Supabase JSONB equality — read all and match in JS (collection is small).
   // For larger catalogs, add a generated column + index on content->>'code'.
-  const { data: rows } = await supabase
+  let couponsQuery = supabase
     .from('entries')
     .select('id, content, status')
     .eq('collection_id', colId)
     .eq('status', 'published');
+  if (await hasSoftDelete()) couponsQuery = couponsQuery.is('deleted_at', null); // trashed coupons are gone
+  const { data: rows } = await couponsQuery;
 
   for (const row of rows || []) {
     const c = row.content as Record<string, any>;
@@ -224,49 +227,31 @@ export async function validateCoupon(opts: ValidateOpts): Promise<ValidationResu
   return { valid: true, discount_cents: discountCents, coupon };
 }
 
-// ── Ensure Stripe coupon exists; return its ID ──
+// ── Stripe coupon for ONE checkout ──
 //
-// If the coupon has `stripe_coupon_id` and it still exists on Stripe, reuse it.
-// Otherwise create a one-time Stripe coupon mirroring our settings and cache the ID.
+// Mirroring percent_off/amount_off let Stripe compute a different discount
+// than validateCoupon (which applies max_discount and the subtotal floor), so
+// the webhook flagged legitimately paid orders as `payment_mismatch`. We now
+// create a one-off coupon carrying the exact amount we computed. `stripe_coupon_id`
+// on the coupon row is no longer used.
 
-export async function ensureStripeCoupon(stripe: any, couponRow: any, coupon: Coupon): Promise<string | null> {
-  if (coupon.stripe_coupon_id) {
-    try {
-      const existing = await stripe.coupons.retrieve(coupon.stripe_coupon_id);
-      if (existing && !existing.deleted) return existing.id;
-    } catch (err: any) {
-      logger.warn('Cached Stripe coupon no longer exists, recreating', { id: coupon.stripe_coupon_id });
-    }
-  }
-
-  const params: Record<string, any> = {
-    name: coupon.code,
-    metadata: { kibanCMS_coupon_id: couponRow.id, code: coupon.code },
-  };
-
-  if (coupon.type === 'percentage') {
-    params.percent_off = coupon.value;
-  } else {
-    params.amount_off = Math.round(coupon.value * 100);
-    params.currency = (coupon.currency || 'eur').toLowerCase();
-  }
-
-  if (coupon.expires_at) {
-    params.redeem_by = Math.floor(new Date(coupon.expires_at).getTime() / 1000);
-  }
-
-  // Stripe's native max_redemptions is global; we keep ours as the source of truth
-  // and rely on our DB counter. Setting max_redemptions here would duplicate checks.
-
+export async function ensureStripeCoupon(
+  stripe: any,
+  couponRow: any,
+  coupon: Coupon,
+  discountCents: number,
+  currency: string,
+): Promise<string | null> {
+  const amount = Math.round(Number(discountCents));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
   try {
-    const created = await stripe.coupons.create(params);
-    // Persist on our row
-    await supabase
-      .from('entries')
-      .update({
-        content: { ...(couponRow.content as any), stripe_coupon_id: created.id },
-      })
-      .eq('id', couponRow.id);
+    const created = await stripe.coupons.create({
+      name: coupon.code,
+      amount_off: amount,
+      currency: String(currency || coupon.currency || 'eur').toLowerCase(),
+      duration: 'once',
+      metadata: { kibanCMS_coupon_id: couponRow.id, code: coupon.code },
+    });
     return created.id;
   } catch (err: any) {
     logger.error('Failed to create Stripe coupon', { error: err.message, code: coupon.code });

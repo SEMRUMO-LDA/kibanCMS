@@ -41,6 +41,9 @@ const FEATURE_NAMES: Record<string, { pt: string; en: string }> = {
   cookie_consents: { pt: 'Registo de consentimentos de cookies', en: 'Cookie consent log' },
   media_bucket: { pt: 'Bucket de imagens', en: 'Image bucket' },
   translation_cache: { pt: 'Cache de traduções', en: 'Translation cache' },
+  private_rls: { pt: 'Proteção de coleções privadas', en: 'Private collection protection' },
+  author_set_null: { pt: 'Conteúdo sobrevive à remoção de utilizadores', en: 'Content survives user deletion' },
+  live_slug_index: { pt: 'Slugs reutilizáveis após a Lixeira', en: 'Slug reuse after Trash' },
 };
 
 function fmtDate(iso: string | null | undefined, pt: boolean): string | null {
