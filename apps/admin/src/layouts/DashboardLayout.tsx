@@ -22,6 +22,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ExternalLink,
+  PenLine,
   Mail,
   FileInput,
   CreditCard,
@@ -491,6 +492,33 @@ const ViewSiteLink = styled.a<{ $collapsed?: boolean }>`
   span { display: ${p => p.$collapsed ? 'none' : 'inline'}; }
 `;
 
+// "Editar no site" — same shape as the link above, darker so the two read as a pair
+const EditSiteBtn = styled.button<{ $collapsed?: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: ${p => p.$collapsed ? 'center' : 'flex-start'};
+  gap: ${spacing[2]};
+  width: ${p => p.$collapsed ? 'auto' : `calc(100% - 2 * ${spacing[4]})`};
+  padding: ${p => p.$collapsed ? spacing[2.5] : `${spacing[2.5]} ${spacing[3.5]}`};
+  margin: -${spacing[1]} ${p => p.$collapsed ? spacing[2] : spacing[4]} ${spacing[3]};
+  background: ${colors.gray[800]};
+  color: ${colors.white};
+  border: 0;
+  border-radius: ${borders.radius.lg};
+  font-size: ${typography.fontSize.sm};
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all ${animations.duration.fast} ${animations.easing.out};
+
+  &:hover:not(:disabled) { background: ${colors.gray[700]}; transform: translateY(-1px); }
+  &:disabled { opacity: .6; cursor: wait; }
+
+  svg { flex-shrink: 0; width: 15px; height: 15px; }
+  span { display: ${p => p.$collapsed ? 'none' : 'inline'}; }
+  .beta { margin-left: auto; font-size: 10px; letter-spacing: .06em; padding: 1px 6px; border-radius: 999px; background: ${colors.gray[600]}; color: ${colors.gray[100]}; }
+`;
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -505,6 +533,9 @@ export const DashboardLayout = () => {
   const [hasOrders, setHasOrders] = useState(false);
   const [hasAffiliates, setHasAffiliates] = useState(false);
   const [siteUrl, setSiteUrl] = useState<string>('');
+  // Settings → General → "Edição no site": off | beta | on
+  const [inlineEditing, setInlineEditing] = useState<string>('off');
+  const [openingEditor, setOpeningEditor] = useState(false);
   const [contentShortcuts, setContentShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const [shortcuts, setShortcuts] = useState<Array<{ slug: string; label: string; icon: LucideIcon }>>([]);
   const { user, profile, signOut } = useAuth();
@@ -561,6 +592,8 @@ export const DashboardLayout = () => {
     const resolveSiteUrl = async () => {
       try {
         const { data: ss } = await api.getEntry('site-settings', 'global');
+        const mode = ss?.content?.inline_editing;
+        setInlineEditing(mode === 'beta' || mode === 'on' ? mode : 'off');
         const fromSettings = ss?.content?.site_url || ss?.content?.canonical_url;
         if (typeof fromSettings === 'string' && fromSettings.trim()) {
           setSiteUrl(fromSettings.trim().replace(/\/+$/, ''));
@@ -602,6 +635,29 @@ export const DashboardLayout = () => {
   const handleNavigation = (path: string) => {
     navigate(path);
     setMobileMenuOpen(false);
+  };
+
+  // Beta: admins only. On: editors too. Mirrors the API's roleAllowed().
+  const canEditOnSite = inlineEditing === 'on'
+    ? ['super_admin', 'admin', 'editor'].includes(profile?.role)
+    : inlineEditing === 'beta' && isAdminRole;
+
+  const openSiteEditor = async () => {
+    if (openingEditor) return;
+    setOpeningEditor(true);
+    // Open the tab synchronously (popup blockers), then point it at the signed URL
+    const win = window.open('', '_blank');
+    try {
+      const { data, error } = await api.createInlineEditSession('/');
+      if (error || !data?.edit_url) {
+        win?.close();
+        alert(error || 'Não foi possível abrir o modo de edição.');
+        return;
+      }
+      if (win) win.location.href = data.edit_url; else window.open(data.edit_url, '_blank');
+    } finally {
+      setOpeningEditor(false);
+    }
   };
 
   const getUserInitials = () => {
@@ -653,6 +709,21 @@ export const DashboardLayout = () => {
             <ExternalLink />
             <span>Ver site</span>
           </ViewSiteLink>
+        )}
+        {/* "Editar no site" — opens the live site with an editing session; the
+            widgets loader there shows the inline editor. Settings → General. */}
+        {siteUrl && canEditOnSite && (
+          <EditSiteBtn
+            type="button"
+            onClick={openSiteEditor}
+            disabled={openingEditor}
+            $collapsed={collapsed}
+            title={collapsed ? 'Editar no site' : 'Abre o site e permite editar textos e imagens a clicar neles'}
+          >
+            <PenLine />
+            <span>{openingEditor ? 'A abrir…' : 'Editar no site'}</span>
+            {inlineEditing === 'beta' && !collapsed && <span className="beta">BETA</span>}
+          </EditSiteBtn>
         )}
 
         <Nav>

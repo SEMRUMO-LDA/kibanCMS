@@ -50,7 +50,7 @@ interface I18nConfig {
 const configCache = new Map<string, { config: I18nConfig; fetchedAt: number }>();
 const CONFIG_TTL = 60_000;
 
-async function getI18nConfig(): Promise<I18nConfig | null> {
+export async function getI18nConfig(): Promise<I18nConfig | null> {
   const tenantId = tenantStore.getStore()?.tenant?.id || 'default';
   const cached = configCache.get(tenantId);
   if (cached && Date.now() - cached.fetchedAt < CONFIG_TTL) {

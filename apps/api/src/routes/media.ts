@@ -16,8 +16,9 @@ const ALLOWED_MIME_TYPES = [
   'application/pdf',
 ];
 
-// Multer config: store in memory buffer for upload to Supabase Storage
-const upload = multer({
+// Multer config: store in memory buffer for upload to Supabase Storage.
+// Exported for routes/inline-edit.ts (images replaced on the live site).
+export const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
@@ -28,6 +29,7 @@ const upload = multer({
     }
   },
 });
+const upload = mediaUpload;
 
 /** Escape special ILIKE characters */
 function escapeIlike(str: string): string {
@@ -164,7 +166,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
  * Shared upload logic for both multipart and base64 uploads.
  * Takes a buffer, metadata, and profile ID, uploads to storage + creates DB record.
  */
-async function processUpload(
+export async function processUpload(
   buffer: Buffer,
   originalName: string,
   mimeType: string,

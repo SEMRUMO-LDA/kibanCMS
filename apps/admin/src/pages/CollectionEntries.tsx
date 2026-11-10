@@ -313,6 +313,13 @@ const LeadBadge = styled.span<{ $status: string }>`
   color: ${p => (LEAD_COLORS[p.$status] || LEAD_COLORS.lost).fg};
 `;
 
+// Changes made on the live site ("Editar no site", beta) waiting for approval in the editor
+const SitePendingBadge = styled.span`
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; vertical-align: middle;
+  background: #f3e8ff; color: #6b21a8;
+`;
+
 const StatusBadge = styled.span<{ $status: string }>`
   display: inline-flex;
   align-items: center;
@@ -1196,6 +1203,11 @@ export const CollectionEntries = () => {
                     {entry.title || 'Untitled'}
                     {entry.content?.lead_status && (
                       <LeadBadge $status={String(entry.content.lead_status)}>{LEAD_LABELS[String(entry.content.lead_status)] || String(entry.content.lead_status)}</LeadBadge>
+                    )}
+                    {Array.isArray((entry as any).meta?.inline_pending) && (entry as any).meta.inline_pending.length > 0 && (
+                      <SitePendingBadge title="Alterações feitas no site a aguardar aprovação">
+                        {(entry as any).meta.inline_pending.length} no site
+                      </SitePendingBadge>
                     )}
                   </td>
                   <td className="slug">{entry.slug || '-'}</td>

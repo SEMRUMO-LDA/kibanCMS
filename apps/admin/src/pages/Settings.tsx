@@ -179,6 +179,8 @@ interface SiteSettings {
   business_type: string;
   // Privacy (GDPR)
   leads_retention_months: string;
+  // Inline editing on the live site: off | beta (admins, changes await approval) | on (editors too, changes go live)
+  inline_editing: string;
 }
 
 const DEFAULTS: SiteSettings = {
@@ -198,6 +200,7 @@ const DEFAULTS: SiteSettings = {
   ai_training_bots: 'allow',
   business_type: 'Organization',
   leads_retention_months: '0',
+  inline_editing: 'off',
 };
 
 interface ApiKey { id: string; name: string; key_prefix: string; created_at: string; last_used_at: string | null; }
@@ -462,6 +465,23 @@ export const Settings = () => {
                 <p className="help">{locale === 'pt'
                   ? 'Submissões mais antigas vão automaticamente para a Lixeira (apagadas 30 dias depois). Exporta o CSV antes se precisares de um histórico.'
                   : 'Older submissions are moved to the Trash automatically (deleted 30 days later). Export the CSV first if you need a history.'}</p>
+              </Field>
+            </Grid>
+          </Section>
+
+          <Section>
+            <h2>{locale === 'pt' ? 'Edição no site (Beta)' : 'Edit on the site (Beta)'}</h2>
+            <Grid>
+              <Field>
+                <label>{locale === 'pt' ? 'Editar textos e imagens diretamente no site' : 'Edit texts and images directly on the live site'}</label>
+                <select value={settings.inline_editing} onChange={e => update('inline_editing', e.target.value)}>
+                  <option value="off">{locale === 'pt' ? 'Desligado' : 'Off'}</option>
+                  <option value="beta">{locale === 'pt' ? 'Beta — só administradores, alterações aguardam aprovação' : 'Beta — admins only, changes await approval'}</option>
+                  <option value="on">{locale === 'pt' ? 'Ligado — editores também, alterações publicam logo' : 'On — editors too, changes go live immediately'}</option>
+                </select>
+                <p className="help">{locale === 'pt'
+                  ? 'Com a opção ligada aparece o botão "Editar no site" na barra lateral: abre o site e permite clicar num texto ou imagem para o alterar. Precisa do URL do Site preenchido acima e do script de widgets do Kiban no site. Os visitantes não são afetados.'
+                  : 'When enabled, an "Edit on site" button appears in the sidebar: it opens the site and lets you click a text or image to change it. Needs the Site URL above and the Kiban widgets script on the site. Visitors are not affected.'}</p>
               </Field>
             </Grid>
           </Section>
