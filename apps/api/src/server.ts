@@ -101,7 +101,7 @@ app.get('/api/v1/img', imageLimiter, async (req, res) => {
 });
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const envOrigins = process.env.ALLOWED_ORIGINS?.split(',') || (NODE_ENV === 'production' ? [] : ['*']);
+const envOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || (NODE_ENV === 'production' ? [] : ['*']);
 // Merge env origins with tenant origins so widgets work cross-origin
 const tenantOrigins = getAllTenants().flatMap(t => t.origins);
 const allowedOrigins = [...new Set([...envOrigins, ...tenantOrigins])];
@@ -115,11 +115,14 @@ app.use(cors({
     if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      // Disallowed origin: answer without CORS headers (the browser blocks the
+      // read) instead of turning every such request into a 500.
       console.log('[CORS] Blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, false);
     }
   },
-  credentials: true,
+  credentials: false, // bearer tokens, never cookies
+  maxAge: 86400, // cache preflights for a day: the widgets make several XHRs per page
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Tenant'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
@@ -146,11 +149,18 @@ app.use('/api/v1/channel-manager/webhook', express.raw({
   verify: (req: any, _res, buf) => { req.rawBody = buf; },
 }));
 
-// Body parsing (limit increased for base64 media uploads)
-app.use(express.json({ limit: '55mb' }));
-app.use(express.urlencoded({ extended: true, limit: '55mb' }));
+// Body parsing. Only media / AI routes carry base64 payloads; a 55 MB limit
+// everywhere let anyone park a 50 MB "form submission" in the database.
+app.use(['/api/v1/media', '/api/v1/ai', '/api/v1/media-intel'], express.json({ limit: '55mb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// Rate limiting - 100 requests per 15 minutes per IP
+// Rate limiting - 100 requests per 15 minutes per IP.
+// Widget boot traffic (8 small GETs per page view, shared by every visitor
+// behind one NAT) and signature-verified webhooks get their own buckets so
+// they neither starve nor get starved by the general one.
+const WIDGET_BOOT_RE = /^\/api\/v1\/(widgets\/|seo(?:\?|$)|(?:cookie-notice|accessibility|whatsapp-widget)\/(?:config|widget\.js)|i18n\/(?:widget(?:\.js)?|languages)(?:\?|$))/;
+const WEBHOOK_RE = /^\/api\/v1\/(payments|channel-manager)\/webhook/;
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -163,10 +173,38 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => WIDGET_BOOT_RE.test(req.originalUrl) || WEBHOOK_RE.test(req.originalUrl),
+});
+const widgetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !WIDGET_BOOT_RE.test(req.originalUrl),
+});
+// Login: one Supabase sign-in per tenant per attempt — keep credential stuffing cheap to stop.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !(req.method === 'POST' && req.path === '/login'),
+  message: { error: { message: 'Too many login attempts, try again in a few minutes.', status: 429 } },
+});
+// Public checkout/booking/payment session creation: each call can hold seats
+// for an hour or mint a payment page on the merchant's Stripe account.
+const checkoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // per IP; offices / mobile carriers share one
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method !== 'POST' || (req as any).authType === 'jwt',
+  message: { error: { message: 'Too many checkout attempts, please try again later.', status: 429 } },
 });
 
 // Apply rate limiting to API routes only
 app.use('/api/v1', limiter);
+app.use('/api/v1', widgetLimiter);
 
 // Request ID — unique ID for every request (tracing)
 app.use(requestIdMiddleware);
@@ -251,7 +289,7 @@ app.get('/api/v1/config', (req, res) => {
 });
 
 // Auth route — no auth middleware (this IS the auth)
-app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/auth', loginLimiter, authRouter);
 
 // API routes
 // Collections/Users use JWT (for admin UI) - entries/webhooks/media use API keys (for public API)
@@ -275,18 +313,18 @@ app.use('/api/v1/brevo', adminLimiter, validateJWT, requireAdmin, brevoRouter); 
 // `/payments` mount (which requires API key and would 401 Stripe's unsigned
 // requests). Audit v1.6 C1. The raw-body parser is already configured at line 84.
 app.post('/api/v1/payments/webhook', paymentsWebhookHandler);
-app.use('/api/v1/payments', validateAny, paymentsRouter); // Payments — JWT (admin) + API Key (frontend)
+app.use('/api/v1/payments', validateAny, checkoutLimiter, paymentsRouter); // Payments — JWT (admin) + API Key (frontend)
 // Bookings: v2 is mounted at both /v2 (public API contract for frontends) and
 // the bare /bookings path (admin UI convenience). Same router, same behaviour.
-app.use('/api/v1/bookings/v2', validateAny, bookingsV2Router);
-app.use('/api/v1/bookings', validateAny, bookingsV2Router);
+app.use('/api/v1/bookings/v2', validateAny, checkoutLimiter, bookingsV2Router);
+app.use('/api/v1/bookings', validateAny, checkoutLimiter, bookingsV2Router);
 // Unified checkout — single endpoint for bookings + products + custom amounts
-app.use('/api/v1/checkout', validateAny, checkoutRouter);
-// Preview: GET /entry is public (token gates access), POST /token requires JWT.
-// Conditionally skip JWT auth for the public token-gated read endpoint.
+app.use('/api/v1/checkout', validateAny, checkoutLimiter, checkoutRouter);
+// Preview: GET /entry is public (token gates access), POST /token requires an
+// editor login (tokens expose draft content).
 app.use('/api/v1/preview', (req, res, next) => {
   if (req.method === 'GET' && req.path === '/entry') return next();
-  return validateJWT(req as any, res, next);
+  return validateJWT(req as any, res, (err?: any) => (err ? next(err) : requireEditor(req as any, res, next)));
 }, previewRouter);
 // Trash — admin-only soft-delete management
 app.use('/api/v1/trash', validateJWT, trashRouter);
@@ -396,7 +434,7 @@ app.get('/api/v1/widgets/enabled', validateApiKey, async (_req, res) => {
       enabled.push('i18n');
     }
 
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
     res.json({ data: enabled, timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: [], timestamp: new Date().toISOString() });
@@ -424,7 +462,7 @@ app.get('/api/v1/widgets/cluster-config', validateApiKey, async (_req, res) => {
       .eq('addon_id', 'widget-cluster')
       .maybeSingle();
     const cfg = { ...DEFAULT_CLUSTER_CONFIG, ...(data?.config || {}) };
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
     res.json({ data: cfg, timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: DEFAULT_CLUSTER_CONFIG, timestamp: new Date().toISOString() });
@@ -434,7 +472,7 @@ app.get('/api/v1/widgets/cluster-config', validateApiKey, async (_req, res) => {
 // Cookie Notice widget — public static JS file (no auth)
 app.get('/api/v1/cookie-notice/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
   const staticPath = NODE_ENV === 'production'
     ? path.join(__dirname, '../static/cookie-notice-widget.js')
     : path.join(__dirname, 'static/cookie-notice-widget.js');
@@ -446,6 +484,7 @@ app.get('/api/v1/cookie-notice/config', validateApiKey, async (req, res) => {
     const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'cookie-notice').single();
     // No row = installed but never configured → default to enabled (matches admin logic)
     const config = data?.config || { enabled: true };
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
     res.json({ data: config, timestamp: new Date().toISOString() });
   } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
@@ -464,7 +503,7 @@ app.post('/api/v1/cookie-notice/consent', validateApiKey, async (req, res) => {
       return res.status(500).json({ error: { message: 'Consent could not be stored', status: 500 } });
     }
     res.json({ data: { ok: true }, timestamp: new Date().toISOString() });
-  } catch (err: any) { res.status(500).json({ error: { message: err.message, status: 500 } }); }
+  } catch (err: any) { logger.error('Request failed', { path: req.path, error: err.message }); res.status(500).json({ error: { message: 'Internal server error', status: 500 } }); }
 });
 
 // WhatsApp Widget — public static JS file (no auth, served to any origin)
@@ -492,7 +531,7 @@ app.get('/api/v1/whatsapp-widget/config', validateApiKey, async (_req, res) => {
       .eq('status', 'published')
       .maybeSingle();
 
-    res.setHeader('Cache-Control', 'public, max-age=60'); // 1-min CDN cache
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant'); // 1-min CDN cache
     res.json({ data: entry?.content || { enabled: false }, timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
@@ -502,7 +541,7 @@ app.get('/api/v1/whatsapp-widget/config', validateApiKey, async (_req, res) => {
 // Accessibility widget — public static JS file (no auth)
 app.get('/api/v1/accessibility/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
   const staticPath = NODE_ENV === 'production'
     ? path.join(__dirname, '../static/accessibility-widget.js')
     : path.join(__dirname, 'static/accessibility-widget.js');
@@ -514,6 +553,7 @@ app.get('/api/v1/accessibility/config', validateApiKey, async (req, res) => {
     const { data } = await supabaseImport.from('addon_configs').select('config').eq('addon_id', 'accessibility').single();
     // No row = installed but never configured → default to enabled (matches admin logic)
     const config = data?.config || { enabled: true };
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
     res.json({ data: config, timestamp: new Date().toISOString() });
   } catch { res.json({ data: { enabled: true }, timestamp: new Date().toISOString() }); }
 });
@@ -575,12 +615,16 @@ if (NODE_ENV === 'production') {
 }
 
 // Error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
-  res.status(500).json({
+  const status = Number(err?.status || err?.statusCode) || 500;
+  // Client errors (bad JSON, body too large) keep their message; upstream and
+  // database messages (table/constraint names, provider errors) stay in the logs.
+  const message = status < 500 && err?.message ? String(err.message) : 'Internal server error';
+  res.status(status).json({
     error: {
-      message: err.message || 'Internal server error',
-      status: 500,
+      message,
+      status,
       timestamp: new Date().toISOString(),
     },
   });

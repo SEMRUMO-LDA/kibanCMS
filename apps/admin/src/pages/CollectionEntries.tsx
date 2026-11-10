@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
-import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 import { ArrowLeft, Plus, Search, Edit2, Trash2, Loader, Eye, X, Download, Upload, Camera, Copy } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -872,33 +871,31 @@ export const CollectionEntries = () => {
     }
 
     try {
+      // Through the API (not supabase directly): delete goes to the Trash,
+      // published_at is stamped, the public cache is invalidated, the audit
+      // log is written, and an editor's "0 rows affected" can't pass as success.
+      const targets = entries.filter(e => selectedEntries.has(e.id));
+      const failures: string[] = [];
+      for (const e of targets) {
+        const { error } = action === 'delete'
+          ? await api.deleteEntry(collectionSlug!, e.slug)
+          : await api.updateEntry(collectionSlug!, e.slug, { status: action, version: (e as any).version });
+        if (error) failures.push(`${e.title || e.slug}: ${error}`);
+      }
+      const doneIds = new Set(targets.filter(e => !failures.some(f => f.startsWith(`${e.title || e.slug}:`))).map(e => e.id));
+
       if (action === 'delete') {
-        const { error } = await supabase
-          .from('entries')
-          .delete()
-          .in('id', Array.from(selectedEntries));
-
-        if (error) throw error;
-
-        setEntries(prev => prev.filter(e => !selectedEntries.has(e.id)));
+        setEntries(prev => prev.filter(e => !doneIds.has(e.id)));
       } else {
-        // Publish or Archive
-        const { error } = await supabase
-          .from('entries')
-          .update({ status: action as 'published' | 'archived' })
-          .in('id', Array.from(selectedEntries));
-
-        if (error) throw error;
-
-        setEntries(prev => prev.map(e =>
-          selectedEntries.has(e.id) ? { ...e, status: action } : e
-        ));
+        setEntries(prev => prev.map(e => (doneIds.has(e.id) ? { ...e, status: action } : e)));
       }
 
       setSelectedEntries(new Set());
       setBulkAction('');
-      const done = ({ delete: 'Deleted', publish: 'Published', archive: 'Archived' } as Record<string, string>)[action] || 'Updated';
-      toast.success(`${done} ${count} ${count === 1 ? 'entry' : 'entries'}`);
+      const okCount = doneIds.size;
+      const done = ({ delete: 'Moved to Trash', published: 'Published', archived: 'Archived' } as Record<string, string>)[action] || 'Updated';
+      if (okCount > 0) toast.success(`${done} ${okCount} ${okCount === 1 ? 'entry' : 'entries'}`);
+      if (failures.length > 0) toast.error(`${failures.length} failed — ${failures[0]}`);
     } catch (err: any) {
       console.error('Error with bulk action:', err);
       toast.error('Bulk action failed: ' + (err.message || 'Unknown error'));

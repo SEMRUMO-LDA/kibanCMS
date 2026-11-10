@@ -159,7 +159,16 @@ router.post('/subscribe', async (req: AuthRequest, res: Response) => {
       .limit(1);
 
     if (existing && existing.length > 0) {
-      // Already subscribed — return success (don't reveal to frontend)
+      // Already subscribed — return success (don't reveal to frontend).
+      // Someone who unsubscribed and signs up again is re-activated.
+      const row = existing[0] as { id: string; content: Record<string, any> };
+      if (row.content?.is_active === false) {
+        await supabase
+          .from('entries')
+          .update({ content: { ...row.content, is_active: true, resubscribed_at: new Date().toISOString() } })
+          .eq('id', row.id);
+        logger.info('Newsletter re-subscription', { email: cleanEmail });
+      }
       return res.status(200).json({
         success: true,
         data: { subscribed: true },

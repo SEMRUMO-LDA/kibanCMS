@@ -67,7 +67,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     }
 
     if (search && typeof search === 'string') {
-      const escaped = search.replace(/%/g, '\\%').replace(/_/g, '\\_');
+      const escaped = search.replace(/[,()"\\]/g, ' ').trim().slice(0, 100).replace(/%/g, '\\%').replace(/_/g, '\\_');
       query = query.or(`email.ilike.%${escaped}%,full_name.ilike.%${escaped}%`);
     }
 
@@ -425,7 +425,23 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Delete via Supabase admin API (cascades to profile via FK)
+    // The profile FK cascades: everything this user "authored" would vanish —
+    // including orders, bookings, leads and subscribers the API created under
+    // their id, and the API keys embedded in live sites. Hand them to the
+    // caller first.
+    if (req.profileId && req.profileId !== id) {
+      const handovers: Array<[string, string]> = [
+        ['entries', 'author_id'], ['media', 'uploaded_by'], ['api_keys', 'profile_id'],
+        ['webhooks', 'profile_id'], ['entry_revisions', 'revised_by'], ['collection_snapshots', 'created_by'],
+      ];
+      for (const [table, column] of handovers) {
+        const { error: handErr } = await supabase.from(table).update({ [column]: req.profileId }).eq(column, id);
+        if (handErr && !/does not exist|relation/i.test(handErr.message)) {
+          logger.warn('Could not reassign records before deleting user', { table, error: handErr.message });
+        }
+      }
+    }
+
     const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
 
     if (error) throw error;

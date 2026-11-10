@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { toApiFields } from '../lib/field-schema';
 import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import { colors, spacing, typography, borders, shadows, animations } from '../shared/styles/design-tokens';
@@ -474,9 +475,12 @@ export const CollectionBuilder = () => {
       type: preset.type,
       icon: preset.icon,
       color: preset.color,
-      fields: preset.fields.map((field, index) => ({
+      // Presets are in API shape (id = content key, name = label)
+      fields: preset.fields.map((field: any, index: number) => ({
         ...field,
         id: `field-${Date.now()}-${index}`,
+        name: field.id,
+        label: field.label || field.name,
       })),
     });
   };
@@ -611,7 +615,7 @@ export const CollectionBuilder = () => {
         type: collection.type,
         icon: collection.icon,
         color: collection.color,
-        fields: collection.fields,
+        fields: toApiFields(collection.fields),
       });
 
       if (error) throw new Error(error);

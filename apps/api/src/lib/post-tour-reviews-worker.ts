@@ -17,6 +17,7 @@ import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
 import { sendPostTourReview, sendBookingReminder } from './email.js';
+import { hasSoftDelete } from './soft-delete.js';
 
 const DEFAULT_DELAY_DAYS = 2;
 const QUERY_LOOKBACK_DAYS = 30; // hard window so the query stays bounded
@@ -128,14 +129,20 @@ async function processCurrentTenant(): Promise<void> {
   const cutoffIso = isoDate(cutoff);
   const floorIso = isoDate(floor);
 
-  const { data: candidates, error } = await supabase
+  // Only bookings not yet emailed: once 200 stamped rows sat in the window,
+  // the unordered limit starved every newer booking of its review email.
+  let candidatesQuery = supabase
     .from('entries')
     .select('id, content')
     .eq('collection_id', bookingsColId)
     .filter('content->>booking_status', 'eq', 'confirmed')
     .filter('content->>date', 'gte', floorIso)
     .filter('content->>date', 'lte', cutoffIso)
+    .filter('content->>review_email_sent_at', 'is', null)
+    .order('created_at', { ascending: true })
     .limit(200);
+  if (await hasSoftDelete()) candidatesQuery = candidatesQuery.is('deleted_at', null);
+  const { data: candidates, error } = await candidatesQuery;
 
   if (error) {
     logger.error('Post-tour reviews: select failed', { error: error.message });
@@ -211,14 +218,18 @@ async function sendRemindersForCurrentTenant(config: Record<string, any>): Promi
   const horizon = new Date(now.getTime() + (hoursBefore + 48) * 3_600_000);
   const maxDate = wallClock(horizon, timeZone).slice(0, 10);
 
-  const { data: candidates, error } = await supabase
+  let candidatesQuery = supabase
     .from('entries')
     .select('id, content')
     .eq('collection_id', bookingsColId)
     .filter('content->>booking_status', 'eq', 'confirmed')
     .filter('content->>date', 'gte', today)
     .filter('content->>date', 'lte', maxDate)
+    .filter('content->>reminder_sent_at', 'is', null)
+    .order('created_at', { ascending: true })
     .limit(500);
+  if (await hasSoftDelete()) candidatesQuery = candidatesQuery.is('deleted_at', null);
+  const { data: candidates, error } = await candidatesQuery;
   if (error) {
     logger.error('Booking reminders: select failed', { error: error.message });
     return;

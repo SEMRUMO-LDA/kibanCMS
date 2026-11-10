@@ -119,6 +119,9 @@ router.get('/', async (req: AuthRequest, res: Response) => {
           google_ads: clean(c.google_ads_id),
           google_autoload: !(c.google_autoload === false || c.google_autoload === 'false'),
           google_consent_mode: c.google_consent_mode === 'advanced' ? 'advanced' : 'basic',
+          // true when the server will forward conversions (Meta CAPI) — the
+          // loader only patches fetch when there is something to report to
+          conversion_tracking: c.meta_capi_enabled === true || c.meta_capi_enabled === 'true',
         },
         indexing: {
           robots_txt: clean(c.robots_txt),

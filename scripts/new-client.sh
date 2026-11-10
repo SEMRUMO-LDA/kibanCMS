@@ -40,6 +40,7 @@ SCHEMA_FILES=(
   "$MIGRATIONS_DIR/010_addons_improvements.sql"
   "$MIGRATIONS_DIR/011_meta_capi_fields.sql"
   "$MIGRATIONS_DIR/012_google_tags_fields.sql"
+  "$MIGRATIONS_DIR/013_security_integrity.sql"
 )
 
 # Colors
@@ -161,7 +162,7 @@ PROJECT_REF=$(echo "$SUPABASE_URL" | sed -n 's|https://\([^.]*\)\.supabase\.co|\
 
 if [ -z "$PROJECT_REF" ]; then
   echo -e "${YELLOW}  Could not extract project ref from URL.${NC}"
-  echo -e "${YELLOW}  Please run CLEAN_RESET.sql and migrations 002, 003, 004, 006, 007, 008, 009, 010 manually in the Supabase SQL Editor.${NC}"
+  echo -e "${YELLOW}  Please run CLEAN_RESET.sql and migrations 002 to 013 (see database/migrations/README.md) manually in the Supabase SQL Editor.${NC}"
   SCHEMA_DONE=false
 else
   # Try using the Supabase database connection string

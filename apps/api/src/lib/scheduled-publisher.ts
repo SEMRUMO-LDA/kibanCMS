@@ -15,6 +15,7 @@
 import { logger } from './logger.js';
 import { expireUnpaidBookingsForCurrentTenant } from './booking-capacity.js';
 import { purgeOldConsentsForCurrentTenant } from '../routes/marketing.js';
+import { hasSoftDelete } from './soft-delete.js';
 import { supabase } from './supabase.js';
 import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
 import { getAllTenants, getDefaultTenant } from '../config/tenants.js';
@@ -29,12 +30,14 @@ async function publishDueEntriesForCurrentTenant(): Promise<number> {
   // no atomic "flip on read" primitive without a function, but the time
   // window is small enough that a duplicate flip across replicas is harmless
   // (UPDATE is idempotent: status is already 'published' on second pass).
-  const { data: due, error: selectErr } = await supabase
+  let dueQuery = supabase
     .from('entries')
     .select('id, title, slug, collection_id')
     .eq('status', 'scheduled')
     .lte('published_at', nowIso)
     .limit(200);
+  if (await hasSoftDelete()) dueQuery = dueQuery.is('deleted_at', null); // never publish from the Trash
+  const { data: due, error: selectErr } = await dueQuery;
 
   if (selectErr) {
     logger.error('Scheduled publisher: select failed', { error: selectErr.message });
@@ -141,7 +144,30 @@ async function processCurrentTenant(): Promise<void> {
     } catch (err: any) {
       logger.warn('Consent log purge failed', { tenant: tenantId, error: err?.message });
     }
+    try {
+      await purgeOldLogsForCurrentTenant();
+    } catch (err: any) {
+      logger.warn('Log retention purge failed', { tenant: tenantId, error: err?.message });
+    }
   }
+}
+
+// Webhook delivery payloads hold full entries (leads, bookings) and the audit
+// log holds IP addresses: neither needs to live forever.
+const WEBHOOK_DELIVERY_RETENTION_DAYS = 90;
+const AUDIT_LOG_RETENTION_DAYS = 365;
+
+async function purgeOldLogsForCurrentTenant(): Promise<void> {
+  const cutoff = (days: number) => new Date(Date.now() - days * 86400_000).toISOString();
+  const { count: deliveries } = await supabase
+    .from('webhook_deliveries')
+    .delete({ count: 'exact' })
+    .lt('created_at', cutoff(WEBHOOK_DELIVERY_RETENTION_DAYS));
+  const { count: audits } = await supabase
+    .from('audit_log')
+    .delete({ count: 'exact' })
+    .lt('created_at', cutoff(AUDIT_LOG_RETENTION_DAYS));
+  if (deliveries || audits) logger.info('Old logs purged', { webhook_deliveries: deliveries || 0, audit_log: audits || 0 });
 }
 
 async function processAllTenants(): Promise<void> {

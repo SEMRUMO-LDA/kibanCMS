@@ -24,8 +24,10 @@ import { logger } from '../lib/logger.js';
 import { tenantStore } from '../middleware/tenant.js';
 import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import { sanitizeClientMetadata } from '../lib/stripe-metadata.js';
-import { keepsSeat, releaseBooking, checkoutExpiry } from '../lib/booking-capacity.js';
+import { keepsSeat, releaseBooking, checkoutExpiry, participantsOf } from '../lib/booking-capacity.js';
 import { trackingToStore } from '../lib/meta-capi.js';
+import { getAdminProfileId } from '../lib/system-author.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 import {
   loadCoupon,
   validateCoupon,
@@ -197,16 +199,6 @@ async function getCollectionId(slug: string): Promise<string | null> {
   return data?.id || null;
 }
 
-async function getAdminProfileId(): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .in('role', ['super_admin', 'admin'])
-    .limit(1)
-    .single();
-  return data?.id || null;
-}
-
 function parseJsonSafe<T>(value: any, fallback: T): T {
   if (value == null) return fallback;
   if (typeof value !== 'string') return (value as T) ?? fallback;
@@ -232,6 +224,11 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
   if (!item.date) throw new Error(`${prefix}: date is required`);
   if (!item.time_slot) throw new Error(`${prefix}: time_slot is required`);
   if (!item.adults || item.adults < 1) throw new Error(`${prefix}: adults must be >= 1`);
+  // Whole, non-negative counts only: children = -1 would subtract a child price and free a seat
+  if (!Number.isInteger(Number(item.adults)) || (item.children != null && (!Number.isInteger(Number(item.children)) || Number(item.children) < 0))) {
+    throw new Error(`${prefix}: adults and children must be whole numbers (children >= 0)`);
+  }
+  if (Number(item.adults) + Number(item.children || 0) > 500) throw new Error(`${prefix}: party is too large`);
 
   // Load the resource (bookable-resources → tours fallback, same as v2)
   let colId = await getCollectionId('bookable-resources');
@@ -297,7 +294,7 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
   const bookingsColId = await getCollectionId('bookings');
   let booked = 0;
   if (bookingsColId) {
-    const { data: existing } = await supabase
+    let existingQuery = supabase
       .from('entries')
       .select('content')
       .eq('collection_id', bookingsColId)
@@ -305,12 +302,11 @@ async function resolveBookingLineItem(item: BookingLineItem, idx: number, defaul
       .filter('content->>date', 'eq', item.date)
       .filter('content->>time_slot', 'eq', item.time_slot)
       .filter('content->>booking_status', 'in', '("pending","confirmed")');
+    if (await hasSoftDelete()) existingQuery = existingQuery.is('deleted_at', null); // trashed bookings hold no seat
+    const { data: existing } = await existingQuery;
 
     if (existing) {
-      for (const b of existing) {
-        const bc = b.content as any;
-        booked += Number(bc.party_size) || (Number(bc.adults) || 0) + (Number(bc.children) || 0);
-      }
+      for (const b of existing) booked += participantsOf(b.content as any);
     }
   }
 
@@ -582,7 +578,15 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
       if (loaded) {
         couponRow = loaded.row;
         couponMeta = { code: loaded.coupon.code, discount_cents: validation.discount_cents || 0 };
-        stripeCouponId = await ensureStripeCoupon(stripe, couponRow, loaded.coupon);
+        if (couponMeta.discount_cents > 0) {
+          stripeCouponId = await ensureStripeCoupon(stripe, couponRow, loaded.coupon, couponMeta.discount_cents, currency);
+          if (!stripeCouponId) {
+            // Never charge full price for a checkout we told the customer was discounted
+            return res.status(502).json({
+              error: { message: 'The coupon could not be applied. Please try again.', code: 'COUPON_APPLY_FAILED', status: 502, timestamp: new Date().toISOString() },
+            });
+          }
+        }
       }
     }
 
@@ -744,6 +748,9 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
     const sessionParams: any = {
       mode: 'payment',
       customer_email: body.customer.email,
+      // Charge/refund events carry no session metadata: tenant_id on the
+      // PaymentIntent is what routes charge.refunded to the right tenant.
+      payment_intent_data: { metadata: { tenant_id: tenantStore.getStore()?.tenant?.id || 'default', order_id: order.id } },
       line_items: resolvedItems.map(r => r.stripeLineItem),
       success_url: body.success_url,
       cancel_url: body.cancel_url,
@@ -796,22 +803,22 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
         .eq('id', bkId);
     }
 
-    // Record coupon pending redemption (one per booking, matches existing contract)
-    if (couponRow && couponMeta && bookingIds.length > 0) {
+    // One pending redemption per ORDER, confirmed by the webhook once paid.
+    // One per booking counted a coupon N times for N seats, and product-only
+    // orders were never counted at all (limits unenforceable).
+    if (couponRow && couponMeta) {
       const loaded = await loadCoupon(body.coupon_code || '');
       if (loaded) {
-        for (const bkId of bookingIds) {
-          await recordPendingRedemption({
-            coupon: loaded.coupon,
-            booking_id: bkId,
-            customer_email: body.customer.email,
-            subtotal_cents: subtotal,
-            discount_cents: couponMeta.discount_cents,
-            currency,
-            stripe_session_id: session.id,
-            author_id: adminId,
-          });
-        }
+        await recordPendingRedemption({
+          coupon: loaded.coupon,
+          booking_id: order.id,
+          customer_email: body.customer.email,
+          subtotal_cents: subtotal,
+          discount_cents: couponMeta.discount_cents,
+          currency,
+          stripe_session_id: session.id,
+          author_id: adminId,
+        });
       }
     }
 

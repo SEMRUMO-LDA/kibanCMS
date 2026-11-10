@@ -15,7 +15,7 @@ Headless CMS built by AORUBRO. Manages content for any frontend — websites, ap
 git clone https://github.com/SEMRUMO-LDA/kibanCMS.git
 cd kibanCMS
 pnpm install
-cp .env.example .env
+cp apps/api/.env.example apps/api/.env   # the API reads apps/api/.env; Vite reads apps/admin/.env
 cp apps/api/.env.example apps/api/.env
 # Fill in Supabase credentials in both .env files
 pnpm dev

@@ -133,7 +133,7 @@ const PlaceholderContent = styled.div`
   .hint { font-size: ${typography.fontSize.xs}; color: ${colors.gray[400]}; }
 `;
 
-const RemoveButton = styled.button`
+const RemoveButton = styled.button.attrs({ type: 'button' })`
   position: absolute;
   top: ${spacing[2]};
   right: ${spacing[2]};
@@ -160,7 +160,7 @@ const ActionButtons = styled.div`
   flex-wrap: wrap;
 `;
 
-const ActionBtn = styled.button`
+const ActionBtn = styled.button.attrs({ type: 'button' })`
   padding: ${spacing[2]} ${spacing[3]};
   background: ${colors.white};
   border: 1px solid ${colors.gray[300]};
@@ -508,7 +508,7 @@ export function ImageField({
           <PickerModal onClick={e => e.stopPropagation()}>
             <PickerHeader>
               <h3>Select Image</h3>
-              <button onClick={() => setShowPicker(false)}><X size={20} /></button>
+              <button type="button" onClick={() => setShowPicker(false)}><X size={20} /></button>
             </PickerHeader>
             <PickerGrid>
               {pickerLoading ? (

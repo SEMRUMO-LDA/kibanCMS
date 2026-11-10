@@ -183,19 +183,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profileFetchedForId.current = null;
     setLoading(false);
 
-    // Clear tenant config and Supabase localStorage
-    clearTenant();
-    try { localStorage.removeItem('sb-' + new URL(import.meta.env.VITE_SUPABASE_URL).hostname.split('.')[0] + '-auth-token'); } catch {}
-
-    // Tell Supabase (with timeout — don't hang if server is dead)
+    // Tell Supabase FIRST (revokes the refresh token) — with a timeout so a
+    // dead server can't hang the logout. clearTenant() swaps the client for a
+    // no-op stub, so it has to come after.
     try {
       await Promise.race([
         supabase.auth.signOut(),
         new Promise((resolve) => setTimeout(resolve, 3000)),
       ]);
     } catch {
-      // Ignore — state is already cleared
+      // Ignore — local state is cleared below regardless
     }
+    clearTenant();
+    try {
+      Object.keys(localStorage).filter(k => /^sb-.*-auth-token$/.test(k)).forEach(k => localStorage.removeItem(k));
+    } catch {}
   }, []);
 
   const value = useMemo(

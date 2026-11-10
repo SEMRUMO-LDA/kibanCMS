@@ -17,8 +17,17 @@
   'use strict';
 
   // ── Config from script tag ──────────────────────────────────────────
-  var scripts = document.querySelectorAll('script[data-api-key]');
-  var scriptTag = scripts[scripts.length - 1];
+  // Our own tag: document.currentScript when available, else the tag whose src
+  // points at this script. The last `script[data-api-key]` on the page may be
+  // an unrelated embed — using it sent every request to a foreign origin.
+  var scriptTag = document.currentScript && document.currentScript.getAttribute('data-api-key') ? document.currentScript : null;
+  if (!scriptTag) {
+    var scripts = document.querySelectorAll('script[data-api-key]');
+    for (var si = scripts.length - 1; si >= 0; si--) {
+      if (/\/cookie-notice\/widget\.js/.test(scripts[si].src || '')) { scriptTag = scripts[si]; break; }
+    }
+    if (!scriptTag) scriptTag = scripts[scripts.length - 1];
+  }
   if (!scriptTag) return;
 
   var API_KEY = scriptTag.getAttribute('data-api-key');
@@ -37,13 +46,31 @@
   var VISITOR_KEY = 'kiban_visitor_id';
   var TENANT_ID = scriptTag.getAttribute('data-tenant');
 
-  // Silktide CDN assets — Silktide ships only on GitHub, not npm. The npm
-  // path returns 404 and silently breaks the banner; the GitHub jsdelivr path
-  // is the canonical one published by Silktide themselves.
-  var SILKTIDE_CSS = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.css';
-  var SILKTIDE_JS  = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@main/silktide-consent-manager.js';
+  // Silktide CDN assets — Silktide ships only on GitHub, not npm. PINNED to a
+  // commit with subresource integrity: an upstream change must never be able
+  // to break every tenant's banner (and with it every consent-gated tag).
+  // To upgrade: change the commit, download both files from the new URLs and
+  // recompute `openssl dgst -sha384 -binary <file> | openssl base64 -A`.
+  var SILKTIDE_COMMIT = 'e01dee803352a565d9f5eefddf427ffa46579a2a';
+  var SILKTIDE_BASE = 'https://cdn.jsdelivr.net/gh/silktide/consent-manager@' + SILKTIDE_COMMIT + '/';
+  var SILKTIDE_CSS = SILKTIDE_BASE + 'silktide-consent-manager.css';
+  var SILKTIDE_JS  = SILKTIDE_BASE + 'silktide-consent-manager.js';
+  var SILKTIDE_CSS_SRI = 'sha384-EdMq+R+YOnsbelo08wPenoTlnxbAyxI11NMIxzugx/qAsbh64KcOkqxYqq6pfvO/';
+  var SILKTIDE_JS_SRI  = 'sha384-5Pt34uiIbCsvfiiZXoLi4HRf/YBXjr9c8e+gYeVo9smUaInNHYVtc8NZ8wUnXJIq';
 
   // ── Helpers ──────────────────────────────────────────────────────────
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function safeUrl(value) {
+    var u = String(value || '').trim();
+    if (!u) return '';
+    return /^(https?:)?\/\//i.test(u) || /^[\/#.?]/.test(u) ? u : '';
+  }
 
   function setAuthHeaders(xhr) {
     xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
@@ -51,7 +78,8 @@
   }
 
   function getVisitorId() {
-    var id = localStorage.getItem(VISITOR_KEY);
+    var id = null;
+    try { id = localStorage.getItem(VISITOR_KEY); } catch (e) {} // "block all cookies" throws here
     if (!id) {
       id = 'v_' + Math.random().toString(36).substring(2, 14) + Date.now().toString(36);
       try { localStorage.setItem(VISITOR_KEY, id); } catch (e) {}
@@ -109,19 +137,21 @@
 
   // ── Load external asset ─────────────────────────────────────────────
 
-  function loadCSS(href, onLoad) {
+  function loadCSS(href, onLoad, integrity) {
     var link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
+    if (integrity) { link.integrity = integrity; link.crossOrigin = 'anonymous'; }
     link.onload = onLoad || function () {};
     link.onerror = function () { console.warn('[KibanCMS] Failed to load Silktide CSS'); };
     document.head.appendChild(link);
   }
 
-  function loadJS(src, onLoad) {
+  function loadJS(src, onLoad, integrity) {
     var script = document.createElement('script');
     script.src = src;
     script.async = true;
+    if (integrity) { script.integrity = integrity; script.crossOrigin = 'anonymous'; }
     script.onload = onLoad || function () {};
     script.onerror = function () { console.warn('[KibanCMS] Failed to load Silktide JS'); };
     document.head.appendChild(script);
@@ -187,10 +217,13 @@
     // Build description HTML
     var title = config.title || 'Informação sobre cookies';
     var message = config.message || 'Ao navegar neste website podem ser colocados no seu dispositivo cookies por nós ou parceiros.';
-    var descriptionHtml = '<p><strong>' + title + '</strong></p><p>' + message + '</p>';
+    // Admin-entered text goes through Silktide's innerHTML: escape it, and only
+    // link to http(s)/relative policy URLs (no javascript:).
+    var descriptionHtml = '<p><strong>' + escapeHtml(title) + '</strong></p><p>' + escapeHtml(message) + '</p>';
 
-    if (config.policyUrl) {
-      descriptionHtml += '<p><a href="' + config.policyUrl + '" target="_blank" rel="noopener">Política de Cookies</a></p>';
+    var policyUrl = safeUrl(config.policyUrl);
+    if (policyUrl) {
+      descriptionHtml += '<p><a href="' + escapeHtml(policyUrl) + '" target="_blank" rel="noopener">Política de Cookies</a></p>';
     }
 
     // Per-category choices (made in "Preferences") used to be lost: only
@@ -325,7 +358,7 @@
     // Load Silktide CSS first, THEN inject overrides — CSS rule order in
     // the DOM decides who wins between same-specificity #stcm-wrapper rules,
     // so our overrides have to be appended after the Silktide stylesheet.
-    loadCSS(SILKTIDE_CSS);
+    loadCSS(SILKTIDE_CSS, null, SILKTIDE_CSS_SRI);
     injectStyleOverrides(config);
 
     // Load Silktide JS then initialise
@@ -373,7 +406,7 @@
           },
         });
       }
-    });
+    }, SILKTIDE_JS_SRI);
   }
 
   // Version of what the visitor was asked: the categories offered plus a
@@ -404,8 +437,10 @@
     maxAgeMonths = m > 0 ? Math.min(m, 24) : 12;
     var c = getConsent();
     if (!c) return;
-    var age = c.updated_at ? Date.now() - Date.parse(c.updated_at) : 0;
-    var expired = age > maxAgeMonths * 30.44 * 86400000;
+    // No or invalid timestamp (records from before versioning): we cannot
+    // prove when the visitor consented, so we ask again.
+    var at = Date.parse(c.updated_at || '');
+    var expired = !isFinite(at) || Date.now() - at > maxAgeMonths * 30.44 * 86400000;
     var changed = !!c.version && c.version !== consentVersion;
     if (expired || changed) {
       clearStoredChoice();
@@ -456,7 +491,7 @@
     /** true once the stored choice was checked against the CMS config. */
     isReady: function () { return ready; },
     reset: function () {
-      localStorage.removeItem(CONSENT_KEY);
+      clearStoredChoice(); // ours + Silktide's keys, even if Silktide failed to load
       // Also reset Silktide's state if available
       if (window.silktideConsentManager) {
         try { window.silktideConsentManager.resetConsent(); } catch (e) {}

@@ -270,7 +270,7 @@ export const FieldEditor: React.FC<FieldEditorProps> = memo(({
     const updates: Partial<FieldDefinition> = { label };
 
     // Only auto-generate name if it's empty or matches the previous label
-    if (!field.name || field.name === field.label.toLowerCase().replace(/\s+/g, '_')) {
+    if (!field.name || field.name === (field.label || '').toLowerCase().replace(/\s+/g, '_')) {
       const generatedName = label
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '_')

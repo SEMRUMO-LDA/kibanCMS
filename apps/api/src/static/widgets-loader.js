@@ -20,8 +20,17 @@
   'use strict';
 
   // ── Config from script tag ──────────────────────────────────────────
-  var scripts = document.querySelectorAll('script[data-api-key]');
-  var scriptTag = scripts[scripts.length - 1];
+  // Our own tag: document.currentScript when available, else the tag whose src
+  // points at this script. The last `script[data-api-key]` on the page may be
+  // an unrelated embed — using it sent every request to a foreign origin.
+  var scriptTag = document.currentScript && document.currentScript.getAttribute('data-api-key') ? document.currentScript : null;
+  if (!scriptTag) {
+    var scripts = document.querySelectorAll('script[data-api-key]');
+    for (var si = scripts.length - 1; si >= 0; si--) {
+      if (/\/widgets\/loader\.js/.test(scripts[si].src || '')) { scriptTag = scripts[si]; break; }
+    }
+    if (!scriptTag) scriptTag = scripts[scripts.length - 1];
+  }
   if (!scriptTag) return;
 
   var API_KEY = scriptTag.getAttribute('data-api-key');
@@ -90,7 +99,7 @@
   var KNOWN_WIDGET_SELECTORS = {
     'cookie-notice':   '#stcm-icon',
     'accessibility':   '#kiban-a11y-btn',
-    'whatsapp-widget': '#kiban-whatsapp-btn',
+    'whatsapp-widget': '#kiban-wa-widget',
     'i18n':            '#kiban-i18n-widget',
   };
 
@@ -137,9 +146,19 @@
   // banner (KibanCookieNotice only reports consent once it has validated the
   // stored choice: expiry, banner version), and conversions carry the
   // consent flag the server checks before sending anything to Meta.
-  var pixel = { id: null, loadedByKiban: false };
+  var pixel = { id: null, loadedByKiban: false, lastPage: '', consentGranted: null };
+  var marketingActive = false; // set once /seo says there is something to track
   var google = { ga: '', ads: '', gtm: '', mode: 'basic', ready: false, own: false,
     gtagLoaded: false, gaOn: false, adsOn: false, gtmOn: false, lastState: '' };
+
+  // Ids like "123-top" are valid HTML but invalid in a selector: escape them,
+  // or querySelectorAll throws and the widgets stay hidden by the pre-hide CSS.
+  function cssEscape(value) {
+    try {
+      if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(value);
+    } catch (_) {}
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; });
+  }
 
   function hasConsent(category) {
     var cn = window.KibanCookieNotice;
@@ -193,16 +212,37 @@
       t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s); }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
     /* eslint-enable */
     pixel.loadedByKiban = true;
+    pixel.consentGranted = true;
     window.fbq('init', pixel.id);
     window.fbq('track', 'PageView');
-    // Single-page sites: count route changes as page views too
+    pixel.lastPage = location.pathname + location.search;
+    // Single-page sites: count route changes as page views too — only while
+    // consent stands, and once per URL (hash changes, same-URL pushes don't count)
+    var pageView = function () {
+      try {
+        var page = location.pathname + location.search;
+        if (page === pixel.lastPage || !hasMarketingConsent()) return;
+        pixel.lastPage = page;
+        window.fbq('track', 'PageView');
+      } catch (_) {}
+    };
     var push = history.pushState;
     history.pushState = function () {
       var r = push.apply(this, arguments);
-      try { window.fbq('track', 'PageView'); } catch (_) {}
+      pageView();
       return r;
     };
-    window.addEventListener('popstate', function () { try { window.fbq('track', 'PageView'); } catch (_) {} });
+    window.addEventListener('popstate', pageView);
+  }
+
+  // Consent withdrawn after the Pixel loaded: tell Meta to stop (and resume
+  // when it is granted again). Without this an SPA kept sending PageViews.
+  function syncPixelConsent() {
+    if (!pixel.loadedByKiban || typeof window.fbq !== 'function') return;
+    var granted = hasMarketingConsent();
+    if (granted === pixel.consentGranted) return;
+    pixel.consentGranted = granted;
+    try { window.fbq('consent', granted ? 'grant' : 'revoke'); } catch (_) {}
   }
 
   // ── Google: GA4 / Ads / Tag Manager with Consent Mode v2 ──
@@ -235,6 +275,18 @@
     syncGoogle();
   }
 
+  function allOfferedGranted() {
+    var cn = window.KibanCookieNotice;
+    var offered = cn && typeof cn.getOfferedCategories === 'function' ? cn.getOfferedCategories() : ['analytics', 'marketing'];
+    var optional = 0;
+    for (var i = 0; i < offered.length; i++) {
+      if (offered[i] !== 'analytics' && offered[i] !== 'marketing') continue;
+      optional++;
+      if (!hasConsent(offered[i])) return false;
+    }
+    return optional > 0; // a banner with nothing to consent to grants nothing
+  }
+
   function syncGoogle() {
     if (!google.ready) return;
     var s = googleConsentState();
@@ -249,7 +301,9 @@
     var adv = google.mode === 'advanced';
     var wantGa = !!google.ga && (adv || s.analytics_storage === 'granted');
     var wantAds = !!google.ads && (adv || s.ad_storage === 'granted');
-    var wantGtm = !!google.gtm && (adv || s.analytics_storage === 'granted' || s.ad_storage === 'granted');
+    // Tag Manager can hold any vendor's tags: in basic mode it waits until every
+    // optional category the banner offers is granted (analytics AND marketing)
+    var wantGtm = !!google.gtm && (adv || allOfferedGranted());
     if ((wantGa || wantAds) && !google.gtagLoaded) {
       google.gtagLoaded = true;
       window.gtag('js', new Date());
@@ -352,7 +406,9 @@
       var id = String(a.facebook_pixel || '').replace(/\D/g, '');
       if (id && a.facebook_pixel_autoload !== false) pixel.id = id;
       initGoogle(a);
-      var onConsent = function () { loadPixel(); syncGoogle(); };
+      // Only touch the site's requests when there is something to report to
+      marketingActive = !!(pixel.id || a.conversion_tracking || google.ga || google.ads || google.gtm);
+      var onConsent = function () { loadPixel(); syncPixelConsent(); syncGoogle(); };
       onConsent();
       window.addEventListener('kiban-consent-change', onConsent);
       window.addEventListener('kiban-consent-ready', onConsent);
@@ -375,6 +431,7 @@
     if (!window.fetch || window.fetch.__kibanTracking) return;
     var originalFetch = window.fetch;
     var wrapped = function (input, init) {
+      if (!marketingActive) return originalFetch.apply(this, arguments);
       try {
         var url = typeof input === 'string' ? input : (input && input.url) || String(input || '');
         var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
@@ -1356,7 +1413,7 @@
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       var id = el.getAttribute('data-kiban-stack-id') || el.id || ('site-' + i);
-      var selector = el.id ? '#' + el.id : '[data-kiban-stack-id="' + id + '"]';
+      var selector = el.id ? '#' + cssEscape(el.id) : '[data-kiban-stack-id="' + id + '"]';
       var height = parseInt(el.getAttribute('data-kiban-stack-height'), 10)
                    || el.offsetHeight || 44;
       window.KibanWidgets.register(id, {

@@ -242,7 +242,7 @@ export const Settings = () => {
       const row = Array.isArray(data) ? data[0] : data;
       if (row?.api_key) {
         setGeneratedKey(row.api_key);
-        await loadAll();
+        await loadKeys(); // not loadAll(): that would discard unsaved edits on the other tabs
       } else {
         throw new Error('No key returned.');
       }
@@ -292,8 +292,9 @@ export const Settings = () => {
   useEffect(() => {
     // Seed the test-email recipient with the logged-in admin's address so the
     // operator can hit "Send" immediately without typing.
-    if (user?.email && !testEmailTo) setTestEmailTo(user.email);
-  }, [user?.email, testEmailTo]);
+    // Seed once per user; re-seeding on every change made the field impossible to clear
+    if (user?.email) setTestEmailTo(prev => prev || user.email!);
+  }, [user?.email]);
 
   const handleSendTestEmail = async () => {
     if (!testEmailTo) return;
@@ -318,6 +319,13 @@ export const Settings = () => {
     }
   };
 
+  const loadKeys = async () => {
+    if (!user?.id) return;
+    const { data: keys, error: keysErr } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
+    setApiKeysError(keysErr ? keysErr.message : null);
+    setApiKeys(keys || []);
+  };
+
   const loadAll = async () => {
     try {
       // Load site settings via API. "Collection not found" just means the
@@ -332,12 +340,7 @@ export const Settings = () => {
         if (globalEntry?.content) setSettings({ ...DEFAULTS, ...globalEntry.content });
       }
 
-      // Load API keys (Supabase direct)
-      if (user?.id) {
-        const { data: keys, error: keysErr } = await supabase.from('api_keys').select('*').eq('profile_id', user.id).is('revoked_at', null).order('created_at', { ascending: false });
-        setApiKeysError(keysErr ? keysErr.message : null);
-        setApiKeys(keys || []);
-      }
+      await loadKeys();
     } catch (err: any) {
       console.error('Settings load error:', err);
       setLoadError(err?.message || 'Failed to load settings');
@@ -462,7 +465,7 @@ export const Settings = () => {
 
       {activeTab === 'api' && (
         <>
-          <ConnectSitePanel locale={locale} onKeyCreated={loadAll} />
+          <ConnectSitePanel locale={locale} onKeyCreated={loadKeys} />
           <Section>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing[5], paddingBottom: spacing[4], borderBottom: `1px solid ${colors.gray[100]}` }}>
               <h2 style={{ margin: 0, border: 'none', padding: 0 }}>API Keys</h2>

@@ -16,6 +16,7 @@
 
 import { supabase } from './supabase.js';
 import { logger } from './logger.js';
+import { hasSoftDelete } from './soft-delete.js';
 
 export const HOLD_STATUSES = ['pending', 'confirmed'] as const;
 /** Stripe allows 30 min – 24 h. */
@@ -63,7 +64,7 @@ export async function keepsSeat(
   slot: { resource_slug: string; date: string; time_slot: string },
   capacity: number,
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  let slotQuery = supabase
     .from('entries')
     .select('id, created_at, content')
     .eq('collection_id', bookingsColId)
@@ -71,6 +72,8 @@ export async function keepsSeat(
     .filter('content->>date', 'eq', slot.date)
     .filter('content->>time_slot', 'eq', slot.time_slot)
     .filter('content->>booking_status', 'in', `(${HOLD_STATUSES.map(s => `"${s}"`).join(',')})`);
+  if (await hasSoftDelete()) slotQuery = slotQuery.is('deleted_at', null); // trashed bookings hold no seat
+  const { data, error } = await slotQuery;
   if (error) {
     // Can't verify → keep the booking (same behaviour as before this check).
     logger.warn('Capacity verification failed — keeping booking', { bookingId, error: error.message });
@@ -125,12 +128,15 @@ export async function expireUnpaidBookingsForCurrentTenant(now: Date = new Date(
   const { data: col } = await supabase.from('collections').select('id').eq('slug', 'bookings').maybeSingle();
   if (!col) return 0;
 
-  const { data, error } = await supabase
+  let pendingQuery = supabase
     .from('entries')
     .select('id, created_at, content')
     .eq('collection_id', col.id)
     .filter('content->>booking_status', 'eq', 'pending')
+    .order('created_at', { ascending: true }) // oldest first, so a backlog can't starve newer holds
     .limit(500);
+  if (await hasSoftDelete()) pendingQuery = pendingQuery.is('deleted_at', null);
+  const { data, error } = await pendingQuery;
   if (error) {
     logger.warn('Booking expiry sweep: select failed', { error: error.message });
     return 0;

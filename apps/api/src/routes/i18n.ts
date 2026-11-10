@@ -17,6 +17,7 @@ import { requireEditor, type AuthRequest } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { tenantStore } from '../middleware/tenant.js';
 import { translateWithCache } from '../lib/translation-cache.js';
+import { getAdminProfileId } from '../lib/system-author.js';
 import {
   translateFields,
   translateTexts,
@@ -123,16 +124,6 @@ async function getCollectionFields(slug: string): Promise<any[]> {
     .eq('slug', slug)
     .single();
   return data?.fields || [];
-}
-
-async function getAdminProfileId(): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .in('role', ['super_admin', 'admin'])
-    .limit(1)
-    .single();
-  return data?.id || null;
 }
 
 // ============================================
@@ -593,7 +584,8 @@ router.post('/translate-bulk', requireEditor, async (req: AuthRequest, res: Resp
 // Translation status overview for a collection
 // ============================================
 
-router.get('/status/:collection', async (req: AuthRequest, res: Response) => {
+// Lists entry ids + titles (customer names for bookings/leads): editors only.
+router.get('/status/:collection', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { collection } = req.params;
 
@@ -934,6 +926,16 @@ router.post('/translate-text', translateTextLimiter, async (req: AuthRequest, re
       });
     }
 
+    // Only languages the site enabled are billable to the tenant's translation account
+    const allowedTargets = new Set(
+      [config.defaultLanguage, ...config.enabledLanguages.map(l => l.code)].map(c => String(c || '').toLowerCase()),
+    );
+    if (!allowedTargets.has(String(target_lang).toLowerCase())) {
+      return res.status(400).json({
+        error: { message: 'target_lang is not enabled for this site', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+
     if (!texts.every((t: unknown) => typeof t === 'string')) {
       return res.status(400).json({
         error: { message: 'texts must be an array of strings', status: 400, timestamp: new Date().toISOString() }
@@ -962,7 +964,7 @@ router.post('/translate-text', translateTextLimiter, async (req: AuthRequest, re
   } catch (error: any) {
     logger.error('Error translating text', { error: error.message });
     res.status(500).json({
-      error: { message: error.message || 'Failed to translate text', status: 500, timestamp: new Date().toISOString() }
+      error: { message: 'Failed to translate text', status: 500, timestamp: new Date().toISOString() }
     });
   }
 });

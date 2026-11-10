@@ -102,6 +102,20 @@ export function formAutoReplyTemplate(
 
 // ── Booking Confirmation (to customer) ──
 
+function countLabel(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? String(n) : '';
+}
+
+/** `amount` is in cents (current producers); legacy rows had `total_amount` in euros. */
+function bookingTotalLabel(b: Record<string, any>): string {
+  if (b.total_amount) return `${b.total_amount}€`;
+  const cents = Number(b.amount);
+  if (!Number.isFinite(cents) || cents <= 0) return '';
+  const cur = String(b.currency || 'eur').toUpperCase();
+  return `${(cents / 100).toFixed(2)} ${cur === 'EUR' ? '€' : cur}`;
+}
+
 export function bookingConfirmationTemplate(
   booking: Record<string, any>,
   siteName: string,
@@ -109,13 +123,15 @@ export function bookingConfirmationTemplate(
   const name = booking.customer_name || '';
   const greeting = name ? `Olá ${escapeHtml(name)},` : 'Olá,';
 
+  // Bookings come from three producers with different keys (tour_title/adults/
+  // amount, resource_title/party_size/amount, legacy tour_name/total_amount).
   const details = [
-    { label: 'Experiência', value: booking.tour_name || booking.tour_slug },
+    { label: 'Experiência', value: booking.tour_title || booking.resource_title || booking.tour_name || booking.tour_slug || booking.resource_slug },
     { label: 'Data', value: booking.date },
     { label: 'Horário', value: booking.time_slot },
-    { label: 'Adultos', value: booking.adults?.toString() },
-    { label: 'Crianças', value: booking.children ? booking.children.toString() : '' },
-    { label: 'Total', value: booking.total_amount ? `${booking.total_amount}€` : '' },
+    { label: 'Adultos', value: countLabel(booking.adults ?? booking.party_size) },
+    { label: 'Crianças', value: countLabel(booking.children ?? booking.party_size_secondary) },
+    { label: 'Total', value: bookingTotalLabel(booking) },
   ].filter(f => f.value);
 
   let rows = '';
@@ -351,7 +367,7 @@ export function postTourReviewTemplate(
   const { booking, language, config, siteName } = input;
 
   const customerName = booking.customer_name || '';
-  const tourName = booking.tour_name || booking.resource_title || booking.resource_slug || '';
+  const tourName = booking.tour_title || booking.tour_name || booking.resource_title || booking.resource_slug || '';
   const tourDate = booking.date || '';
 
   // Pick template values; if the requested language is empty, fall back to PT,
@@ -388,10 +404,15 @@ export function postTourReviewTemplate(
   const ctaGoogleLabel = pick(language, 'cta_google_label', d.ctaGoogle);
   const ctaTripadvisorLabel = pick(language, 'cta_tripadvisor_label', d.ctaTripadvisor);
 
-  const replace = (s: string) => s
-    .replace(/\{customer_name\}/g, customerName)
-    .replace(/\{tour_name\}/g, tourName)
-    .replace(/\{tour_date\}/g, tourDate);
+  // Substituted values are customer-controlled (name) or admin-controlled:
+  // escape them when the result is HTML.
+  const replace = (s: string, html = false) => {
+    const v = (x: string) => (html ? escapeHtml(x) : x);
+    return s
+      .replace(/\{customer_name\}/g, v(customerName))
+      .replace(/\{tour_name\}/g, v(tourName))
+      .replace(/\{tour_date\}/g, v(tourDate));
+  };
 
   const subject = replace(subjectRaw);
   const greeting = customerName
@@ -399,7 +420,7 @@ export function postTourReviewTemplate(
     : (language === 'pt' ? 'Olá,' : 'Hi,');
 
   // Body is plain text; preserve paragraphs by splitting on double newlines.
-  const bodyHtml = replace(escapeHtml(bodyRaw))
+  const bodyHtml = replace(escapeHtml(bodyRaw), true)
     .split(/\n\s*\n/)
     .map(p => `<p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;line-height:1.55;">${p.replace(/\n/g, '<br>')}</p>`)
     .join('');
@@ -476,15 +497,18 @@ export function bookingReminderTemplate(input: BookingReminderInput): { subject:
     },
   }[language];
 
-  const replace = (s: string) => s
-    .replace(/\{customer_name\}/g, customerName)
-    .replace(/\{tour_name\}/g, tourName)
-    .replace(/\{tour_date\}/g, tourDate)
-    .replace(/\{tour_time\}/g, tourTime)
-    .replace(/\{participants\}/g, participants);
+  const replace = (s: string, html = false) => {
+    const v = (x: string) => (html ? escapeHtml(x) : x);
+    return s
+      .replace(/\{customer_name\}/g, v(customerName))
+      .replace(/\{tour_name\}/g, v(tourName))
+      .replace(/\{tour_date\}/g, v(tourDate))
+      .replace(/\{tour_time\}/g, v(tourTime))
+      .replace(/\{participants\}/g, v(participants));
+  };
 
   const subject = replace(pick('reminder_subject', defaults.subject));
-  const bodyHtml = replace(escapeHtml(pick('reminder_body', defaults.body)))
+  const bodyHtml = replace(escapeHtml(pick('reminder_body', defaults.body)), true)
     .split(/\n\s*\n/)
     .map(p => `<p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;line-height:1.55;">${p.replace(/\n/g, '<br>')}</p>`)
     .join('');

@@ -10,7 +10,9 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
-import { requireEditor, type AuthRequest } from '../middleware/auth.js';
+import { requireEditor, isApiKeyRequest, type AuthRequest } from '../middleware/auth.js';
+import { getAdminProfileId } from '../lib/system-author.js';
+import { hasSoftDelete } from '../lib/soft-delete.js';
 
 const router: Router = Router();
 
@@ -21,16 +23,6 @@ async function getCollectionId(slug: string): Promise<string | null> {
     .from('collections')
     .select('id')
     .eq('slug', slug)
-    .single();
-  return data?.id || null;
-}
-
-async function getAdminProfileId(): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .in('role', ['super_admin', 'admin'])
-    .limit(1)
     .single();
   return data?.id || null;
 }
@@ -198,7 +190,7 @@ async function isBookingsAddonInstalled(): Promise<boolean> {
 // so the generic Bookings API can handle availability + checkout for tours
 // without knowing anything about tour-specific content.
 
-async function syncTourToResource(tour: ReturnType<typeof expandTourContent>): Promise<string | null> {
+async function syncTourToResource(tour: ReturnType<typeof expandTourContent>, opts: { createOnly?: boolean } = {}): Promise<string | null> {
   const resourcesColId = await getCollectionId('bookable-resources');
   if (!resourcesColId) {
     logger.warn('syncTourToResource: bookable-resources collection not installed');
@@ -237,9 +229,13 @@ async function syncTourToResource(tour: ReturnType<typeof expandTourContent>): P
   };
 
   if (existing?.id) {
+    // Public tour reads only create the mirror; they never overwrite what an
+    // admin set on the resource (is_active, notice hours, prices…).
+    if (opts.createOnly) return targetSlug;
+    const { is_active: _keepAdminChoice, ...updates } = resourceContent;
     const { error } = await supabase
       .from('entries')
-      .update({ content: { ...(existing.content as any), ...resourceContent } } as any)
+      .update({ content: { ...(existing.content as any), ...updates } } as any)
       .eq('id', existing.id);
     if (error) {
       logger.error('syncTourToResource: update failed', { error: error.message });
@@ -292,12 +288,14 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     // controls which language the response is rendered in.
     const lang = (req.query.lang as string | undefined)?.toLowerCase();
 
-    const { data: entries, error } = await supabase
+    let toursQuery = supabase
       .from('entries')
       .select('id, title, slug, content, featured_image, status, meta')
       .eq('collection_id', colId)
       .eq('status', 'published')
       .order('created_at', { ascending: true });
+    if (await hasSoftDelete()) toursQuery = toursQuery.is('deleted_at', null);
+    const { data: entries, error } = await toursQuery;
 
     if (error) throw error;
 
@@ -336,12 +334,15 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
 
     const lang = (req.query.lang as string | undefined)?.toLowerCase();
 
-    const { data: entry, error } = await supabase
+    let tourQuery = supabase
       .from('entries')
       .select('id, title, slug, content, featured_image, status, meta')
       .eq('collection_id', colId)
-      .eq('slug', req.params.slug)
-      .single();
+      .eq('slug', req.params.slug);
+    // Public frontends only see published tours; trashed ones are gone for everyone
+    if (isApiKeyRequest(req)) tourQuery = tourQuery.eq('status', 'published');
+    if (await hasSoftDelete()) tourQuery = tourQuery.is('deleted_at', null);
+    const { data: entry, error } = await tourQuery.single();
 
     if (error || !entry) {
       return res.status(404).json({
@@ -357,7 +358,7 @@ router.get('/:slug', async (req: AuthRequest, res: Response) => {
     // internal checkout. External-URL tours don't need a resource entry,
     // and creating one would waste storage + confuse capacity reports.
     if (booking_mode === 'kiban') {
-      syncTourToResource(tour).catch(err =>
+      syncTourToResource(tour, { createOnly: true }).catch(err =>
         logger.warn('Tour → resource sync failed', { slug: entry.slug, error: err.message })
       );
     }

@@ -15,8 +15,17 @@
   'use strict';
 
   // ── Config ──
-  var scripts = document.querySelectorAll('script[data-api-key]');
-  var scriptTag = scripts[scripts.length - 1];
+  // Our own tag: document.currentScript when available, else the tag whose src
+  // points at this script. The last `script[data-api-key]` on the page may be
+  // an unrelated embed — using it sent every request to a foreign origin.
+  var scriptTag = document.currentScript && document.currentScript.getAttribute('data-api-key') ? document.currentScript : null;
+  if (!scriptTag) {
+    var scripts = document.querySelectorAll('script[data-api-key]');
+    for (var si = scripts.length - 1; si >= 0; si--) {
+      if (/\/i18n\/widget\.js/.test(scripts[si].src || '')) { scriptTag = scripts[si]; break; }
+    }
+    if (!scriptTag) scriptTag = scripts[scripts.length - 1];
+  }
   if (!scriptTag) return;
 
   var API_KEY = scriptTag.getAttribute('data-api-key');
@@ -100,6 +109,9 @@
         var text = node.textContent.trim();
         if (!text || text.length < MIN_LENGTH) return NodeFilter.FILTER_REJECT;
         if (SKIP_TAGS[node.parentElement.tagName]) return NodeFilter.FILTER_REJECT;
+        // Any ancestor that must never be translated: code, inline SVG (lowercase
+        // tagName, so SKIP_TAGS misses it), form controls, and the standard opt-outs
+        if (node.parentElement.closest('script,style,noscript,iframe,svg,code,pre,kbd,samp,textarea,option,[translate="no"],.notranslate')) return NodeFilter.FILTER_REJECT;
         if (node.parentElement.closest('#kiban-i18n-widget')) return NodeFilter.FILTER_REJECT;
         if (node.parentElement.isContentEditable) return NodeFilter.FILTER_REJECT;
         // Skip if looks like code/data
@@ -244,6 +256,8 @@
           }
         }
       };
+      xhr.timeout = 20000; // a hung request used to leave isTranslating=true forever
+      xhr.ontimeout = xhr.onerror;
       xhr.send(JSON.stringify({ texts: batch, target_lang: targetLang }));
     });
   }
@@ -745,7 +759,10 @@
 
         defaultLang = res.data.default || 'pt';
         languages = res.data.available || [];
-        if (!currentLang) currentLang = defaultLang;
+        // ?lang= from the URL must be a language the site enabled (the server
+        // rejects others; this avoids a doomed request and a stuck state)
+        var known = languages.some(function (l) { return ((l && l.code) || l) === currentLang; });
+        if (!currentLang || (currentLang !== defaultLang && !known)) currentLang = defaultLang;
 
         renderWidget();
 

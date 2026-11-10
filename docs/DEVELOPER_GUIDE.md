@@ -202,7 +202,7 @@ pnpm install
 
 # 3. Configurar variaveis de ambiente
 # Copia .env.example para .env e preenche:
-cp .env.example .env
+cp apps/api/.env.example apps/api/.env   # the API reads apps/api/.env; Vite reads apps/admin/.env
 cp apps/api/.env.example apps/api/.env
 
 # Variaveis necessarias:

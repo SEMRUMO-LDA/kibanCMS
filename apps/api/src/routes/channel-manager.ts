@@ -17,7 +17,7 @@
  * normal bookings UI surfaces them without code changes.
  */
 
-import express, { type Request, type Response, type Router as ExpressRouter } from 'express';
+import express, { type Request, type Response, type NextFunction, type Router as ExpressRouter } from 'express';
 import crypto from 'node:crypto';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
@@ -199,10 +199,13 @@ async function handleWebhook(req: Request, res: Response, urlToken: string | nul
   });
 }
 
+// Express 4 does not catch rejected promises: without `.catch(next)` a
+// malformed payload left the request hanging and the process with an
+// unhandled rejection.
 channelManagerRouter.post('/webhook/:provider/:token',
-  (req, res) => handleWebhook(req, res, req.params.token));
+  (req, res, next) => handleWebhook(req, res, req.params.token).catch(next));
 channelManagerRouter.post('/webhook/:provider',
-  (req, res) => handleWebhook(req, res, null));
+  (req, res, next) => handleWebhook(req, res, null).catch(next));
 
 async function upsertBookingEntry(provider: string, b: NormalizedBooking): Promise<string | null> {
   const colId = await getBookingsCollectionId();
@@ -296,22 +299,28 @@ async function markBookingCancelled(provider: string, externalId: string): Promi
 
 // ── Admin (JWT-protected — wired in server.ts) ───────────────────────
 
-channelManagerRouter.get('/providers', async (_req, res) => {
+type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
+/** Routes a rejected promise to the error handler (Express 4 does not). */
+const asyncRoute = (fn: AsyncHandler) => (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
+channelManagerRouter.get('/providers', asyncRoute(async (_req, res) => {
   res.json({
     data: listAdapters().map(a => ({ id: a.id, displayName: a.displayName })),
   });
-});
+}));
 
-channelManagerRouter.get('/connections', async (_req, res) => {
+channelManagerRouter.get('/connections', asyncRoute(async (_req, res) => {
   const { data, error } = await supabase
     .from('channel_connections')
     .select('id, provider, enabled, credentials, webhook_secret, last_sync_at, last_sync_status, last_sync_error, metadata, created_at, updated_at')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: { message: error.message } });
   res.json({ data: (data || []).map(redactConnection) });
-});
+}));
 
-channelManagerRouter.post('/connections', async (req, res) => {
+channelManagerRouter.post('/connections', asyncRoute(async (req, res) => {
   const { provider, credentials, enabled, metadata } = req.body || {};
   if (!provider || !getAdapter(provider)) {
     return res.status(400).json({ error: { message: `Unknown provider: ${provider}` } });
@@ -349,9 +358,9 @@ channelManagerRouter.post('/connections', async (req, res) => {
       webhook_url: webhookUrl,
     },
   });
-});
+}));
 
-channelManagerRouter.put('/connections/:id', async (req, res) => {
+channelManagerRouter.put('/connections/:id', asyncRoute(async (req, res) => {
   const { credentials, enabled, metadata } = req.body || {};
   const patch: Record<string, any> = { updated_at: new Date().toISOString() };
   if (credentials !== undefined) patch.credentials = credentials;
@@ -366,18 +375,18 @@ channelManagerRouter.put('/connections/:id', async (req, res) => {
     .single();
   if (error) return res.status(500).json({ error: { message: error.message } });
   res.json({ data: redactConnection(data) });
-});
+}));
 
-channelManagerRouter.delete('/connections/:id', async (req, res) => {
+channelManagerRouter.delete('/connections/:id', asyncRoute(async (req, res) => {
   const { error } = await supabase
     .from('channel_connections')
     .delete()
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: { message: error.message } });
   res.json({ ok: true });
-});
+}));
 
-channelManagerRouter.post('/connections/:id/test', async (req, res) => {
+channelManagerRouter.post('/connections/:id/test', asyncRoute(async (req, res) => {
   const { data: conn, error } = await supabase
     .from('channel_connections')
     .select('provider, credentials')
@@ -398,9 +407,9 @@ channelManagerRouter.post('/connections/:id/test', async (req, res) => {
     })
     .eq('id', req.params.id);
   res.json({ data: result });
-});
+}));
 
-channelManagerRouter.get('/log', async (req, res) => {
+channelManagerRouter.get('/log', asyncRoute(async (req, res) => {
   const limit = Math.min(parseInt(String(req.query.limit || '50'), 10), 200);
   const { data, error } = await supabase
     .from('channel_bookings_log')
@@ -409,11 +418,11 @@ channelManagerRouter.get('/log', async (req, res) => {
     .limit(limit);
   if (error) return res.status(500).json({ error: { message: error.message } });
   res.json({ data: data || [] });
-});
+}));
 
 // Full row including the raw provider payload — separate from /log so the list
 // view stays cheap (payloads can be 50KB+).
-channelManagerRouter.get('/log/:id', async (req, res) => {
+channelManagerRouter.get('/log/:id', asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('channel_bookings_log')
     .select('*')
@@ -422,4 +431,4 @@ channelManagerRouter.get('/log/:id', async (req, res) => {
   if (error) return res.status(500).json({ error: { message: error.message } });
   if (!data) return res.status(404).json({ error: { message: 'Log entry not found' } });
   res.json({ data });
-});
+}));

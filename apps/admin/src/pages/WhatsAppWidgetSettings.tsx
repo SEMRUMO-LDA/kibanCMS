@@ -356,18 +356,20 @@ export const WhatsAppWidgetSettings = () => {
       }
 
       if (entryId) {
-        await api.updateEntry(COLLECTION_SLUG, ENTRY_SLUG, {
+        const { error: updateErr } = await api.updateEntry(COLLECTION_SLUG, ENTRY_SLUG, {
           title: 'WhatsApp Widget Config',
           content: config,
           status: 'published',
         });
+        if (updateErr) throw new Error(updateErr);
       } else {
-        await api.createEntry(COLLECTION_SLUG, {
+        const { error: createErr } = await api.createEntry(COLLECTION_SLUG, {
           title: 'WhatsApp Widget Config',
           slug: ENTRY_SLUG,
           content: config,
           status: 'published',
         });
+        if (createErr) throw new Error(createErr);
         // Re-fetch entry id
         const { data: entries } = await api.getEntries(COLLECTION_SLUG);
         const created = (entries || []).find((e: any) => e.slug === ENTRY_SLUG);
