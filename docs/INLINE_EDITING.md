@@ -77,6 +77,48 @@ to the English translation (`meta.translations.en`), exactly what the public API
 serves with `?lang=en`. Images and the excerpt are shared by all languages: edit
 them in the default language.
 
+## Capturing hard-coded texts ("Capturar")
+
+Most sites have copy that lives in the site's code, not in Kiban (the hero
+title, section intros, buttons). Admins can make any such text or image
+editable without touching the site:
+
+1. In the editor bar press **Capturar**, hover the text or image (pink
+   outline) and click it. Give it a name ("Título – Clínica de Saúde").
+2. Kiban creates the **Conteúdo do site** collection (first time) and one
+   entry per captured element: page path, the value, and an anchor (the
+   original text plus the element's CSS path). The value starts equal to the
+   original, so nothing changes for visitors yet.
+3. The element is now editable like any other: edit on the site (pending in
+   beta, approved in the admin) or in Content → Conteúdo do site.
+4. The widgets loader asks `/api/v1/widgets/site-content?path=` on every page
+   view and swaps the current values in, for every visitor. It finds the
+   element by its CSS path first; when the site's HTML changed, by the
+   original text (fallback). Values are cached per page in `localStorage`, so
+   repeat visits swap before the first paint settles; the first visit may show
+   the original text for a fraction of a second.
+
+Limits and caveats:
+
+- Plain text and images only: the swap sets the element's text, so inline
+  formatting inside a captured element (a `<b>` in a paragraph) is lost once
+  the text is changed. Elements with more than three child elements cannot
+  be captured.
+- Search engines that run JavaScript (Google) index the swapped text; others,
+  and social previews, see the original. Page titles and meta tags are not
+  covered.
+- If the site is rebuilt and neither the CSS path nor the original text
+  matches any more, the entry simply stops applying. Fix it by editing the
+  entry's anchor fields in the admin (or capture again).
+- "Edição no site" = **Desligado** also stops the swaps: the site shows
+  exactly what its code contains.
+- Up to 200 captures per page. Audit action: `inline_edit_capture`.
+
+For the long run, the site's developer can bake the content in: tag the
+elements with `data-kiban="site-content/<entry-slug>/text"` (or `/image`), or
+fetch the entries from the API at build time; the runtime swap then has
+nothing to do.
+
 ## Approval (beta mode)
 
 Pending changes live in the entry's `meta.inline_pending` (field, new value,
@@ -125,6 +167,13 @@ PATCH /api/v1/inline-edit/entries/:id              X-Kiban-Edit
 
 POST  /api/v1/inline-edit/media                    X-Kiban-Edit, multipart "file" (images)
       → { id, url }
+
+POST  /api/v1/inline-edit/site-content             X-Kiban-Edit (admins)
+      body { path, kind: 'text'|'image', label?, tag, selector, original }
+      → { entry, created }                         (idempotent per page + original)
+
+GET   /api/v1/widgets/site-content?path=           API key (the loader, every page view)
+      → { path, items: [{ id, slug, kind, selector, original, value }] }
 
 POST  /api/v1/inline-edit/pending/:id/apply        JWT (editor+)   body { indexes?: number[] }
 POST  /api/v1/inline-edit/pending/:id/discard      JWT (editor+)   body { indexes?: number[] }

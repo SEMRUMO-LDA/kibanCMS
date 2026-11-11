@@ -42,7 +42,9 @@
     editing: null,        // { el, b, before }
     saving: false,
     bar: null,
-    observer: null
+    observer: null,
+    capture: false,       // "Capturar" mode: click any text/image to make it editable
+    candidate: null       // element highlighted under the mouse in capture mode
   };
 
   // ── Helpers ───────────────────────────────────────────────────────
@@ -244,7 +246,8 @@
         var o = textMatches[k];
         if (o !== m && o.key === m.key && m.el !== o.el && m.el.contains(o.el)) { deeper = true; break; }
       }
-      if (deeper) continue;
+      // …and never an element that wraps something already bound (<a> around a captured <span>)
+      if (deeper || m.el.querySelector('[data-kiban-ie]')) continue;
       var hit = pickHit(m.hits);
       if (hit) bind(m.el, hit, 'text'); else deferred.push(m);
     }
@@ -343,6 +346,93 @@
   function bindingOf(el) {
     for (var i = 0; i < state.bindings.length; i++) if (state.bindings[i].el === el) return state.bindings[i];
     return null;
+  }
+
+  // ── Capture: make a hard-coded text or image editable ("Capturar") ──
+  // The element becomes an entry of the "site-content" collection with an
+  // anchor (CSS path + original text); from then on the widgets loader swaps
+  // the current value into the page for every visitor.
+  function canCapture() {
+    var role = state.session && state.session.user ? state.session.user.role : null;
+    return role === 'admin' || role === 'super_admin';
+  }
+  function candidateOf(node) {
+    var el = node && node.nodeType === 1 ? node : (node ? node.parentElement : null);
+    if (!el || el === document.body || isOurs(el) || SKIP[el.tagName]) return null;
+    if (el.closest && el.closest('[data-kiban-ie],[data-kiban],[' + UI_ATTR + ']')) return null;
+    if (el.tagName === 'IMG') return el;
+    if (el.childElementCount > 3) return null;
+    var text = norm(el.textContent);
+    if (!text || text.length > 5000) return null;
+    // The single child that holds the same text is the better anchor (<h1><span>Title</span></h1> → the span)
+    while (el.childElementCount === 1 && !SKIP[el.firstElementChild.tagName] && norm(el.firstElementChild.textContent) === text) el = el.firstElementChild;
+    return el;
+  }
+  function cssPath(el) {
+    var parts = [], node = el;
+    while (node && node.nodeType === 1 && node !== document.body && parts.length < 12) {
+      var id = node.getAttribute('id');
+      if (id && /^[A-Za-z_][\w-]*$/.test(id) && document.querySelectorAll('#' + id).length === 1) { parts.unshift('#' + id); break; }
+      var idx = 1, sib = node;
+      while ((sib = sib.previousElementSibling)) if (sib.tagName === node.tagName) idx++;
+      parts.unshift(node.tagName.toLowerCase() + ':nth-of-type(' + idx + ')');
+      node = node.parentElement;
+    }
+    return parts.join(' > ');
+  }
+  var LABEL_BY_TAG = { h1: 'Título', h2: 'Subtítulo', h3: 'Subtítulo', h4: 'Subtítulo', p: 'Parágrafo', a: 'Botão', button: 'Botão', li: 'Item', img: 'Imagem', figcaption: 'Legenda', blockquote: 'Citação' };
+  function suggestLabel(el) {
+    var tagName = el.tagName.toLowerCase(), kind = LABEL_BY_TAG[tagName] || 'Texto';
+    if (tagName === 'img') return kind;
+    var words = norm(el.textContent).split(' ').slice(0, 4).join(' ');
+    return words ? kind + ' – ' + words : kind;
+  }
+  function setCandidate(el) {
+    if (state.candidate === el) return;
+    if (state.candidate) state.candidate.classList.remove('kiban-ie-candidate');
+    state.candidate = el;
+    if (el) el.classList.add('kiban-ie-candidate');
+  }
+  function onCaptureOver(e) { setCandidate(candidateOf(e.target)); }
+  function onCaptureKey(e) { if (e.key === 'Escape') { e.preventDefault(); toggleCapture(false); } }
+  function onCaptureClick(e) {
+    if (state.editing) return;
+    var el = candidateOf(e.target);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    var isImg = el.tagName === 'IMG';
+    var original = isImg ? (el.currentSrc || el.getAttribute('src') || '') : el.textContent;
+    if (isImg) { try { original = new URL(original, location.href).href; } catch (err) { /* keep as is */ } }
+    var label = window.prompt('Nome ' + (isImg ? 'desta imagem' : 'deste texto') + ' no Kiban:', suggestLabel(el));
+    if (label === null) return;
+    setCandidate(null);
+    setStatus('A capturar…');
+    api('POST', '/api/v1/inline-edit/site-content', {
+      path: location.pathname, kind: isImg ? 'image' : 'text', label: label, tag: el.tagName.toLowerCase(), selector: cssPath(el), original: original
+    }, function (err, data) {
+      if (err) { toast('Não foi possível capturar: ' + err.message, 'error', 6000); updateToolbar(); return; }
+      var entry = data && data.entry;
+      if (!entry) { updateToolbar(); return; }
+      if (!state.entriesById[entry.id]) state.session.entries.push(entry);
+      el.setAttribute('data-kiban', 'site-content/' + entry.slug + '/' + (isImg ? 'image' : 'text'));
+      buildIndex(); scan();
+      toast(data.created ? 'Capturado — já pode clicar para alterar.' : 'Este elemento já estava capturado.', 'ok');
+    });
+  }
+  function toggleCapture(force) {
+    var on = typeof force === 'boolean' ? force : !state.capture;
+    if (on === state.capture) return;
+    if (on && state.editing) finishEdit(true);
+    state.capture = on;
+    document.body.classList.toggle('kiban-ie-capturing', on);
+    var btn = state.bar && state.bar.querySelector('[data-act="capture"]');
+    if (btn) btn.classList.toggle('is-on', on);
+    var fn = on ? 'addEventListener' : 'removeEventListener';
+    document[fn]('mouseover', onCaptureOver, true);
+    document[fn]('click', onCaptureClick, true);
+    document[fn]('keydown', onCaptureKey, true);
+    if (!on) setCandidate(null);
+    updateToolbar();
   }
 
   // ── Text editing ─────────────────────────────────────────────────
@@ -575,6 +665,8 @@
     '.kiban-ie-icon{padding:6px 10px;font-size:16px;line-height:1}' +
     '.kiban-ie-toast{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:2147483000;padding:10px 14px;border-radius:10px;background:#1e293b;color:#fff;font:500 13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:min(92vw,520px);text-align:center;animation:kibanIeIn .2s ease-out}' +
     '.kiban-ie-toast.is-ok{background:#166534}.kiban-ie-toast.is-error{background:#991b1b}' +
+    '.kiban-ie-candidate{outline:2px solid #f472b6!important;outline-offset:3px;cursor:copy!important;background-color:rgba(244,114,182,.08)!important}' +
+    'body.kiban-ie-capturing .kiban-ie-target{outline-color:#cbd5e1}' +
     '@keyframes kibanIeIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}' +
     '@media (max-width:640px){.kiban-ie-status{display:none}.kiban-ie-label{display:none}}';
 
@@ -599,6 +691,7 @@
       '<div class="kiban-ie-brand"><span class="kiban-ie-dot"></span><span class="kiban-ie-label">Edição no site</span>' + (isBeta ? '<span class="kiban-ie-beta">BETA</span>' : '') + '</div>' +
       '<div class="kiban-ie-status" data-role="status"></div>' +
       '<button type="button" class="kiban-ie-btn" data-act="highlight" title="Realçar tudo o que é editável">Realçar</button>' +
+      (canCapture() ? '<button type="button" class="kiban-ie-btn" data-act="capture" title="Tornar editável um texto ou imagem que ainda não está no Kiban">Capturar</button>' : '') +
       '<button type="button" class="kiban-ie-btn" data-act="discard" disabled>Descartar</button>' +
       '<button type="button" class="kiban-ie-btn kiban-ie-primary" data-act="save" disabled>Guardar</button>' +
       '<button type="button" class="kiban-ie-btn kiban-ie-icon" data-act="exit" title="Sair do modo de edição" aria-label="Sair do modo de edição">×</button>';
@@ -610,6 +703,7 @@
       else if (act === 'discard') discardAll();
       else if (act === 'exit') exit();
       else if (act === 'highlight') { var on = document.body.classList.toggle('kiban-ie-highlight'); btn.classList.toggle('is-on', on); }
+      else if (act === 'capture') toggleCapture();
     });
     // Clicking the bar must not blur the active editor before its own handlers run
     bar.addEventListener('mousedown', function (e) { if (state.editing && e.target.getAttribute('data-act') !== 'save') e.preventDefault(); });
@@ -635,6 +729,7 @@
     saveBtn.textContent = state.saving ? 'A guardar…' : (n ? 'Guardar (' + n + ')' : 'Guardar');
     discardBtn.disabled = state.saving || !n;
     if (state.editing || state.saving || !state.session) return;
+    if (state.capture) { setStatus('Clique num texto ou imagem para o tornar editável · Esc termina', 'muted'); return; }
     var editable = state.bindings.length;
     if (!editable) { setStatus('Nenhum texto ou imagem editável nesta página', 'muted'); return; }
     if (n) { setStatus(n + (n === 1 ? ' alteração por guardar' : ' alterações por guardar')); return; }
@@ -706,6 +801,7 @@
     });
     state.observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener('popstate', scheduleRescan);
+    document.addEventListener('kiban:site-content', scheduleRescan); // the loader swapped captured texts in
     var methods = ['pushState', 'replaceState'];
     for (var m = 0; m < methods.length; m++) {
       (function (name) {
