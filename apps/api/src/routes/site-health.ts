@@ -25,7 +25,7 @@ import type { AuthRequest } from '../middleware/auth.js';
 const router: Router = Router();
 
 /** Must match `schema_version` in the newest kiban_schema_status() (migration 013). */
-export const EXPECTED_SCHEMA_VERSION = 13;
+export const EXPECTED_SCHEMA_VERSION = 14;
 
 export type CheckStatus = 'ok' | 'warn' | 'error' | 'info';
 
