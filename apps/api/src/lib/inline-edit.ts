@@ -283,3 +283,27 @@ export function mergePending(
   }));
   return [...kept, ...added];
 }
+
+// ── Collection fallback ──────────────────────────────────────────────
+// Pages show lists (team, services, testimonials…) whose entries have nothing
+// to do with the URL. Small editable collections are sent whole and matched by
+// text on the page; big ones (a blog) are left out.
+export const MAX_FALLBACK_ENTRIES = 300;
+export const MAX_FALLBACK_PER_COLLECTION = 100;
+
+/** Ids of the collections to send whole: smallest first, until the budget is spent. */
+export function pickFallbackCollections(
+  counts: Array<{ id: string; count: number }>,
+  perCollection = MAX_FALLBACK_PER_COLLECTION,
+  total = MAX_FALLBACK_ENTRIES,
+): string[] {
+  const chosen: string[] = [];
+  let budget = total;
+  for (const c of [...counts].sort((a, b) => a.count - b.count)) {
+    if (c.count <= 0 || c.count > perCollection) continue;
+    if (c.count > budget) break;
+    chosen.push(c.id);
+    budget -= c.count;
+  }
+  return chosen;
+}

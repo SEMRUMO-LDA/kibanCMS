@@ -32,6 +32,7 @@ import {
   EDIT_TOKEN_TTL_SECONDS, MAX_PENDING_PER_ENTRY,
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
   normalizeChanges, applyChanges, mergePending,
+  MAX_FALLBACK_ENTRIES, pickFallbackCollections,
   type InlineEditMode, type SaveMode, type PendingChange, type InlineChange,
 } from '../lib/inline-edit.js';
 
@@ -144,9 +145,16 @@ export async function validateEditToken(req: EditRequest, res: Response, next: N
 
 const router: Router = Router();
 
-function serializeEntry(entry: any, col: { id: string; name: string; slug: string; fields: any[] | null }, lang: string | null) {
+/** How an entry got into the resolve answer: named by the URL, by a data-kiban ref, or sent whole with its small collection. */
+type EntrySource = 'page' | 'ref' | 'collection';
+
+function serializeEntry(entry: any, col: { id: string; name: string; slug: string; fields: any[] | null }, lang: string | null, source: EntrySource) {
   const safe = redactForPublic(entry);
   const pending: PendingChange[] = Array.isArray(entry.meta?.inline_pending) ? entry.meta.inline_pending : [];
+  const fields = editableFields(col.fields || [], entry.content || {});
+  // Rich text is not editable on the site (phase 1): don't ship whole articles to the overlay.
+  const content: Record<string, any> = { ...(safe.content || {}) };
+  for (const f of fields) if (f.type === 'richtext' && f.key.startsWith('content.')) content[f.key.slice(8)] = '';
   return {
     id: entry.id,
     collection: { slug: col.slug, name: col.name },
@@ -154,10 +162,11 @@ function serializeEntry(entry: any, col: { id: string; name: string; slug: strin
     title: entry.title,
     excerpt: entry.excerpt,
     featured_image: entry.featured_image,
-    content: safe.content || {},
+    content,
     status: entry.status,
     version: entry.version,
-    fields: editableFields(col.fields || [], entry.content || {}),
+    source,
+    fields,
     translation: lang ? (entry.meta?.translations?.[lang] || null) : null,
     pending: pending.map(p => ({ field: p.field, value: p.value, lang: p.lang || null, by: p.by, at: p.at })),
   };
@@ -186,6 +195,7 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
     const softDelete = await hasSoftDelete();
 
     let entries: any[] = [];
+    const sourceOf = new Map<string, EntrySource>();
     if (info.slugs.length && editableCols.length) {
       let q = supabase.from('entries').select(ENTRY_COLS)
         .in('collection_id', editableCols.map(c => c.id))
@@ -200,6 +210,8 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
       }
     }
 
+    for (const e of entries) sourceOf.set(e.id, 'page');
+
     for (const ref of refs) {
       const [colSlug, entrySlug] = ref.split('/');
       const col = bySlug.get(colSlug);
@@ -208,7 +220,29 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
       let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', col.id).eq('slug', entrySlug).order('status', { ascending: false }).limit(1);
       if (softDelete) q = q.is('deleted_at', null);
       const { data } = await q;
-      if (data && data[0]) entries.push(data[0]);
+      if (data && data[0]) { entries.push(data[0]); sourceOf.set(data[0].id, 'ref'); }
+    }
+
+    // Lists on a page (team, services, testimonials…) belong to entries the URL
+    // never names: send the small editable collections whole and let the overlay
+    // match their values by text. Big collections (a blog) stay out.
+    if (editableCols.length) {
+      const counts = await Promise.all(editableCols.map(async c => {
+        let q = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', c.id);
+        if (softDelete) q = q.is('deleted_at', null);
+        const { count } = await q;
+        return { id: c.id as string, count: count || 0 };
+      }));
+      const chosen = pickFallbackCollections(counts);
+      if (chosen.length) {
+        let q = supabase.from('entries').select(ENTRY_COLS).in('collection_id', chosen)
+          .order('status', { ascending: false }).order('created_at', { ascending: true }).limit(MAX_FALLBACK_ENTRIES);
+        if (softDelete) q = q.is('deleted_at', null);
+        const { data } = await q;
+        for (const e of (data || []) as any[]) {
+          if (!sourceOf.has(e.id)) { entries.push(e); sourceOf.set(e.id, 'collection'); }
+        }
+      }
     }
 
     res.setHeader('Cache-Control', 'no-store');
@@ -220,7 +254,7 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
         lang,
         source_lang: sourceLang,
         languages,
-        entries: entries.map(e => serializeEntry(e, byId.get(e.collection_id)!, lang)),
+        entries: entries.map(e => serializeEntry(e, byId.get(e.collection_id)!, lang, sourceOf.get(e.id) || 'page')),
       },
       timestamp: new Date().toISOString(),
     });
