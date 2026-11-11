@@ -212,6 +212,7 @@
       var it = items[i], el = scFind(it, ctx);
       if (!el) continue;
       if (it.kind === 'image') {
+        if (!/^(https?:)?\/\/|^\/[^/]/i.test(it.value)) continue; // only http(s) or site-relative URLs reach src
         if (scKey(el.currentSrc || el.getAttribute('src') || '') !== scKey(it.value)) {
           el.removeAttribute('srcset'); el.removeAttribute('sizes'); el.removeAttribute('data-src'); el.removeAttribute('data-srcset');
           var pic = el.parentElement;
