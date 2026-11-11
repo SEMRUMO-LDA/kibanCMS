@@ -363,13 +363,14 @@ export const Settings = () => {
     setSaving(true);
     try {
       // Every call is checked: api.* never throws, it returns { error }.
-      // Ensure collection exists
-      const { data: cols, error: colsErr } = await api.getCollections();
-      if (colsErr) throw new Error(colsErr);
-      const exists = (cols || []).find((c: any) => c.slug === 'site-settings');
-      if (!exists) {
+      // Ensure the collection exists. GET /collections hides system
+      // collections (site-settings among them), so look it up by slug;
+      // a 409 on create just means another save got there first.
+      const { error: colErr } = await api.getCollection('site-settings');
+      if (colErr) {
+        if (!/not found/i.test(colErr)) throw new Error(colErr);
         const { error: createColErr } = await api.createCollection({ name: 'Site Settings', slug: 'site-settings', description: 'Global configuration', type: 'custom', fields: [] });
-        if (createColErr) throw new Error(createColErr);
+        if (createColErr && !/already exists/i.test(createColErr)) throw new Error(createColErr);
       }
 
       // Check if entry exists
