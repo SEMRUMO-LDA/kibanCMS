@@ -11,7 +11,7 @@
 import { supabase } from './supabase.js';
 import { getSingletonContent } from './sitemap.js';
 import { hasSoftDelete } from './soft-delete.js';
-import { parseMode, normalizePagePath, SITE_CONTENT_SLUG, MAX_SITE_CONTENT_PER_PAGE } from './inline-edit.js';
+import { parseMode, normalizePagePath, SITE_CONTENT_SLUG, MAX_SITE_CONTENT_PER_PAGE, ALL_PAGES } from './inline-edit.js';
 
 export interface SiteContentItem {
   id: string;
@@ -56,12 +56,18 @@ export async function siteContentForPage(rawPath: unknown): Promise<{ path: stri
   if (!(await featureOn())) return { path, items: [] };
   const colId = await siteContentCollectionId();
   if (!colId) return { path, items: [] };
-  let q = supabase.from('entries').select('id, slug, content').eq('collection_id', colId).eq('status', 'published')
-    .eq('content->>page', path).order('created_at', { ascending: true }).limit(MAX_SITE_CONTENT_PER_PAGE);
-  if (await hasSoftDelete()) q = q.is('deleted_at', null);
-  const { data } = await q;
+  const softDelete = await hasSoftDelete();
+  // This page's captures, then the site-wide ones (header, footer…)
+  const rows: any[] = [];
+  for (const page of [path, ALL_PAGES]) {
+    let q = supabase.from('entries').select('id, slug, content').eq('collection_id', colId).eq('status', 'published')
+      .eq('content->>page', page).order('created_at', { ascending: true }).limit(MAX_SITE_CONTENT_PER_PAGE);
+    if (softDelete) q = q.is('deleted_at', null);
+    const { data } = await q;
+    rows.push(...((data || []) as any[]));
+  }
   const items: SiteContentItem[] = [];
-  for (const row of (data || []) as any[]) {
+  for (const row of rows) {
     const c = row.content || {};
     const kind: 'text' | 'image' = c.kind === 'image' ? 'image' : 'text';
     const value = kind === 'image' ? imageUrl(c.image) : String(c.text ?? '');

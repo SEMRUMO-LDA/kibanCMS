@@ -44,7 +44,13 @@
     bar: null,
     observer: null,
     capture: false,       // "Capturar" mode: click any text/image to make it editable
-    candidate: null       // element highlighted under the mouse in capture mode
+    candidate: null,      // element highlighted under the mouse in capture mode
+    notes: [],            // open notes pinned on this page (from /resolve)
+    noteMode: false,      // "Nota" mode: click a spot to leave feedback there
+    noteTarget: null,
+    pins: null,           // container of the note pins
+    notePop: null,
+    dialog: null
   };
 
   // ── Helpers ───────────────────────────────────────────────────────
@@ -53,6 +59,7 @@
     return String(s == null ? '' : s).replace(/ /g, ' ').replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   }
   function truncate(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]; }); }
   function changeKey(b) { return b.entry.id + '|' + b.field.key; }
   function hasChange(b) { return !!state.changes[changeKey(b)]; }
   function countChanges() { return Object.keys(state.changes).length; }
@@ -117,6 +124,7 @@
       }
       state.session = data;
       state.path = location.pathname;
+      state.notes = data.notes || [];
       buildIndex();
       showToolbar();
       scan();
@@ -262,6 +270,7 @@
       var dm = deferred[d], ctx = hitByContext(dm.el, dm.hits);
       if (ctx) bind(dm.el, ctx, 'text'); else bind(dm.el, dm.hits[0], 'text', { ambiguous: distinctEntries(dm.hits).length });
     }
+    renderPins();
     updateToolbar();
   }
 
@@ -410,26 +419,37 @@
     var isImg = el.tagName === 'IMG';
     var original = isImg ? (el.currentSrc || el.getAttribute('src') || '') : el.textContent;
     if (isImg) { try { original = new URL(original, location.href).href; } catch (err) { /* keep as is */ } }
-    var label = window.prompt('Nome ' + (isImg ? 'desta imagem' : 'deste texto') + ' no Kiban:', suggestLabel(el));
-    if (label === null) return;
     setCandidate(null);
-    setStatus('A capturar…');
-    api('POST', '/api/v1/inline-edit/site-content', {
-      path: location.pathname, kind: isImg ? 'image' : 'text', label: label, tag: el.tagName.toLowerCase(), selector: cssPath(el), original: original
-    }, function (err, data) {
-      if (err) { toast('Não foi possível capturar: ' + err.message, 'error', 6000); updateToolbar(); return; }
-      var entry = data && data.entry;
-      if (!entry) { updateToolbar(); return; }
-      if (!state.entriesById[entry.id]) state.session.entries.push(entry);
-      el.setAttribute('data-kiban', 'site-content/' + entry.slug + '/' + (isImg ? 'image' : 'text'));
-      buildIndex(); scan();
-      toast(data.created ? 'Capturado — já pode clicar para alterar.' : 'Este elemento já estava capturado.', 'ok');
+    openDialog({
+      title: isImg ? 'Tornar esta imagem editável' : 'Tornar este texto editável',
+      submit: 'Capturar',
+      fields: [
+        { type: 'text', name: 'label', label: 'Nome no Kiban', value: suggestLabel(el) },
+        { type: 'radio', name: 'scope', label: 'Onde existe este elemento?', value: 'page', options: [
+          { value: 'page', label: 'Só nesta página' },
+          { value: 'site', label: 'Em todas as páginas (cabeçalho, rodapé, contactos…)' }
+        ] }
+      ]
+    }, function (values) {
+      if (!values) return;
+      setStatus('A capturar…');
+      api('POST', '/api/v1/inline-edit/site-content', {
+        path: location.pathname, scope: values.scope, kind: isImg ? 'image' : 'text', label: values.label, tag: el.tagName.toLowerCase(), selector: cssPath(el), original: original
+      }, function (err, data) {
+        if (err) { toast('Não foi possível capturar: ' + err.message, 'error', 6000); updateToolbar(); return; }
+        var entry = data && data.entry;
+        if (!entry) { updateToolbar(); return; }
+        if (!state.entriesById[entry.id]) state.session.entries.push(entry);
+        el.setAttribute('data-kiban', 'site-content/' + entry.slug + '/' + (isImg ? 'image' : 'text'));
+        buildIndex(); scan();
+        toast(data.created ? 'Capturado — já pode clicar para alterar.' : 'Este elemento já estava capturado.', 'ok');
+      });
     });
   }
   function toggleCapture(force) {
     var on = typeof force === 'boolean' ? force : !state.capture;
     if (on === state.capture) return;
-    if (on && state.editing) finishEdit(true);
+    if (on) { toggleNote(false); if (state.editing) finishEdit(true); }
     state.capture = on;
     document.body.classList.toggle('kiban-ie-capturing', on);
     var btn = state.bar && state.bar.querySelector('[data-act="capture"]');
@@ -440,6 +460,171 @@
     document[fn]('keydown', onCaptureKey, true);
     if (!on) setCandidate(null);
     updateToolbar();
+  }
+
+  // ── Small dialog above the bar (capture name, note text) ───────────
+  function openDialog(opts, cb) {
+    closeDialog();
+    var box = document.createElement('form');
+    box.className = 'kiban-ie-dialog'; box.setAttribute(UI_ATTR, '');
+    var html = '<div class="kiban-ie-dialog-title">' + escapeHtml(opts.title) + '</div>';
+    for (var i = 0; i < opts.fields.length; i++) {
+      var f = opts.fields[i];
+      html += '<label class="kiban-ie-dialog-label">' + escapeHtml(f.label) + '</label>';
+      if (f.type === 'textarea') html += '<textarea class="kiban-ie-dialog-input" name="' + f.name + '" rows="3" placeholder="' + escapeHtml(f.placeholder || '') + '"></textarea>';
+      else if (f.type === 'radio') {
+        for (var o = 0; o < f.options.length; o++) {
+          var op = f.options[o];
+          html += '<label class="kiban-ie-dialog-radio"><input type="radio" name="' + f.name + '" value="' + escapeHtml(op.value) + '"' + (op.value === f.value ? ' checked' : '') + '> ' + escapeHtml(op.label) + '</label>';
+        }
+      } else html += '<input class="kiban-ie-dialog-input" type="text" name="' + f.name + '" value="' + escapeHtml(f.value || '') + '">';
+    }
+    html += '<div class="kiban-ie-dialog-actions"><button type="button" class="kiban-ie-btn" data-dialog="cancel">Cancelar</button><button type="submit" class="kiban-ie-btn kiban-ie-primary">' + escapeHtml(opts.submit) + '</button></div>';
+    box.innerHTML = html;
+    function finish(values) { closeDialog(); cb(values); }
+    box.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var values = {};
+      for (var i = 0; i < opts.fields.length; i++) {
+        var f = opts.fields[i];
+        if (f.type === 'radio') { var r = box.querySelector('input[name="' + f.name + '"]:checked'); values[f.name] = r ? r.value : f.value; }
+        else values[f.name] = box.querySelector('[name="' + f.name + '"]').value;
+      }
+      finish(values);
+    });
+    box.addEventListener('click', function (e) { if (e.target.getAttribute('data-dialog') === 'cancel') finish(null); });
+    box.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(null); } });
+    document.body.appendChild(box);
+    state.dialog = box;
+    var first = box.querySelector('input[type="text"],textarea');
+    if (first) { first.focus(); if (first.select) first.select(); }
+  }
+  function closeDialog() {
+    if (state.dialog && state.dialog.parentNode) state.dialog.parentNode.removeChild(state.dialog);
+    state.dialog = null;
+  }
+
+  // ── Notes: feedback pinned on the page ("Nota") ───────────────────
+  // The client clicks a spot and writes what should change there; the note
+  // is stored (private collection), the agency is emailed, and a numbered
+  // pin marks the spot for everyone who opens the editor.
+  function noteTargetOf(node) {
+    var el = node && node.nodeType === 1 ? node : (node ? node.parentElement : null);
+    if (!el || el === document.body || el === document.documentElement || isOurs(el)) return null;
+    return el;
+  }
+  function onNoteOver(e) {
+    var el = noteTargetOf(e.target);
+    if (state.noteTarget && state.noteTarget !== el) state.noteTarget.classList.remove('kiban-ie-note-target');
+    state.noteTarget = el;
+    if (el) el.classList.add('kiban-ie-note-target');
+  }
+  function onNoteKey(e) { if (e.key === 'Escape' && !state.dialog) { e.preventDefault(); toggleNote(false); } }
+  function onNoteClick(e) {
+    var el = noteTargetOf(e.target);
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    var rect = el.getBoundingClientRect();
+    var x = rect.width ? Math.round((e.clientX - rect.left) / rect.width * 1000) / 10 : 50;
+    var y = rect.height ? Math.round((e.clientY - rect.top) / rect.height * 1000) / 10 : 50;
+    var payload = { page: location.pathname, selector: cssPath(el), anchor_text: norm(el.textContent).slice(0, 120), x: x, y: y };
+    openDialog({
+      title: 'Nota para a agência', submit: 'Enviar nota',
+      fields: [{ type: 'textarea', name: 'text', label: 'O que deve mudar aqui?', placeholder: 'Ex.: trocar esta foto por uma mais recente' }]
+    }, function (values) {
+      if (!values || !norm(values.text)) return;
+      payload.text = values.text;
+      setStatus('A enviar nota…');
+      api('POST', '/api/v1/inline-edit/notes', payload, function (err, note) {
+        if (err) { toast('Não foi possível enviar a nota: ' + err.message, 'error', 6000); updateToolbar(); return; }
+        state.notes.push(note);
+        toggleNote(false);
+        renderPins();
+        toast('Nota enviada — a agência foi avisada.', 'ok');
+      });
+    });
+  }
+  function toggleNote(force) {
+    var on = typeof force === 'boolean' ? force : !state.noteMode;
+    if (on === state.noteMode) return;
+    if (on) { toggleCapture(false); if (state.editing) finishEdit(true); }
+    state.noteMode = on;
+    document.body.classList.toggle('kiban-ie-noting', on);
+    var btn = state.bar && state.bar.querySelector('[data-act="note"]');
+    if (btn) btn.classList.toggle('is-on', on);
+    var fn = on ? 'addEventListener' : 'removeEventListener';
+    document[fn]('mouseover', onNoteOver, true);
+    document[fn]('click', onNoteClick, true);
+    document[fn]('keydown', onNoteKey, true);
+    if (!on && state.noteTarget) { state.noteTarget.classList.remove('kiban-ie-note-target'); state.noteTarget = null; }
+    updateToolbar();
+  }
+  function pinsContainer() {
+    if (state.pins && state.pins.parentNode) return state.pins;
+    var c = document.createElement('div');
+    c.className = 'kiban-ie-pins'; c.setAttribute(UI_ATTR, '');
+    document.body.appendChild(c);
+    state.pins = c;
+    return c;
+  }
+  function onPinClick(e) { e.preventDefault(); e.stopPropagation(); openNote(+e.currentTarget.getAttribute('data-note'), e.currentTarget); }
+  function renderPins() {
+    if (!state.session || !document.body) return;
+    var c = pinsContainer();
+    c.innerHTML = '';
+    var lost = 0;
+    for (var i = 0; i < state.notes.length; i++) {
+      var n = state.notes[i];
+      if (!n || n.status === 'done') continue;
+      var el = null;
+      if (n.selector) { try { el = document.querySelector(n.selector); } catch (e) { el = null; } }
+      var pin = document.createElement('button');
+      pin.type = 'button'; pin.className = 'kiban-ie-pin'; pin.setAttribute(UI_ATTR, '');
+      pin.textContent = String(i + 1);
+      pin.setAttribute('data-note', String(i));
+      pin.title = truncate(n.text, 120);
+      if (el && !isOurs(el)) {
+        var r = el.getBoundingClientRect();
+        pin.style.left = Math.round(r.left + window.pageXOffset + r.width * ((n.x == null ? 50 : n.x) / 100)) + 'px';
+        pin.style.top = Math.round(r.top + window.pageYOffset + r.height * ((n.y == null ? 50 : n.y) / 100)) + 'px';
+      } else {
+        pin.classList.add('is-lost');
+        pin.style.position = 'fixed'; pin.style.left = '16px'; pin.style.top = 'auto'; pin.style.bottom = (80 + lost * 34) + 'px';
+        pin.title = 'Posição já não existe na página — ' + truncate(n.text, 100);
+        lost++;
+      }
+      pin.addEventListener('click', onPinClick);
+      c.appendChild(pin);
+    }
+  }
+  function openNote(idx, pin) {
+    var n = state.notes[idx];
+    if (!n) return;
+    closeNotePop();
+    var pop = document.createElement('div');
+    pop.className = 'kiban-ie-note-pop'; pop.setAttribute(UI_ATTR, '');
+    pop.innerHTML = '<div class="kiban-ie-note-text">' + escapeHtml(n.text) + '</div>' +
+      '<div class="kiban-ie-note-meta">' + escapeHtml(n.by || '') + (n.at ? ' · ' + escapeHtml(String(n.at).slice(0, 10)) : '') + '</div>' +
+      '<div class="kiban-ie-dialog-actions"><button type="button" class="kiban-ie-btn" data-note-act="close">Fechar</button><button type="button" class="kiban-ie-btn kiban-ie-primary" data-note-act="done">Concluída</button></div>';
+    pop.addEventListener('click', function (e) {
+      var act = e.target.getAttribute('data-note-act');
+      if (act === 'close') closeNotePop();
+      else if (act === 'done') {
+        api('PATCH', '/api/v1/inline-edit/notes/' + n.id, { status: 'done' }, function (err) {
+          if (err) { toast('Não foi possível concluir a nota: ' + err.message, 'error'); return; }
+          n.status = 'done'; closeNotePop(); renderPins(); toast('Nota concluída.', 'ok');
+        });
+      }
+    });
+    var r = pin.getBoundingClientRect();
+    pop.style.left = Math.min(window.innerWidth - 340, Math.max(8, r.left)) + 'px';
+    pop.style.top = Math.min(window.innerHeight - 160, r.bottom + 8) + 'px';
+    document.body.appendChild(pop);
+    state.notePop = pop;
+  }
+  function closeNotePop() {
+    if (state.notePop && state.notePop.parentNode) state.notePop.parentNode.removeChild(state.notePop);
+    state.notePop = null;
   }
 
   // ── Text editing ─────────────────────────────────────────────────
@@ -674,6 +859,19 @@
     '.kiban-ie-toast.is-ok{background:#166534}.kiban-ie-toast.is-error{background:#991b1b}' +
     '.kiban-ie-candidate{outline:2px solid #f472b6!important;outline-offset:3px;cursor:copy!important;background-color:rgba(244,114,182,.08)!important}' +
     'body.kiban-ie-capturing .kiban-ie-target{outline-color:#cbd5e1}' +
+    '.kiban-ie-note-target{outline:2px dashed #f59e0b!important;outline-offset:3px;cursor:crosshair!important}' +
+    '.kiban-ie-dialog{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);z-index:2147483001;width:min(92vw,440px);box-sizing:border-box;padding:14px 16px;border-radius:14px;background:#0f172a;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.4);font:500 13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;animation:kibanIeIn .2s ease-out}' +
+    '.kiban-ie-dialog-title{font-weight:600;font-size:14px;margin-bottom:8px}' +
+    '.kiban-ie-dialog-label{display:block;color:#cbd5e1;font-size:12px;margin:8px 0 4px}' +
+    '.kiban-ie-dialog-input{display:block;width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#fff;font:inherit;resize:vertical}' +
+    '.kiban-ie-dialog-input:focus{outline:2px solid #06b6d4;border-color:#06b6d4}' +
+    '.kiban-ie-dialog-radio{display:flex;align-items:center;gap:8px;color:#e2e8f0;margin:4px 0;cursor:pointer;font-size:13px}' +
+    '.kiban-ie-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}' +
+    '.kiban-ie-pins{position:absolute;left:0;top:0;width:0;height:0;z-index:2147482000}' +
+    '.kiban-ie-pin{position:absolute;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:#f59e0b;color:#1a1a1a;font:700 12px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.35);padding:0}' +
+    '.kiban-ie-pin.is-lost{transform:none;background:#94a3b8}' +
+    '.kiban-ie-note-pop{position:fixed;z-index:2147483001;width:320px;box-sizing:border-box;padding:12px 14px;border-radius:12px;background:#0f172a;color:#fff;box-shadow:0 14px 40px rgba(0,0,0,.4);font:500 13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
+    '.kiban-ie-note-text{white-space:pre-wrap}.kiban-ie-note-meta{color:#94a3b8;font-size:11px;margin-top:6px}' +
     '@keyframes kibanIeIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}' +
     '@media (max-width:640px){.kiban-ie-status{display:none}.kiban-ie-label{display:none}}';
 
@@ -699,6 +897,7 @@
       '<div class="kiban-ie-status" data-role="status"></div>' +
       '<button type="button" class="kiban-ie-btn" data-act="highlight" title="Realçar tudo o que é editável">Realçar</button>' +
       (canCapture() ? '<button type="button" class="kiban-ie-btn" data-act="capture" title="Tornar editável um texto ou imagem que ainda não está no Kiban">Capturar</button>' : '') +
+      '<button type="button" class="kiban-ie-btn" data-act="note" title="Deixar uma nota para a agência num ponto da página">Nota</button>' +
       '<button type="button" class="kiban-ie-btn" data-act="discard" disabled>Descartar</button>' +
       '<button type="button" class="kiban-ie-btn kiban-ie-primary" data-act="save" disabled>Guardar</button>' +
       '<button type="button" class="kiban-ie-btn kiban-ie-icon" data-act="exit" title="Sair do modo de edição" aria-label="Sair do modo de edição">×</button>';
@@ -711,6 +910,7 @@
       else if (act === 'exit') exit();
       else if (act === 'highlight') { var on = document.body.classList.toggle('kiban-ie-highlight'); btn.classList.toggle('is-on', on); }
       else if (act === 'capture') toggleCapture();
+      else if (act === 'note') toggleNote();
     });
     // Clicking the bar must not blur the active editor before its own handlers run
     bar.addEventListener('mousedown', function (e) { if (state.editing && e.target.getAttribute('data-act') !== 'save') e.preventDefault(); });
@@ -737,6 +937,7 @@
     discardBtn.disabled = state.saving || !n;
     if (state.editing || state.saving || !state.session) return;
     if (state.capture) { setStatus('Clique num texto ou imagem para o tornar editável · Esc termina', 'muted'); return; }
+    if (state.noteMode) { setStatus('Clique no ponto da página sobre o qual quer deixar a nota · Esc termina', 'muted'); return; }
     var editable = state.bindings.length;
     if (!editable) { setStatus('Nenhum texto ou imagem editável nesta página', 'muted'); return; }
     if (n) { setStatus(n + (n === 1 ? ' alteração por guardar' : ' alterações por guardar')); return; }
@@ -746,7 +947,7 @@
       (s.save_mode === 'draft' ? ' · guarda para aprovação' : ' · publica diretamente'), 'muted');
   }
 
-  var toastTimer = null, toastEl = null;
+  var toastTimer = null, toastEl = null, pinTimer = null;
   function toast(text, kind, ms) {
     injectStyles();
     if (toastEl && toastEl.parentNode) toastEl.parentNode.removeChild(toastEl);
@@ -774,6 +975,9 @@
     if (state.observer) state.observer.disconnect();
     if (state.bar && state.bar.parentNode) state.bar.parentNode.removeChild(state.bar);
     state.bar = null;
+    toggleCapture(false); toggleNote(false); closeDialog(); closeNotePop();
+    if (state.pins && state.pins.parentNode) state.pins.parentNode.removeChild(state.pins);
+    state.pins = null;
     document.body.classList.remove('kiban-ie-highlight');
     window.__kibanInlineEditor = false;
   }
@@ -809,6 +1013,7 @@
     state.observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener('popstate', scheduleRescan);
     document.addEventListener('kiban:site-content', scheduleRescan); // the loader swapped captured texts in
+    window.addEventListener('resize', function () { clearTimeout(pinTimer); pinTimer = setTimeout(renderPins, 150); });
     var methods = ['pushState', 'replaceState'];
     for (var m = 0; m < methods.length; m++) {
       (function (name) {

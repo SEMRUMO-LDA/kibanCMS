@@ -18,6 +18,7 @@ import { Router, type Response, type NextFunction } from 'express';
 import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { audit } from '../lib/audit.js';
+import { sendSiteNoteNotification } from '../lib/email.js';
 import { tenantStore } from '../middleware/tenant.js';
 import type { AuthRequest } from '../middleware/auth.js';
 import { signLink, verifyLink } from '../lib/signed-links.js';
@@ -33,8 +34,9 @@ import {
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
   normalizeChanges, applyChanges, mergePending,
   MAX_FALLBACK_ENTRIES, pickFallbackCollections,
-  SITE_CONTENT_SLUG, SITE_CONTENT_NAME, SITE_CONTENT_FIELDS, MAX_SITE_CONTENT_PER_PAGE,
+  SITE_CONTENT_SLUG, SITE_CONTENT_NAME, SITE_CONTENT_FIELDS, MAX_SITE_CONTENT_PER_PAGE, ALL_PAGES,
   normalizePagePath, pageLabel, siteContentSlug, normalizeCapture, captureContent,
+  SITE_NOTES_SLUG, SITE_NOTES_NAME, SITE_NOTES_FIELDS, MAX_OPEN_NOTES_PER_PAGE, normalizeNote, noteTitle,
   type InlineEditMode, type SaveMode, type PendingChange, type InlineChange,
 } from '../lib/inline-edit.js';
 
@@ -214,17 +216,22 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
 
     for (const e of entries) sourceOf.set(e.id, 'page');
 
-    // Texts captured on this very page ("Capturar"): always part of the page
+    // Texts captured on this very page ("Capturar"), then the site-wide ones: always part of the page
     const siteCol = bySlug.get(SITE_CONTENT_SLUG);
     if (siteCol) {
-      let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', siteCol.id)
-        .eq('content->>page', normalizePagePath(path)).order('created_at', { ascending: true }).limit(MAX_SITE_CONTENT_PER_PAGE);
-      if (softDelete) q = q.is('deleted_at', null);
-      const { data } = await q;
-      for (const e of (data || []) as any[]) {
-        if (!sourceOf.has(e.id)) { entries.push(e); sourceOf.set(e.id, 'page'); }
+      for (const page of [normalizePagePath(path), ALL_PAGES]) {
+        let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', siteCol.id)
+          .eq('content->>page', page).order('created_at', { ascending: true }).limit(MAX_SITE_CONTENT_PER_PAGE);
+        if (softDelete) q = q.is('deleted_at', null);
+        const { data } = await q;
+        for (const e of (data || []) as any[]) {
+          if (!sourceOf.has(e.id)) { entries.push(e); sourceOf.set(e.id, 'page'); }
+        }
       }
     }
+
+    // Open notes pinned on this page ("Nota")
+    const notes = await loadOpenNotes(normalizePagePath(path), softDelete);
 
     for (const ref of refs) {
       const [colSlug, entrySlug] = ref.split('/');
@@ -269,6 +276,7 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
         source_lang: sourceLang,
         languages,
         entries: entries.map(e => serializeEntry(e, byId.get(e.collection_id)!, lang, sourceOf.get(e.id) || 'page')),
+        notes,
       },
       timestamp: new Date().toISOString(),
     });
@@ -353,6 +361,128 @@ router.post('/site-content', async (req: EditRequest, res: Response) => {
     res.status(201).json({ data: { entry: serializeEntry(entry, col, null, 'page'), created: true }, timestamp: new Date().toISOString() });
   } catch (err: any) {
     logger.error('Inline edit capture failed', { error: err?.message });
+    fail(res, 500, 'Internal server error');
+  }
+});
+
+// ============================================
+// Notes — "Nota": feedback pinned on the live site
+// ============================================
+interface SiteNote { id: string; page: string; text: string; status: string; selector: string; anchor_text: string; x: number | null; y: number | null; by: string | null; at: string; }
+
+function serializeNote(row: any): SiteNote {
+  const c = row.content || {};
+  return {
+    id: row.id, page: String(c.page || '/'), text: String(c.text || ''), status: c.status === 'done' ? 'done' : 'open',
+    selector: String(c.selector || ''), anchor_text: String(c.anchor_text || ''),
+    x: typeof c.x === 'number' ? c.x : null, y: typeof c.y === 'number' ? c.y : null,
+    by: c.by ? String(c.by) : null, at: row.created_at || row.published_at || '',
+  };
+}
+
+async function siteNotesCollection(): Promise<{ id: string; name: string; slug: string; fields: any[] } | null> {
+  const { data } = await supabase.from('collections').select('id, name, slug, fields').eq('slug', SITE_NOTES_SLUG).maybeSingle();
+  return (data as any) || null;
+}
+
+async function ensureSiteNotesCollection(req: EditRequest): Promise<{ id: string; name: string; slug: string; fields: any[] }> {
+  const existing = await siteNotesCollection();
+  if (existing) return existing;
+  const { data: created, error } = await supabase.from('collections').insert({
+    name: SITE_NOTES_NAME,
+    slug: SITE_NOTES_SLUG,
+    description: 'Pedidos deixados no próprio site com "Editar no site" → Nota. Interno: nunca aparece na API pública.',
+    type: 'custom',
+    fields: SITE_NOTES_FIELDS,
+    created_by: req.profileId,
+  }).select('id, name, slug, fields').single();
+  if (error) throw error;
+  audit(req, 'create', 'collection', created.id, { name: SITE_NOTES_NAME, slug: SITE_NOTES_SLUG, via: 'site_note' });
+  invalidateCachePattern('collections:*').catch(() => {});
+  return created as any;
+}
+
+async function loadOpenNotes(page: string, softDelete: boolean): Promise<SiteNote[]> {
+  const col = await siteNotesCollection();
+  if (!col) return [];
+  let q = supabase.from('entries').select(ENTRY_COLS + ', created_at').eq('collection_id', col.id)
+    .eq('content->>page', page).eq('content->>status', 'open').order('created_at', { ascending: true }).limit(MAX_OPEN_NOTES_PER_PAGE);
+  if (softDelete) q = q.is('deleted_at', null);
+  const { data } = await q;
+  return ((data || []) as any[]).map(serializeNote);
+}
+
+router.post('/notes', async (req: EditRequest, res: Response) => {
+  try {
+    let input: ReturnType<typeof normalizeNote>;
+    try { input = normalizeNote(req.body); } catch (e: any) { return fail(res, 400, e.message); }
+    const col = await ensureSiteNotesCollection(req);
+    const softDelete = await hasSoftDelete();
+
+    let cnt = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', col.id)
+      .eq('content->>page', input.page).eq('content->>status', 'open');
+    if (softDelete) cnt = cnt.is('deleted_at', null);
+    const { count } = await cnt;
+    if ((count || 0) >= MAX_OPEN_NOTES_PER_PAGE) return fail(res, 400, `Esta página já tem ${MAX_OPEN_NOTES_PER_PAGE} notas abertas`);
+
+    const now = new Date().toISOString();
+    const by = req.user?.email || null;
+    const { data: entryRow, error } = await supabase.from('entries').insert({
+      collection_id: col.id,
+      title: noteTitle(input.text),
+      slug: `nota-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      content: { ...input, status: 'open', by },
+      excerpt: null,
+      status: 'published',
+      published_at: now,
+      author_id: req.profileId,
+      tags: [],
+      meta: {},
+      featured_image: null,
+    }).select(ENTRY_COLS + ', created_at').single();
+    if (error) throw error;
+    const entry = entryRow as any;
+
+    const note = serializeNote(entry);
+    audit(req, 'site_note_create', 'entry', entry.id, { page: note.page });
+    invalidateCachePattern(`entries:${SITE_NOTES_SLUG}:*`).catch(() => {});
+
+    // Tell the operator's inbox (same recipients as form notifications); never blocks the answer
+    const site = await getSingletonContent('site-settings');
+    const siteUrl = String(site.site_url || '').trim().replace(/\/+$/, '');
+    const protocol = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const adminUrl = `${protocol}://${req.headers.host || 'kiban.pt'}/site-notes`;
+    sendSiteNoteNotification({ text: note.text, page: note.page, anchor_text: note.anchor_text, by: by || undefined }, siteUrl ? `${siteUrl}${note.page}` : note.page, adminUrl)
+      .catch(err => logger.warn('Site note notification failed', { error: err?.message }));
+
+    res.status(201).json({ data: note, timestamp: now });
+  } catch (err: any) {
+    logger.error('Site note create failed', { error: err?.message });
+    fail(res, 500, 'Internal server error');
+  }
+});
+
+router.patch('/notes/:id', async (req: EditRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!UUID_RE.test(id)) return fail(res, 400, 'Invalid id');
+    const status = req.body?.status === 'done' ? 'done' : req.body?.status === 'open' ? 'open' : null;
+    if (!status) return fail(res, 400, 'status must be "open" or "done"');
+    const col = await siteNotesCollection();
+    if (!col) return fail(res, 404, 'Note not found');
+    let q = supabase.from('entries').select(ENTRY_COLS + ', created_at').eq('id', id).eq('collection_id', col.id);
+    if (await hasSoftDelete()) q = q.is('deleted_at', null);
+    const { data: row } = await q.maybeSingle();
+    if (!row) return fail(res, 404, 'Note not found');
+    const now = new Date().toISOString();
+    const content = { ...(row as any).content, status, ...(status === 'done' ? { done_by: req.user?.email || null, done_at: now } : { done_by: null, done_at: null }) };
+    const { data: updated, error } = await supabase.from('entries').update({ content, updated_at: now }).eq('id', id).select(ENTRY_COLS + ', created_at').single();
+    if (error) throw error;
+    audit(req, status === 'done' ? 'site_note_done' : 'site_note_reopen', 'entry', id, { page: content.page });
+    invalidateCachePattern(`entries:${SITE_NOTES_SLUG}:*`).catch(() => {});
+    res.json({ data: serializeNote(updated), timestamp: now });
+  } catch (err: any) {
+    logger.error('Site note update failed', { error: err?.message });
     fail(res, 500, 'Internal server error');
   }
 });
