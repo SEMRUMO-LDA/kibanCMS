@@ -4,6 +4,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { pickFallbackCollections, MAX_FALLBACK_ENTRIES, MAX_FALLBACK_PER_COLLECTION } from '../lib/inline-edit.js';
 import {
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
   normalizeChanges, applyChanges, mergePending, currentValue, sanitizeText,
@@ -151,5 +152,17 @@ describe('inline edit: applying changes', () => {
     const third = mergePending(second, [{ field: 'title', value: 'D' }], entry, null, 'c@d.pt');
     assert.equal(third.length, 2);
     assert.equal(third.find(p => !p.lang)?.value, 'D');
+  });
+});
+
+describe('pickFallbackCollections', () => {
+  it('sends small collections whole, smallest first, within the budget', () => {
+    const ids = pickFallbackCollections([
+      { id: 'blog', count: 500 }, { id: 'team', count: 11 }, { id: 'services', count: 19 }, { id: 'empty', count: 0 },
+    ]);
+    assert.deepEqual(ids, ['team', 'services']);
+    assert.deepEqual(pickFallbackCollections([{ id: 'a', count: 80 }, { id: 'b', count: 90 }, { id: 'c', count: 100 }], 100, 200), ['a', 'b']);
+    assert.deepEqual(pickFallbackCollections([{ id: 'a', count: 101 }], 100, 300), []);
+    assert.ok(MAX_FALLBACK_PER_COLLECTION <= MAX_FALLBACK_ENTRIES);
   });
 });

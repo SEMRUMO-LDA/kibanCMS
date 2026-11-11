@@ -164,7 +164,9 @@
       for (var i = 0; i < ks.length; i++) (state.imageIndex[ks[i]] = state.imageIndex[ks[i]] || []).push({ entry: entry, field: field });
     } else if (field.type !== 'richtext' && (typeof value === 'string' || typeof value === 'number')) {
       var k = norm(String(value));
-      if (k && k.length <= 5000) (state.textIndex[k] = state.textIndex[k] || []).push({ entry: entry, field: field });
+      // Entries sent with their small collection (not named by this URL): very short values ("5") would match anything
+      if (!k || k.length > 5000 || (entry.source === 'collection' && k.length < 3)) return;
+      (state.textIndex[k] = state.textIndex[k] || []).push({ entry: entry, field: field });
     }
   }
   function buildIndex() {
@@ -235,15 +237,57 @@
       if (hits) textMatches.push({ el: el, hits: hits, key: key });
     }
     // Prefer the deepest element holding the text (<h1><span>Title</span></h1> → the span)
+    var deferred = [];
     for (var j = 0; j < textMatches.length; j++) {
       var m = textMatches[j], deeper = false;
       for (var k = 0; k < textMatches.length; k++) {
         var o = textMatches[k];
         if (o !== m && o.key === m.key && m.el !== o.el && m.el.contains(o.el)) { deeper = true; break; }
       }
-      if (!deeper) bind(m.el, m.hits[0], 'text');
+      if (deeper) continue;
+      var hit = pickHit(m.hits);
+      if (hit) bind(m.el, hit, 'text'); else deferred.push(m);
+    }
+    // A text shared by several entries (two team members with the same role) goes
+    // to the entry whose other fields sit in the same block; otherwise it is locked.
+    for (var d = 0; d < deferred.length; d++) {
+      var dm = deferred[d], ctx = hitByContext(dm.el, dm.hits);
+      if (ctx) bind(dm.el, ctx, 'text'); else bind(dm.el, dm.hits[0], 'text', { ambiguous: distinctEntries(dm.hits).length });
     }
     updateToolbar();
+  }
+
+  function distinctEntries(hits) {
+    var ids = [];
+    for (var i = 0; i < hits.length; i++) if (ids.indexOf(hits[i].entry.id) < 0) ids.push(hits[i].entry.id);
+    return ids;
+  }
+  // One entry → its first field. Several → the one found for this URL (page / data-kiban) if it is alone; else undecided.
+  function pickHit(hits) {
+    if (distinctEntries(hits).length === 1) return hits[0];
+    var page = [];
+    for (var i = 0; i < hits.length; i++) if (hits[i].entry.source !== 'collection') page.push(hits[i]);
+    if (page.length && distinctEntries(page).length === 1) return page[0];
+    return null;
+  }
+  // Smallest ancestor that already holds bound elements: if exactly one of the
+  // candidate entries is bound inside it, the shared text belongs to that entry.
+  function hitByContext(el, hits) {
+    var cands = distinctEntries(hits);
+    var node = el.parentElement;
+    for (var depth = 0; node && node !== document.body && depth < 8; depth++, node = node.parentElement) {
+      var bound = node.querySelectorAll('[data-kiban-ie]');
+      if (!bound.length) continue;
+      var found = [];
+      for (var i = 0; i < bound.length; i++) {
+        if (bound[i] === el || bound[i].hasAttribute('data-kiban-ie-ambiguous')) continue;
+        var id = (bound[i].getAttribute('data-kiban-ie') || '').split('|')[0];
+        if (cands.indexOf(id) >= 0 && found.indexOf(id) < 0) found.push(id);
+      }
+      if (found.length === 1) { for (var h = 0; h < hits.length; h++) if (hits[h].entry.id === found[0]) return hits[h]; }
+      if (found.length > 1) return null;
+    }
+    return null;
   }
 
   function bindExplicit(el, ref) {
@@ -259,7 +303,7 @@
     bind(el, { entry: entry, field: field }, (el.tagName === 'IMG' || field.type === 'image') ? 'image' : 'text');
   }
 
-  function bind(el, hit, kind) {
+  function bind(el, hit, kind, opts) {
     var b = { el: el, entry: hit.entry, field: hit.field, kind: kind, prevTitle: el.getAttribute('title') };
     if (kind === 'text') { b.origHTML = el.innerHTML; b.original = el.textContent; }
     else { b.origSrc = el.getAttribute('src'); b.origSrcset = el.getAttribute('srcset'); b.origSizes = el.getAttribute('sizes'); b.origBg = el.style.backgroundImage; }
@@ -268,6 +312,12 @@
     if (kind === 'image') el.classList.add('kiban-ie-image');
     var tip = hit.field.label + ' · ' + hit.entry.collection.name;
     if (hit.field.type === 'richtext') { el.classList.add('kiban-ie-locked'); tip = 'Texto rico — por agora edita-se no admin'; }
+    if (opts && opts.ambiguous) {
+      b.ambiguous = opts.ambiguous;
+      el.classList.add('kiban-ie-locked');
+      el.setAttribute('data-kiban-ie-ambiguous', String(opts.ambiguous));
+      tip = 'Texto repetido em ' + opts.ambiguous + ' entradas — edite no admin do Kiban';
+    }
     var p = state.pending[changeKey(b)];
     if (p) { el.classList.add('kiban-ie-pending'); tip = 'Pendente de aprovação no Kiban: «' + truncate(String(p.value), 80) + '»'; }
     el.setAttribute('title', tip);
@@ -279,6 +329,7 @@
     el.removeEventListener('click', onTargetClick, true);
     el.classList.remove('kiban-ie-target', 'kiban-ie-image', 'kiban-ie-locked', 'kiban-ie-pending', 'kiban-ie-saved', 'kiban-ie-changed', 'kiban-ie-editing');
     el.removeAttribute('data-kiban-ie');
+    el.removeAttribute('data-kiban-ie-ambiguous');
     if (b.prevTitle == null) el.removeAttribute('title'); else el.setAttribute('title', b.prevTitle);
   }
   function unbindAll(keepChanged) {
@@ -301,6 +352,7 @@
     if (state.editing && state.editing.el === el) return; // caret placement inside the active editor
     e.preventDefault(); e.stopPropagation();
     if (b.field.type === 'richtext') { toast('Este bloco é texto rico — por agora edita-se no admin do Kiban.', 'info'); return; }
+    if (b.ambiguous) { toast('Este texto existe em ' + b.ambiguous + ' entradas e não dá para saber qual é — edite no admin do Kiban.', 'info'); return; }
     if (b.kind === 'image') { pickImage(b); return; }
     startEdit(b);
   }

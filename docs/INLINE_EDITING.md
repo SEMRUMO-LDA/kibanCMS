@@ -49,9 +49,16 @@ disappears and every token stops working at once, no deploy needed.
 3. The overlay walks the page and marks every element whose text equals a field
    value, and every `<img>` whose URL (or inner URL of an optimiser such as
    `/api/v1/img?src=…` or `/_next/image?url=…`, or file name) equals an image field.
+4. Lists have no URL of their own (team, services, testimonials on the home
+   page), so small editable collections (up to 100 entries each, 300 in total,
+   smallest first) are sent whole and matched by text as well. Values shorter
+   than 3 characters are ignored for those. A text shared by several entries
+   (two team members with the role "Fisioterapeuta") goes to the entry whose
+   other fields sit in the same block (the name next to it); when that cannot
+   be decided the element is shown locked, with the reason in the tooltip.
 
-For content the matcher cannot see (lists on the home page, rich text later),
-tag the element explicitly:
+For content the matcher cannot see (big collections, rich text later), tag the
+element explicitly:
 
 ```html
 <h2 data-kiban="tours/lisbon-tour/title">…</h2>
