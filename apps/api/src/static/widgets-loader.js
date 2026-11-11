@@ -51,6 +51,7 @@
     'accessibility':    '/api/v1/accessibility/widget.js',
     'whatsapp-widget':  '/api/v1/whatsapp-widget/widget.js',
     'i18n':             '/api/v1/i18n/widget.js',
+    'popups':           '/api/v1/popups/widget.js',
   };
 
   // ── Fetch everything in one request ────────────────────────────────
@@ -657,7 +658,8 @@
 
   // ── Boot ─────────────────────────────────────────────────────────────
   function startWidgets(enabledAddons) {
-    expectedRegistrations = enabledAddons.length;
+    // Popups never join the floating cluster: don't wait for them before arranging
+    expectedRegistrations = enabledAddons.filter(function (id) { return id !== 'popups'; }).length;
     enabledAddons.forEach(function (addonId) {
       var widgetPath = WIDGET_MAP[addonId];
       if (widgetPath) injectWidget(widgetPath);

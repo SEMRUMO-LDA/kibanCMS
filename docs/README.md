@@ -28,7 +28,8 @@
 | [Performance & AI search](AI_PERFORMANCE.md) | Optimised images, AI crawler policy, llms.txt, automatic JSON-LD |
 | [Meta Conversions API](META_CAPI.md) | Server-side Lead / Registration / Purchase events, GDPR consent |
 | [Redirects Manager](REDIRECTS_SETUP.md) | 301/302 redirects for SEO and migrations |
-| [Edição no site (Beta)](INLINE_EDITING.md) | Edit texts and images by clicking them on the live site; approval flow |
+| [Edição no site (Beta)](INLINE_EDITING.md) | Edit texts and images by clicking them on the live site; capture hard-coded copy; notes; approval flow |
+| [Popups e barras de anúncio](POPUPS_SETUP.md) | Promotions, announcements and newsletter sign-ups as a bar or popup, scheduled and targeted, no site changes |
 
 ## Checking a client
 

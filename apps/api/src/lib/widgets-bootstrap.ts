@@ -18,6 +18,7 @@ import { logger } from './logger.js';
 import { loadSeoConfig } from '../routes/seo.js';
 import { publicI18nLanguages, publicI18nWidget } from '../routes/i18n.js';
 import { siteContentEnabled } from './site-content.js';
+import { getPopupsConfig, loadActivePopups, type PopupsConfig } from './popups.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dev: src/lib → src/static · prod: dist/lib → /app/apps/api/static (copied by the Dockerfile)
@@ -26,7 +27,7 @@ export const WIDGET_STATIC_DIR = candidates.find(d => existsSync(path.join(d, 'w
 
 export const WIDGET_FILES = [
   'widgets-loader.js', 'cookie-notice-widget.js', 'accessibility-widget.js', 'whatsapp-widget.js', 'i18n-widget.js',
-  'edit-overlay.js',
+  'edit-overlay.js', 'popups-widget.js',
 ] as const;
 
 /** Short hash of the widget scripts shipped with this build. */
@@ -78,6 +79,9 @@ export async function getEnabledWidgets(): Promise<string[]> {
   if (wa.enabled) enabled.push('whatsapp-widget');
 
   if ((await collectionId('i18n-config')) && !disabled('i18n')) enabled.push('i18n');
+
+  // Popups: the widget is only worth loading when something is active today
+  if ((await loadActivePopups()).length > 0) enabled.push('popups');
   return enabled;
 }
 
@@ -117,6 +121,8 @@ export interface WidgetsBootstrap {
     accessibility: Record<string, any>;
     'whatsapp-widget': Record<string, any>;
     i18n: { widget: Record<string, any>; languages: Record<string, any> | null };
+    /** Active popups / announcement bars (add-on "Popups"); present only when at least one is active. */
+    popups?: PopupsConfig;
   };
   /** Texts captured with "Editar no site": when enabled the loader asks /widgets/site-content for the page. */
   siteContent: { enabled: boolean };
@@ -132,7 +138,7 @@ async function guarded<T>(label: string, fallback: T, fn: () => Promise<T>): Pro
 }
 
 export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap> {
-  const [enabled, cluster, seo, cookie, a11y, whatsapp, i18nWidget, i18nLanguages, siteContent] = await Promise.all([
+  const [enabled, cluster, seo, cookie, a11y, whatsapp, i18nWidget, i18nLanguages, siteContent, popups] = await Promise.all([
     guarded('enabled', [] as string[], getEnabledWidgets),
     guarded('cluster', DEFAULT_CLUSTER_CONFIG, getClusterConfig),
     guarded('seo', { analytics: {} } as any, loadSeoConfig),
@@ -142,6 +148,7 @@ export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap>
     guarded('i18n-widget', { enabled: false }, () => publicI18nWidget(baseUrl)),
     guarded('i18n-languages', null as Record<string, any> | null, publicI18nLanguages),
     guarded('site-content', false, siteContentEnabled),
+    guarded('popups', { items: [], turnstileSiteKey: '' } as PopupsConfig, getPopupsConfig),
   ]);
   return {
     version: WIDGETS_VERSION,
@@ -153,6 +160,7 @@ export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap>
       accessibility: a11y,
       'whatsapp-widget': whatsapp,
       i18n: { widget: i18nWidget, languages: i18nLanguages },
+      ...(popups.items.length ? { popups } : {}),
     },
     siteContent: { enabled: siteContent },
   };

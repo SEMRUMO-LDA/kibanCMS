@@ -173,6 +173,7 @@ interface SiteSettings {
   resend_api_key: string; default_from_email: string; default_from_name: string; default_reply_to: string;
   notification_emails: string;
   turnstile_secret_key: string;
+  turnstile_site_key: string;
   // AI & Performance
   ai_search_bots: string;
   ai_training_bots: string;
@@ -196,6 +197,7 @@ const DEFAULTS: SiteSettings = {
   resend_api_key: '', default_from_email: '', default_from_name: '', default_reply_to: '',
   notification_emails: '',
   turnstile_secret_key: '',
+  turnstile_site_key: '',
   ai_search_bots: 'allow',
   ai_training_bots: 'allow',
   business_type: 'Organization',
@@ -686,6 +688,21 @@ export const Settings = () => {
                 {locale === 'pt'
                   ? 'Opcional. Com esta chave preenchida, formulários e newsletter passam a exigir o widget Turnstile no site (o site usa a "site key" pública). Todos os formulários já têm um honeypot invisível: o site só precisa de um campo escondido chamado _hp.'
                   : 'Optional. When set, forms and newsletter sign-ups require the Turnstile widget on the site (the site uses the public "site key"). All forms already have an invisible honeypot: the site just needs a hidden field named _hp.'}
+              </p>
+            </Field>
+            <Field $full>
+              <label>Cloudflare Turnstile (site key)</label>
+              <input
+                type="text"
+                autoComplete="off"
+                value={settings.turnstile_site_key}
+                onChange={e => update('turnstile_site_key', e.target.value)}
+                placeholder="0x4AAAAAAA…"
+              />
+              <p className="help">
+                {locale === 'pt'
+                  ? 'Chave pública, só necessária com a secret key preenchida: o formulário de newsletter dos popups (add-on Popups) usa-a para mostrar o Turnstile.'
+                  : 'Public key, only needed when the secret key is set: the newsletter form inside popups (Popups add-on) uses it to render Turnstile.'}
               </p>
             </Field>
           </Grid>
