@@ -183,6 +183,11 @@
         fieldsByKey[entry.fields[f].key] = entry.fields[f];
         indexHit(entry, entry.fields[f], fieldValue(entry, entry.fields[f].key));
       }
+      // Captured site texts: before the loader swapped them in, the page still shows the original
+      if (entry.collection && entry.collection.slug === 'site-content' && entry.content && entry.content.original) {
+        var scField = fieldsByKey[entry.content.kind === 'image' ? 'content.image' : 'content.text'];
+        if (scField) indexHit(entry, scField, entry.content.original);
+      }
       // Pending values too: after a beta save the page shows the new text while the entry still has the old one
       for (var p = 0; p < (entry.pending || []).length; p++) {
         var pend = entry.pending[p];
@@ -378,6 +383,8 @@
       parts.unshift(node.tagName.toLowerCase() + ':nth-of-type(' + idx + ')');
       node = node.parentElement;
     }
+    // No id on the way up: anchor the path at <body> so it cannot match a nested look-alike
+    if (node === document.body) parts.unshift('body');
     return parts.join(' > ');
   }
   var LABEL_BY_TAG = { h1: 'Título', h2: 'Subtítulo', h3: 'Subtítulo', h4: 'Subtítulo', p: 'Parágrafo', a: 'Botão', button: 'Botão', li: 'Item', img: 'Imagem', figcaption: 'Legenda', blockquote: 'Citação' };

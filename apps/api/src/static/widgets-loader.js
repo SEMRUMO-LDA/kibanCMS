@@ -673,7 +673,8 @@
         if (b.cluster) applyClusterConfig(b.cluster);
         initMarketing(b.analytics || {});
         startWidgets(b.enabled || []);
-        if (b.siteContent && b.siteContent.enabled) { scLoad(); scWatchNavigation(); }
+        // The bootstrap is cached 5 min: an admin who just captured the first text must not wait for it
+        if ((b.siteContent && b.siteContent.enabled) || readEditToken()) { scLoad(); scWatchNavigation(); }
         loadEditOverlay();
         return;
       }
