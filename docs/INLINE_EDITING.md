@@ -87,8 +87,9 @@ in the tooltip, so the admin knows what is already queued.
 ## Security
 
 - The token (`X-Kiban-Edit` header) is an HMAC-SHA256 signature over
-  `{user, tenant, exp}` with the same secret as preview links (`PREVIEW_SECRET`,
-  else the service role key). 4-hour lifetime.
+  `{user, tenant, exp}` with the same secret as preview and newsletter links
+  (`PREVIEW_SECRET`, else a service role key of the deployment; see
+  `lib/signing-secret.ts`). 4-hour lifetime.
 - Every request re-reads the site setting and the user's current role: turning
   the feature off or demoting the user takes effect immediately.
 - Tenant-bound: a token for site A is rejected by site B's origin.

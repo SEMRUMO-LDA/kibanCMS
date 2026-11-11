@@ -9,6 +9,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { signingSecret } from './signing-secret.js';
 
 function base64url(buf: Buffer | string): string {
   const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
@@ -20,14 +21,8 @@ function fromBase64url(s: string): Buffer {
   return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/') + (pad ? '='.repeat(4 - pad) : ''), 'base64');
 }
 
-function secret(): string {
-  const s = process.env.PREVIEW_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!s) throw new Error('No PREVIEW_SECRET (or SUPABASE_SERVICE_ROLE_KEY fallback) configured');
-  return s;
-}
-
 function sign(payloadB64: string): string {
-  return base64url(createHmac('sha256', secret()).update(payloadB64).digest());
+  return base64url(createHmac('sha256', signingSecret()).update(payloadB64).digest());
 }
 
 export function signLink<T extends Record<string, unknown>>(payload: T, ttlSeconds: number): string {

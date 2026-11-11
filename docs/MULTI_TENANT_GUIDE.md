@@ -52,6 +52,14 @@ Se `TENANTS` NAO estiver definido, o servidor usa as variaveis tradicionais:
 
 Isto garante que o setup existente continua a funcionar sem mudancas.
 
+### Variavel de ambiente: PREVIEW_SECRET (recomendada)
+
+Segredo HMAC dos links assinados (pré-visualização de rascunhos, confirmação
+e cancelamento de newsletter, sessões de "Editar no site"). Define no Railway
+uma string aleatória com 32+ caracteres (`openssl rand -hex 32`). Sem ela, o
+servidor usa a service role key do primeiro tenant do `TENANTS`: funciona, mas
+trocar a ordem dos tenants invalida os links já enviados por email.
+
 ## Adicionar um novo cliente
 
 1. **Criar Supabase**: Novo projeto no Supabase dashboard
