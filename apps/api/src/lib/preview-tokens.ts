@@ -12,6 +12,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
+import { signingSecret } from './signing-secret.js';
 
 interface PreviewPayload {
   entry_id: string;
@@ -32,17 +33,10 @@ function fromBase64url(s: string): Buffer {
   return Buffer.from(norm, 'base64');
 }
 
-function getSecret(): string {
-  // Prefer a dedicated PREVIEW_SECRET env var. Fall back to the service role
-  // key (also a 64+ char secret tied to this deployment). NEVER fall back to
-  // a hard-coded constant.
-  const s = process.env.PREVIEW_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!s) throw new Error('No PREVIEW_SECRET (or SUPABASE_SERVICE_ROLE_KEY fallback) configured');
-  return s;
-}
-
 function sign(payload: string): string {
-  return base64url(createHmac('sha256', getSecret()).update(payload).digest());
+  // One secret per deployment (PREVIEW_SECRET, else a service role key);
+  // see lib/signing-secret.ts. NEVER a hard-coded constant.
+  return base64url(createHmac('sha256', signingSecret()).update(payload).digest());
 }
 
 export function generatePreviewToken(entryId: string, tenantId: string, ttlSeconds: number = DEFAULT_TTL_SECONDS): {
