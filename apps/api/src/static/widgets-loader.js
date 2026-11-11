@@ -152,6 +152,135 @@
     document.head.appendChild(script);
   }
 
+  // ── Site content: texts/images captured with "Editar no site" ──────
+  // The page is static, but the admin captured some of its texts in the
+  // editor: swap in the current values for every visitor. Each item carries
+  // an anchor (CSS path + original text); the text is the fallback when the
+  // site's HTML changed. Cached per path in localStorage so repeat visits
+  // swap before the first paint settles; always refreshed from the API.
+  var SC_CACHE_PREFIX = 'kiban-site-content:';
+  var SC_TEXT_TAGS = 'h1,h2,h3,h4,h5,h6,p,span,a,li,button,div,strong,em,b,i,small,blockquote,figcaption,label,td,th,dd,dt,summary,legend';
+  var scItems = null, scPathLoaded = null, scNavTimer = null;
+  function scNorm(s) { return String(s == null ? '' : s).replace(/ /g, ' ').replace(/\s+/g, ' ').trim(); }
+  function scPath() { var p = location.pathname || '/'; return p.length > 1 ? p.replace(/\/+$/, '') : p; }
+  function scKey(u) {
+    try {
+      var x = new URL(u, location.href);
+      var inner = x.searchParams.get('url') || x.searchParams.get('src');
+      if (inner) { try { x = new URL(inner, location.href); } catch (e) { /* keep outer */ } }
+      return x.origin + x.pathname;
+    } catch (e) { return String(u || ''); }
+  }
+  // normalised text → deepest element holding exactly that text
+  function scTextMap() {
+    var map = {}, nodes = document.body.querySelectorAll(SC_TEXT_TAGS);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.childElementCount > 3 || el.hasAttribute('data-kiban-edit-ui')) continue;
+      var t = el.textContent;
+      if (!t || t.length > 5200) continue;
+      var k = scNorm(t);
+      if (!k) continue;
+      if (!map[k] || map[k].contains(el)) map[k] = el;
+    }
+    return map;
+  }
+  function scFindImage(url) {
+    var want = scKey(url);
+    if (!want) return null;
+    var imgs = document.images;
+    for (var i = 0; i < imgs.length; i++) {
+      if (scKey(imgs[i].currentSrc || imgs[i].getAttribute('src') || '') === want) return imgs[i];
+    }
+    return null;
+  }
+  function scFind(item, ctx) {
+    var el = null;
+    if (item.selector) { try { el = document.querySelector(item.selector); } catch (e) { el = null; } }
+    if (el) {
+      if (item.kind === 'image') { if (el.tagName === 'IMG') return el; }
+      else { var t = scNorm(el.textContent); if (t === scNorm(item.original) || t === scNorm(item.value)) return el; }
+    }
+    if (item.kind === 'image') return scFindImage(item.original) || scFindImage(item.value);
+    if (!ctx.map) ctx.map = scTextMap();
+    return ctx.map[scNorm(item.original)] || ctx.map[scNorm(item.value)] || null;
+  }
+  function scApply(items) {
+    if (!items || !items.length || !document.body) return 0;
+    var n = 0, ctx = {};
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i], el = scFind(it, ctx);
+      if (!el) continue;
+      if (it.kind === 'image') {
+        if (scKey(el.currentSrc || el.getAttribute('src') || '') !== scKey(it.value)) {
+          el.removeAttribute('srcset'); el.removeAttribute('sizes'); el.removeAttribute('data-src'); el.removeAttribute('data-srcset');
+          var pic = el.parentElement;
+          if (pic && pic.tagName === 'PICTURE') { var srcs = pic.querySelectorAll('source'); for (var s = 0; s < srcs.length; s++) pic.removeChild(srcs[s]); }
+          el.setAttribute('src', it.value);
+        }
+      } else if (scNorm(el.textContent) !== scNorm(it.value)) {
+        el.textContent = it.value;
+      }
+      // Lets the editor bind the element directly (data-kiban="collection/slug/field")
+      el.setAttribute('data-kiban', 'site-content/' + it.slug + '/' + (it.kind === 'image' ? 'image' : 'text'));
+      n++;
+    }
+    return n;
+  }
+  function scApplyAll() {
+    if (!scItems) return;
+    var run = function () {
+      if (!scApply(scItems)) return;
+      var ev;
+      try { ev = new Event('kiban:site-content'); } catch (e) { ev = document.createEvent('Event'); ev.initEvent('kiban:site-content', true, true); }
+      document.dispatchEvent(ev);
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+    // Content rendered later (SPA shells, lazy sections): a couple more passes
+    setTimeout(run, 1000); setTimeout(run, 3000);
+  }
+  function scLoad() {
+    var path = scPath();
+    scPathLoaded = path;
+    var version = bootstrapData && bootstrapData.version;
+    try {
+      var cached = JSON.parse(localStorage.getItem(SC_CACHE_PREFIX + path) || 'null');
+      if (cached && cached.v === version && cached.items && cached.items.length) { scItems = cached.items; scApplyAll(); }
+    } catch (e) { /* no cache */ }
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', BASE_URL + '/api/v1/widgets/site-content?path=' + encodeURIComponent(path));
+    xhr.setRequestHeader('Authorization', 'Bearer ' + API_KEY);
+    if (TENANT_ID) xhr.setRequestHeader('X-Tenant', TENANT_ID);
+    xhr.timeout = 15000;
+    xhr.onload = function () {
+      if (xhr.status !== 200) return;
+      try {
+        var r = JSON.parse(xhr.responseText);
+        var items = (r && r.data && r.data.items) || [];
+        scItems = items;
+        try {
+          if (items.length) localStorage.setItem(SC_CACHE_PREFIX + path, JSON.stringify({ v: version, items: items }));
+          else localStorage.removeItem(SC_CACHE_PREFIX + path);
+        } catch (e) { /* storage blocked or full */ }
+        scApplyAll();
+      } catch (e) { /* bad json */ }
+    };
+    xhr.send();
+  }
+  // SPA navigation: a new path has its own captures
+  function scOnNavigate() {
+    clearTimeout(scNavTimer);
+    scNavTimer = setTimeout(function () { if (scPathLoaded !== null && scPath() !== scPathLoaded) scLoad(); }, 300);
+  }
+  function scWatchNavigation() {
+    window.addEventListener('popstate', scOnNavigate);
+    ['pushState', 'replaceState'].forEach(function (name) {
+      var orig = history[name];
+      if (typeof orig !== 'function') return;
+      history[name] = function () { var r = orig.apply(this, arguments); scOnNavigate(); return r; };
+    });
+  }
+
   // Selectors of every widget we know how to clusterise. Used by the
   // pre-hide stylesheet below (we don't want the floating button to flash
   // for ~1s before the cluster forms), and by the arrange logic to know
@@ -544,6 +673,7 @@
         if (b.cluster) applyClusterConfig(b.cluster);
         initMarketing(b.analytics || {});
         startWidgets(b.enabled || []);
+        if (b.siteContent && b.siteContent.enabled) { scLoad(); scWatchNavigation(); }
         loadEditOverlay();
         return;
       }
@@ -1511,6 +1641,8 @@
     /** Config pre-fetched by the bootstrap for a widget ('cookie-notice', 'accessibility', 'whatsapp-widget', 'i18n'); undefined when the widget must fetch its own. */
     getConfig: function (id) { return bootstrapData && bootstrapData.configs ? bootstrapData.configs[id] : undefined; },
     getVersion: function () { return bootstrapData ? bootstrapData.version : null; },
+    /** Re-applies the texts captured with "Editar no site" (after the site re-rendered a section). */
+    applySiteContent: function () { scApplyAll(); },
     register: function (id, opts) {
       if (!id || !opts || !opts.selector) return;
       stackItems[id] = {

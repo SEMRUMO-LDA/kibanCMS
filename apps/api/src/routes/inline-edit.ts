@@ -33,6 +33,8 @@ import {
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
   normalizeChanges, applyChanges, mergePending,
   MAX_FALLBACK_ENTRIES, pickFallbackCollections,
+  SITE_CONTENT_SLUG, SITE_CONTENT_NAME, SITE_CONTENT_FIELDS, MAX_SITE_CONTENT_PER_PAGE,
+  normalizePagePath, pageLabel, siteContentSlug, normalizeCapture, captureContent,
   type InlineEditMode, type SaveMode, type PendingChange, type InlineChange,
 } from '../lib/inline-edit.js';
 
@@ -212,6 +214,18 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
 
     for (const e of entries) sourceOf.set(e.id, 'page');
 
+    // Texts captured on this very page ("Capturar"): always part of the page
+    const siteCol = bySlug.get(SITE_CONTENT_SLUG);
+    if (siteCol) {
+      let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', siteCol.id)
+        .eq('content->>page', normalizePagePath(path)).order('created_at', { ascending: true }).limit(MAX_SITE_CONTENT_PER_PAGE);
+      if (softDelete) q = q.is('deleted_at', null);
+      const { data } = await q;
+      for (const e of (data || []) as any[]) {
+        if (!sourceOf.has(e.id)) { entries.push(e); sourceOf.set(e.id, 'page'); }
+      }
+    }
+
     for (const ref of refs) {
       const [colSlug, entrySlug] = ref.split('/');
       const col = bySlug.get(colSlug);
@@ -260,6 +274,85 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
     });
   } catch (err: any) {
     logger.error('Inline edit resolve failed', { error: err?.message });
+    fail(res, 500, 'Internal server error');
+  }
+});
+
+// ============================================
+// POST /site-content — "Capturar": make a hard-coded text/image editable
+// ============================================
+async function ensureSiteContentCollection(req: EditRequest): Promise<{ id: string; name: string; slug: string; fields: any[] }> {
+  const { data: existing } = await supabase.from('collections').select('id, name, slug, fields').eq('slug', SITE_CONTENT_SLUG).maybeSingle();
+  if (existing) {
+    // A collection created by an older version: add the fields this one introduced
+    const fields: any[] = Array.isArray(existing.fields) ? existing.fields : [];
+    const missing = SITE_CONTENT_FIELDS.filter(f => !fields.some(x => x && x.id === f.id));
+    if (!missing.length) return { ...existing, fields } as any;
+    const merged = [...fields, ...missing];
+    await supabase.from('collections').update({ fields: merged }).eq('id', existing.id);
+    return { ...existing, fields: merged } as any;
+  }
+  const { data: created, error } = await supabase.from('collections').insert({
+    name: SITE_CONTENT_NAME,
+    slug: SITE_CONTENT_SLUG,
+    description: 'Textos e imagens do site capturados com "Editar no site" (beta). Cada entrada é um elemento de uma página.',
+    type: 'custom',
+    fields: SITE_CONTENT_FIELDS,
+    created_by: req.profileId,
+  }).select('id, name, slug, fields').single();
+  if (error) throw error;
+  audit(req, 'create', 'collection', created.id, { name: SITE_CONTENT_NAME, slug: SITE_CONTENT_SLUG, via: 'inline_edit_capture' });
+  invalidateCachePattern('collections:*').catch(() => {});
+  return created as any;
+}
+
+router.post('/site-content', async (req: EditRequest, res: Response) => {
+  try {
+    if (!['super_admin', 'admin'].includes(req.inlineEdit?.role || '')) return fail(res, 403, 'Só administradores podem capturar textos do site');
+    let cap: ReturnType<typeof normalizeCapture>;
+    try { cap = normalizeCapture(req.body); } catch (e: any) { return fail(res, 400, e.message); }
+
+    const col = await ensureSiteContentCollection(req);
+    const softDelete = await hasSoftDelete();
+
+    // The same element captured twice → the existing entry
+    let dup = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', col.id)
+      .eq('content->>page', cap.path).eq('content->>original', cap.original).limit(1);
+    if (softDelete) dup = dup.is('deleted_at', null);
+    const { data: found } = await dup;
+    if (found && found[0]) {
+      return res.json({ data: { entry: serializeEntry(found[0], col, null, 'page'), created: false }, timestamp: new Date().toISOString() });
+    }
+
+    let cnt = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', col.id).eq('content->>page', cap.path);
+    if (softDelete) cnt = cnt.is('deleted_at', null);
+    const { count } = await cnt;
+    if ((count || 0) >= MAX_SITE_CONTENT_PER_PAGE) return fail(res, 400, `Esta página já tem ${MAX_SITE_CONTENT_PER_PAGE} elementos capturados`);
+
+    const { data: slugRows } = await supabase.from('entries').select('slug').eq('collection_id', col.id);
+    const slug = siteContentSlug(cap.path, cap.label, new Set(((slugRows || []) as any[]).map(r => r.slug)));
+    const now = new Date().toISOString();
+    // Published right away: the value equals what the site already shows, so nothing changes for visitors.
+    const { data: entry, error } = await supabase.from('entries').insert({
+      collection_id: col.id,
+      title: `${pageLabel(cap.path)} · ${cap.label}`,
+      slug,
+      content: captureContent(cap),
+      excerpt: null,
+      status: 'published',
+      published_at: now,
+      author_id: req.profileId,
+      tags: [],
+      meta: { site_anchor: { tag: cap.tag, captured_by: req.user?.email || null, captured_at: now } },
+      featured_image: null,
+    }).select(ENTRY_COLS).single();
+    if (error) throw error;
+
+    audit(req, 'inline_edit_capture', 'entry', entry.id, { page: cap.path, kind: cap.kind, label: cap.label, slug });
+    invalidateCachePattern(`entries:${SITE_CONTENT_SLUG}:*`).catch(() => {});
+    res.status(201).json({ data: { entry: serializeEntry(entry, col, null, 'page'), created: true }, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    logger.error('Inline edit capture failed', { error: err?.message });
     fail(res, 500, 'Internal server error');
   }
 });

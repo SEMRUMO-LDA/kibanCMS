@@ -109,8 +109,8 @@ export function editableFields(fields: FieldDef[] | null | undefined, content: R
 
   if (fields && fields.length > 0) {
     for (const f of fields) {
-      if (!f || !f.id || hiddenKey(f.id)) continue;
-      const label = f.name || f.id;
+      if (!f || !f.id || hiddenKey(f.id) || (f as any).hidden) continue;
+      const label = (f as any).label || f.name || f.id;
       if (TEXT_TYPES.has(f.type)) out.push({ key: `content.${f.id}`, type: 'text', label });
       else if (f.type === 'textarea') out.push({ key: `content.${f.id}`, type: 'textarea', label });
       else if (f.type === 'number') out.push({ key: `content.${f.id}`, type: 'number', label });
@@ -306,4 +306,106 @@ export function pickFallbackCollections(
     budget -= c.count;
   }
   return chosen;
+}
+
+// ── Site content (texts captured on the site with "Editar no site") ───
+// A site whose copy is hard-coded can still be edited: in the editor the
+// admin clicks a text or image and "captures" it. Each capture is an entry of
+// the `site-content` collection: the page path, the value, and an anchor
+// (original text + CSS path) the widgets loader uses to find the element
+// again and swap in the current value for every visitor.
+export const SITE_CONTENT_SLUG = 'site-content';
+export const SITE_CONTENT_NAME = 'Conteúdo do site';
+export const MAX_SITE_CONTENT_PER_PAGE = 200;
+export const MAX_SELECTOR_LENGTH = 500;
+export const MAX_LABEL_LENGTH = 80;
+
+/** Schema of the `site-content` collection (created on the first capture). `hidden` keeps anchors out of the site editor. */
+export const SITE_CONTENT_FIELDS: Array<Record<string, any>> = [
+  { id: 'page', name: 'page', label: 'Página', type: 'text', hidden: true, helpText: 'Caminho da página onde aparece (técnico)' },
+  { id: 'kind', name: 'kind', label: 'Tipo', type: 'select', hidden: true, options: [{ label: 'Texto', value: 'text' }, { label: 'Imagem', value: 'image' }] },
+  { id: 'text', name: 'text', label: 'Texto', type: 'text', helpText: 'O que o site mostra. Edite aqui ou no próprio site.' },
+  { id: 'image', name: 'image', label: 'Imagem', type: 'image', helpText: 'Só para capturas de imagem' },
+  { id: 'original', name: 'original', label: 'Âncora: texto original', type: 'textarea', hidden: true, helpText: 'Como estava no site quando foi capturado; é assim que o Kiban encontra o elemento. Só mude se o site mudou.' },
+  { id: 'selector', name: 'selector', label: 'Âncora: posição na página', type: 'text', hidden: true, helpText: 'Caminho CSS do elemento (técnico)' },
+];
+
+/** "/sobre/" → "/sobre"; full URLs, query strings and fragments are reduced to the path. */
+export function normalizePagePath(input: unknown): string {
+  let p = String(input ?? '/').trim();
+  if (/^https?:\/\//i.test(p)) { try { p = new URL(p).pathname; } catch { p = '/'; } }
+  p = p.split('?')[0].split('#')[0];
+  if (!p.startsWith('/')) p = '/' + p;
+  p = p.replace(/\/{2,}/g, '/');
+  if (p.length > 1) p = p.replace(/\/+$/, '');
+  return p.slice(0, 500) || '/';
+}
+
+export function slugifyText(s: string, max = 60): string {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
+}
+
+/** "/" → "Home", "/sobre" → "Sobre", "/equipa/ana-silva" → "Equipa / Ana silva" */
+export function pageLabel(path: string): string {
+  const segs = normalizePagePath(path).split('/').filter(Boolean);
+  if (!segs.length) return 'Home';
+  return segs.map(s => {
+    let t = s;
+    try { t = decodeURIComponent(s); } catch { /* keep raw */ }
+    t = t.replace(/[-_]+/g, ' ').trim();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }).join(' / ');
+}
+
+export function siteContentSlug(path: string, label: string, taken: Set<string>): string {
+  const base = `${slugifyText(pageLabel(path), 40) || 'home'}-${slugifyText(label, 40) || 'texto'}`;
+  let slug = base;
+  let n = 2;
+  while (taken.has(slug)) slug = `${base}-${n++}`;
+  return slug;
+}
+
+const LABEL_BY_TAG: Record<string, string> = {
+  h1: 'Título', h2: 'Subtítulo', h3: 'Subtítulo', h4: 'Subtítulo', p: 'Parágrafo', a: 'Botão', button: 'Botão',
+  li: 'Item', img: 'Imagem', figcaption: 'Legenda', blockquote: 'Citação',
+};
+/** Name proposed to the admin for a capture: "Título – Clínica de Saúde &" */
+export function suggestedLabel(tag: string, text: string): string {
+  const kind = LABEL_BY_TAG[String(tag || '').toLowerCase()] || 'Texto';
+  const words = sanitizeText(text).split(' ').filter(Boolean).slice(0, 4).join(' ');
+  return (kind === 'Imagem' || !words) ? kind : `${kind} – ${words}`.slice(0, MAX_LABEL_LENGTH);
+}
+
+export interface SiteContentCapture { path: string; kind: 'text' | 'image'; label: string; tag: string; selector: string; original: string; }
+
+/** Validates what the overlay sends when the admin captures an element; throws user-facing errors. */
+export function normalizeCapture(body: unknown): SiteContentCapture {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const kind = b.kind === 'image' ? 'image' : b.kind === 'text' ? 'text' : null;
+  if (!kind) throw new Error('kind must be "text" or "image"');
+  const path = normalizePagePath(b.path);
+  const tag = String(b.tag || '').toLowerCase().slice(0, 16);
+  if (tag && !/^[a-z][a-z0-9-]*$/.test(tag)) throw new Error('Invalid tag');
+  const selector = String(b.selector || '').trim();
+  // A CSS path ("main > h1:nth-of-type(1)", "#hero"): no markup, no line breaks
+  if (selector.length > MAX_SELECTOR_LENGTH || /[<{}\r\n]/.test(selector)) throw new Error('Invalid selector');
+  let original: string;
+  if (kind === 'image') {
+    if (!isSafeImageUrl(b.original)) throw new Error('A imagem tem de ser um URL http(s)');
+    original = String(b.original).slice(0, 2048);
+  } else {
+    original = sanitizeText(b.original);
+    if (!original) throw new Error('O elemento não tem texto');
+    if (original.length < 2) throw new Error('Texto demasiado curto para ser reconhecido');
+  }
+  const label = sanitizeText(b.label).slice(0, MAX_LABEL_LENGTH) || suggestedLabel(tag, kind === 'text' ? original : '');
+  return { path, kind, label, tag, selector, original };
+}
+
+/** Content of the entry created for a capture: the value starts equal to the original, so nothing changes on the site. */
+export function captureContent(c: SiteContentCapture): Record<string, any> {
+  return c.kind === 'image'
+    ? { page: c.path, kind: 'image', image: c.original, original: c.original, selector: c.selector }
+    : { page: c.path, kind: 'text', text: c.original, original: c.original, selector: c.selector };
 }

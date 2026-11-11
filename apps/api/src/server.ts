@@ -33,6 +33,7 @@ import {
   buildBootstrap, WIDGET_STATIC_DIR, WIDGETS_VERSION,
   getEnabledWidgets, getClusterConfig, getAddonConfig, getWhatsAppConfig, DEFAULT_CLUSTER_CONFIG,
 } from './lib/widgets-bootstrap.js';
+import { siteContentForPage } from './lib/site-content.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter, { newsletterConfirmHandler, newsletterUnsubscribeLinkHandler } from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
@@ -420,6 +421,19 @@ app.get('/api/v1/widgets/bootstrap', validateApiKey, async (req, res) => {
   } catch (err: any) {
     logger.error('Widgets bootstrap failed', { error: err.message });
     res.status(500).json({ error: { message: 'Failed to load widgets configuration', status: 500 } });
+  }
+});
+// Texts/images captured with "Editar no site": the loader swaps the current
+// values into the page for every visitor (lib/site-content.ts). Empty when
+// the feature is off for the site.
+app.get('/api/v1/widgets/site-content', validateApiKey, async (req, res) => {
+  try {
+    const data = await siteContentForPage(req.query.path);
+    res.setHeader('Cache-Control', 'private, max-age=60'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    logger.error('Widgets site-content failed', { error: err.message });
+    res.status(500).json({ error: { message: 'Failed to load site content', status: 500 } });
   }
 });
 app.get('/api/v1/widgets/version', (_req, res) => {

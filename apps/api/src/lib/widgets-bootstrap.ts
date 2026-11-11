@@ -17,6 +17,7 @@ import { supabase } from './supabase.js';
 import { logger } from './logger.js';
 import { loadSeoConfig } from '../routes/seo.js';
 import { publicI18nLanguages, publicI18nWidget } from '../routes/i18n.js';
+import { siteContentEnabled } from './site-content.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dev: src/lib → src/static · prod: dist/lib → /app/apps/api/static (copied by the Dockerfile)
@@ -117,6 +118,8 @@ export interface WidgetsBootstrap {
     'whatsapp-widget': Record<string, any>;
     i18n: { widget: Record<string, any>; languages: Record<string, any> | null };
   };
+  /** Texts captured with "Editar no site": when enabled the loader asks /widgets/site-content for the page. */
+  siteContent: { enabled: boolean };
 }
 
 async function guarded<T>(label: string, fallback: T, fn: () => Promise<T>): Promise<T> {
@@ -129,7 +132,7 @@ async function guarded<T>(label: string, fallback: T, fn: () => Promise<T>): Pro
 }
 
 export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap> {
-  const [enabled, cluster, seo, cookie, a11y, whatsapp, i18nWidget, i18nLanguages] = await Promise.all([
+  const [enabled, cluster, seo, cookie, a11y, whatsapp, i18nWidget, i18nLanguages, siteContent] = await Promise.all([
     guarded('enabled', [] as string[], getEnabledWidgets),
     guarded('cluster', DEFAULT_CLUSTER_CONFIG, getClusterConfig),
     guarded('seo', { analytics: {} } as any, loadSeoConfig),
@@ -138,6 +141,7 @@ export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap>
     guarded('whatsapp-widget', { enabled: false }, getWhatsAppConfig),
     guarded('i18n-widget', { enabled: false }, () => publicI18nWidget(baseUrl)),
     guarded('i18n-languages', null as Record<string, any> | null, publicI18nLanguages),
+    guarded('site-content', false, siteContentEnabled),
   ]);
   return {
     version: WIDGETS_VERSION,
@@ -150,5 +154,6 @@ export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap>
       'whatsapp-widget': whatsapp,
       i18n: { widget: i18nWidget, languages: i18nLanguages },
     },
+    siteContent: { enabled: siteContent },
   };
 }

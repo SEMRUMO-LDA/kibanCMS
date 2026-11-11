@@ -6,6 +6,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { pickFallbackCollections, MAX_FALLBACK_ENTRIES, MAX_FALLBACK_PER_COLLECTION } from '../lib/inline-edit.js';
 import {
+  normalizePagePath, pageLabel, siteContentSlug, normalizeCapture, captureContent, suggestedLabel, SITE_CONTENT_FIELDS,
+} from '../lib/inline-edit.js';
+import {
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
   normalizeChanges, applyChanges, mergePending, currentValue, sanitizeText,
 } from '../lib/inline-edit.js';
@@ -164,5 +167,45 @@ describe('pickFallbackCollections', () => {
     assert.deepEqual(pickFallbackCollections([{ id: 'a', count: 80 }, { id: 'b', count: 90 }, { id: 'c', count: 100 }], 100, 200), ['a', 'b']);
     assert.deepEqual(pickFallbackCollections([{ id: 'a', count: 101 }], 100, 300), []);
     assert.ok(MAX_FALLBACK_PER_COLLECTION <= MAX_FALLBACK_ENTRIES);
+  });
+});
+
+describe('site content capture', () => {
+  it('normalises page paths', () => {
+    assert.equal(normalizePagePath(''), '/');
+    assert.equal(normalizePagePath('/sobre/'), '/sobre');
+    assert.equal(normalizePagePath('https://www.hakura.pt/equipa?x=1#y'), '/equipa');
+    assert.equal(normalizePagePath('sobre//nos'), '/sobre/nos');
+  });
+
+  it('labels pages and builds unique slugs', () => {
+    assert.equal(pageLabel('/'), 'Home');
+    assert.equal(pageLabel('/equipa/ana-silva'), 'Equipa / Ana silva');
+    assert.equal(siteContentSlug('/', 'Título', new Set(['home-titulo'])), 'home-titulo-2');
+    assert.equal(siteContentSlug('/sobre', 'Parágrafo – Do alívio da dor', new Set()), 'sobre-paragrafo-do-alivio-da-dor');
+  });
+
+  it('validates a capture and seeds the entry with the original value', () => {
+    const c = normalizeCapture({ path: '/', kind: 'text', tag: 'H1', selector: 'main > h1:nth-of-type(1)', original: '  Clínica de <b>Saúde</b> & Bem-estar ' });
+    assert.equal(c.original, 'Clínica de Saúde & Bem-estar');
+    assert.equal(c.label, 'Título – Clínica de Saúde &');
+    assert.deepEqual(captureContent(c), { page: '/', kind: 'text', text: c.original, original: c.original, selector: 'main > h1:nth-of-type(1)' });
+    assert.equal(suggestedLabel('img', ''), 'Imagem');
+
+    const img = normalizeCapture({ path: '/sobre/', kind: 'image', tag: 'img', selector: '#hero', original: 'https://x.pt/a.jpg', label: 'Hero' });
+    assert.equal(img.path, '/sobre');
+    assert.equal(captureContent(img).image, 'https://x.pt/a.jpg');
+
+    assert.throws(() => normalizeCapture({ kind: 'text', original: '' }), /texto/);
+    assert.throws(() => normalizeCapture({ kind: 'image', original: 'javascript:alert(1)' }), /http/);
+    assert.throws(() => normalizeCapture({ kind: 'text', original: 'ok ok', selector: '<img onerror=x>' }), /selector/i);
+    assert.throws(() => normalizeCapture({ kind: 'video' }), /kind/);
+  });
+
+  it('keeps the anchor fields out of the site editor', () => {
+    const keys = editableFields(SITE_CONTENT_FIELDS as any, {}).map(f => f.key);
+    assert.ok(keys.includes('content.text') && keys.includes('content.image'));
+    for (const hidden of ['content.original', 'content.selector', 'content.page', 'content.kind']) assert.ok(!keys.includes(hidden), hidden);
+    assert.equal(editableFields(SITE_CONTENT_FIELDS as any, {}).find(f => f.key === 'content.text')?.label, 'Texto');
   });
 });
