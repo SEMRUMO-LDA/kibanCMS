@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { pickFallbackCollections, MAX_FALLBACK_ENTRIES, MAX_FALLBACK_PER_COLLECTION } from '../lib/inline-edit.js';
 import {
   normalizePagePath, pageLabel, siteContentSlug, normalizeCapture, captureContent, suggestedLabel, SITE_CONTENT_FIELDS,
+  ALL_PAGES, normalizeNote, noteTitle, SITE_NOTES_SLUG,
 } from '../lib/inline-edit.js';
 import {
   parseMode, roleAllowed, saveModeFor, isEditableCollection, parsePath, editableFields,
@@ -200,6 +201,24 @@ describe('site content capture', () => {
     assert.throws(() => normalizeCapture({ kind: 'image', original: 'javascript:alert(1)' }), /http/);
     assert.throws(() => normalizeCapture({ kind: 'text', original: 'ok ok', selector: '<img onerror=x>' }), /selector/i);
     assert.throws(() => normalizeCapture({ kind: 'video' }), /kind/);
+  });
+
+  it('captures for every page when the scope is the whole site', () => {
+    const c = normalizeCapture({ path: '/sobre', scope: 'site', kind: 'text', tag: 'p', selector: 'body > footer:nth-of-type(1) > p:nth-of-type(1)', original: 'Rua das Flores 12, Albufeira' });
+    assert.equal(c.path, ALL_PAGES);
+    assert.equal(pageLabel(ALL_PAGES), 'Todas as páginas');
+    assert.equal(siteContentSlug(ALL_PAGES, 'Morada', new Set()), 'todas-as-paginas-morada');
+    assert.equal(normalizeCapture({ path: '/sobre', scope: 'page', kind: 'text', original: 'Olá mundo' }).path, '/sobre');
+  });
+
+  it('validates notes left on the site', () => {
+    const n = normalizeNote({ page: 'https://www.hakura.pt/equipa/', text: '  Trocar esta <b>foto</b> por uma mais recente ', selector: '#team > img:nth-of-type(2)', anchor_text: 'Ana   Silva', x: '33.333', y: 120 });
+    assert.deepEqual(n, { page: '/equipa', text: 'Trocar esta foto por uma mais recente', selector: '#team > img:nth-of-type(2)', anchor_text: 'Ana Silva', x: 33.3, y: 100 });
+    assert.equal(normalizeNote({ text: 'ok', x: 'abc' }).x, null);
+    assert.throws(() => normalizeNote({ text: '   ' }), /nota/i);
+    assert.throws(() => normalizeNote({ text: 'ok', selector: '<script>' }), /selector/i);
+    assert.equal(noteTitle('a'.repeat(100)).length, 70);
+    assert.equal(isEditableCollection(SITE_NOTES_SLUG), false); // private: never editable or public
   });
 
   it('keeps the anchor fields out of the site editor', () => {

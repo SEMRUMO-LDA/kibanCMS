@@ -346,8 +346,12 @@ export function slugifyText(s: string, max = 60): string {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
 }
 
-/** "/" → "Home", "/sobre" → "Sobre", "/equipa/ana-silva" → "Equipa / Ana silva" */
+/** Captures with this page apply on every page of the site (header, footer, contact line…). */
+export const ALL_PAGES = '*';
+
+/** "/" → "Home", "/sobre" → "Sobre", "/equipa/ana-silva" → "Equipa / Ana silva", "*" → "Todas as páginas" */
 export function pageLabel(path: string): string {
+  if (path === ALL_PAGES) return 'Todas as páginas';
   const segs = normalizePagePath(path).split('/').filter(Boolean);
   if (!segs.length) return 'Home';
   return segs.map(s => {
@@ -384,7 +388,8 @@ export function normalizeCapture(body: unknown): SiteContentCapture {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const kind = b.kind === 'image' ? 'image' : b.kind === 'text' ? 'text' : null;
   if (!kind) throw new Error('kind must be "text" or "image"');
-  const path = normalizePagePath(b.path);
+  // scope "site": the same element exists on every page (footer, header) → one entry for all of them
+  const path = b.scope === 'site' ? ALL_PAGES : normalizePagePath(b.path);
   const tag = String(b.tag || '').toLowerCase().slice(0, 16);
   if (tag && !/^[a-z][a-z0-9-]*$/.test(tag)) throw new Error('Invalid tag');
   const selector = String(b.selector || '').trim();
@@ -408,4 +413,57 @@ export function captureContent(c: SiteContentCapture): Record<string, any> {
   return c.kind === 'image'
     ? { page: c.path, kind: 'image', image: c.original, original: c.original, selector: c.selector }
     : { page: c.path, kind: 'text', text: c.original, original: c.original, selector: c.selector };
+}
+
+// ── Site notes ("Nota": feedback pinned on the live site) ────────────
+// A client clicks a spot on the site and writes "change this photo"; the
+// agency sees it in the admin (and by email) with the page and the exact
+// place. Private collection: never served through the public API.
+export const SITE_NOTES_SLUG = 'site-notes';
+export const SITE_NOTES_NAME = 'Notas do site';
+export const MAX_NOTE_LENGTH = 2000;
+export const MAX_OPEN_NOTES_PER_PAGE = 100;
+
+export const SITE_NOTES_FIELDS: Array<Record<string, any>> = [
+  { id: 'text', name: 'text', label: 'Nota', type: 'textarea', required: true },
+  { id: 'status', name: 'status', label: 'Estado', type: 'select', options: [{ label: 'Aberta', value: 'open' }, { label: 'Concluída', value: 'done' }], defaultValue: 'open' },
+  { id: 'page', name: 'page', label: 'Página', type: 'text', helpText: 'Caminho da página onde a nota foi deixada' },
+  { id: 'anchor_text', name: 'anchor_text', label: 'Texto junto à nota', type: 'text' },
+  { id: 'by', name: 'by', label: 'Autor', type: 'text' },
+  { id: 'selector', name: 'selector', label: 'Posição na página (técnico)', type: 'text' },
+  { id: 'x', name: 'x', label: 'X (% do elemento)', type: 'number' },
+  { id: 'y', name: 'y', label: 'Y (% do elemento)', type: 'number' },
+  { id: 'done_by', name: 'done_by', label: 'Concluída por', type: 'text' },
+  { id: 'done_at', name: 'done_at', label: 'Concluída em', type: 'text' },
+];
+
+export interface SiteNoteInput { page: string; text: string; selector: string; anchor_text: string; x: number | null; y: number | null; }
+
+function percent(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.min(100, Math.max(0, n)) * 10) / 10;
+}
+
+/** Validates a note left on the site; throws user-facing errors. */
+export function normalizeNote(body: unknown): SiteNoteInput {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const text = sanitizeText(b.text).slice(0, MAX_NOTE_LENGTH);
+  if (!text) throw new Error('Escreva a nota antes de enviar');
+  const selector = String(b.selector || '').trim();
+  if (selector.length > MAX_SELECTOR_LENGTH || /[<{}\r\n]/.test(selector)) throw new Error('Invalid selector');
+  return {
+    page: normalizePagePath(b.page),
+    text,
+    selector,
+    anchor_text: sanitizeText(b.anchor_text).replace(/\s+/g, ' ').slice(0, 200),
+    x: percent(b.x),
+    y: percent(b.y),
+  };
+}
+
+/** Entry title: the first words of the note. */
+export function noteTitle(text: string): string {
+  const one = text.replace(/\s+/g, ' ').trim();
+  return one.length > 70 ? one.slice(0, 69) + '…' : one;
 }

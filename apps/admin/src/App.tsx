@@ -26,6 +26,7 @@ import { AffiliatesManager } from './pages/AffiliatesManager';
 import { AffiliateDetail } from './pages/AffiliateDetail';
 import { CommissionReport } from './pages/CommissionReport';
 import { TrashManager } from './pages/TrashManager';
+import { SiteNotes } from './pages/SiteNotes';
 import { I18nManager } from './pages/I18nManager';
 import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
 import { AccessibilitySettings } from './pages/AccessibilitySettings';
@@ -121,6 +122,7 @@ const AppContent = () => {
         <Route path="affiliates/report" element={<CommissionReport />} />
         <Route path="affiliates/:id" element={<AffiliateDetail />} />
         <Route path="trash" element={<TrashManager />} />
+        <Route path="site-notes" element={<SiteNotes />} />
         <Route path="i18n" element={<I18nManager />} />
         <Route path="settings" element={<Settings />} />
         <Route path="addons/cookie-notice" element={<CookieNoticeSettings />} />

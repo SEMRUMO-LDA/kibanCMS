@@ -29,6 +29,7 @@ import {
   Tag,
   Map,
   MessageSquare,
+  StickyNote,
   type LucideIcon,
 } from 'lucide-react';
 import { colors, spacing, typography, borders, shadows, animations, layout } from '../shared/styles/design-tokens';
@@ -785,9 +786,15 @@ export const DashboardLayout = () => {
           {/* Inbox — daily-use add-on collections. Only rendered when at
               least one is installed, otherwise the section disappears
               completely (no empty header). */}
-          {shortcuts.length > 0 && (
+          {(shortcuts.length > 0 || inlineEditing !== 'off') && (
             <NavSection>
               <NavLabel $collapsed={collapsed}>Inbox</NavLabel>
+              {inlineEditing !== 'off' && (
+                <NavItem $active={location.pathname === '/site-notes'} $collapsed={collapsed} onClick={() => handleNavigation('/site-notes')} role="button" tabIndex={0} title={collapsed ? 'Notas do site' : undefined}>
+                  <StickyNote size={20} />
+                  <span>Notas do site</span>
+                </NavItem>
+              )}
               {shortcuts.map(s => {
                 const Icon = s.icon;
                 const path = `/content/${s.slug}`;

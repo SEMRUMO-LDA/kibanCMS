@@ -301,6 +301,36 @@ export function newsletterAdminNotificationTemplate(
   };
 }
 
+// ── Site note (feedback pinned on the live site, to the operator) ──
+
+export function siteNoteNotificationTemplate(
+  note: { text: string; page: string; anchor_text?: string; by?: string },
+  pageUrl: string,
+  adminUrl: string,
+  siteName: string,
+): { subject: string; html: string } {
+  const row = (label: string, value: string, last = false) => `
+      <tr>
+        <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#888;width:110px;${last ? '' : 'border-bottom:1px solid #f5f5f5;'}">${label}</td>
+        <td style="padding:8px 12px;font-size:14px;color:#2c2c2c;${last ? '' : 'border-bottom:1px solid #f5f5f5;'}">${value}</td>
+      </tr>`;
+  const body = `
+    <p style="margin:0 0 16px;font-size:15px;color:#2c2c2c;"><strong>Nova nota no site</strong></p>
+    <blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #06b6d4;background:#f8fafc;font-size:15px;color:#1a1a1a;white-space:pre-wrap;">${escapeHtml(note.text)}</blockquote>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #eee;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      ${row('Página', `<a href="${escapeHtml(pageUrl)}" style="color:#0e7490;">${escapeHtml(note.page)}</a>`)}
+      ${note.anchor_text ? row('Junto a', escapeHtml(note.anchor_text)) : ''}
+      ${note.by ? row('Autor', escapeHtml(note.by)) : ''}
+      ${row('Data', new Date().toLocaleString('pt-PT'), true)}
+    </table>
+    <p style="margin:0;"><a href="${escapeHtml(adminUrl)}" style="display:inline-block;padding:10px 18px;background:#0f172a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Ver notas no Kiban</a></p>
+  `;
+  return {
+    subject: `Nota no site — ${note.page}: ${note.text.replace(/\s+/g, ' ').slice(0, 60)}${note.text.length > 60 ? '…' : ''}`,
+    html: layout(body, siteName),
+  };
+}
+
 // ── Payment Receipt (to customer) ──
 
 export function paymentReceiptTemplate(

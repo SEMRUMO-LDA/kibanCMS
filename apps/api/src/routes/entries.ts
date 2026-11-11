@@ -30,6 +30,7 @@ export const PRIVATE_COLLECTIONS = new Set([
   'coupons', 'coupon-redemptions',
   'affiliates', 'commission-ledger',
   'automations', 'post-tour-reviews',
+  'site-notes', // feedback left on the live site ("Nota"): internal, never public
 ]);
 
 export const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails|credential|webhook_?url|dsn|smtp|service_?role)/i;

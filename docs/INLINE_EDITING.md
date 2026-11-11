@@ -119,6 +119,30 @@ elements with `data-kiban="site-content/<entry-slug>/text"` (or `/image`), or
 fetch the entries from the API at build time; the runtime swap then has
 nothing to do.
 
+### Site-wide texts (header, footer, contacts)
+
+When capturing, choose **Em todas as páginas**: the entry is stored with page
+`*` and the loader applies it on every page (after that page's own
+captures). The editor finds it on any page by its original text. Use it for
+the footer line, the phone number, the opening hours.
+
+## Notes on the site ("Nota")
+
+Feedback without screenshots: in the editor bar press **Nota**, click the
+spot (any element, orange dashed outline) and write what should change.
+Kiban stores it in the private **Notas do site** collection (never public),
+emails the operator's notification inbox (the same recipients as form
+notifications, reply-to the author), and shows a numbered pin on the spot
+for whoever opens the editor next. Click a pin to read it or mark it done.
+
+In the admin, **Inbox → Notas do site** lists them with the page and the
+nearby text; "Abrir no site" opens the page in the editor with the pin
+visible; "Concluída" closes it (reopen possible). Anchors: CSS path plus
+offset inside the element; when the element no longer exists the pin is
+parked at the bottom-left corner with a grey colour. Up to 100 open notes
+per page. Audit actions: `site_note_create`, `site_note_done`,
+`site_note_reopen`.
+
 ## Approval (beta mode)
 
 Pending changes live in the entry's `meta.inline_pending` (field, new value,
@@ -169,8 +193,14 @@ POST  /api/v1/inline-edit/media                    X-Kiban-Edit, multipart "file
       → { id, url }
 
 POST  /api/v1/inline-edit/site-content             X-Kiban-Edit (admins)
-      body { path, kind: 'text'|'image', label?, tag, selector, original }
+      body { path, scope?: 'page'|'site', kind: 'text'|'image', label?, tag, selector, original }
       → { entry, created }                         (idempotent per page + original)
+
+POST  /api/v1/inline-edit/notes                    X-Kiban-Edit
+      body { page, text, selector?, anchor_text?, x?, y? }
+      → { id, page, text, status, selector, anchor_text, x, y, by, at }   (201; emails the operator)
+PATCH /api/v1/inline-edit/notes/:id                X-Kiban-Edit   body { status: 'open'|'done' }
+GET   /api/v1/inline-edit/resolve                  … also returns notes[] (open notes of the page)
 
 GET   /api/v1/widgets/site-content?path=           API key (the loader, every page view)
       → { path, items: [{ id, slug, kind, selector, original, value }] }

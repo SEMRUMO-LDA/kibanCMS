@@ -26,6 +26,7 @@ import {
   paymentAdminNotificationTemplate,
   postTourReviewTemplate,
   bookingReminderTemplate,
+  siteNoteNotificationTemplate,
 } from './email-templates.js';
 
 // ── Types ──
@@ -328,6 +329,18 @@ export async function sendNewsletterAdminNotification(
   const { subject, html } = newsletterAdminNotificationTemplate(email, source, config.defaultFromName);
 
   await sendEmail({ to: config.notificationEmails, subject, html });
+}
+
+/** A note was pinned on the live site ("Nota" in the editor): tell the operator's inbox. */
+export async function sendSiteNoteNotification(
+  note: { text: string; page: string; anchor_text?: string; by?: string },
+  pageUrl: string,
+  adminUrl: string,
+): Promise<void> {
+  const config = await getEmailConfig();
+  if (!config || config.notificationEmails.length === 0) return;
+  const { subject, html } = siteNoteNotificationTemplate(note, pageUrl, adminUrl, config.defaultFromName);
+  await sendEmail({ to: config.notificationEmails, subject, html, replyTo: note.by || undefined });
 }
 
 /**
