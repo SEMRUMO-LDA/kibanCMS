@@ -34,6 +34,7 @@ import {
   getEnabledWidgets, getClusterConfig, getAddonConfig, getWhatsAppConfig, DEFAULT_CLUSTER_CONFIG,
 } from './lib/widgets-bootstrap.js';
 import { siteContentForPage } from './lib/site-content.js';
+import { getPopupsConfig } from './lib/popups.js';
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter, { newsletterConfirmHandler, newsletterUnsubscribeLinkHandler } from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
@@ -167,7 +168,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 // Widget boot traffic (8 small GETs per page view, shared by every visitor
 // behind one NAT) and signature-verified webhooks get their own buckets so
 // they neither starve nor get starved by the general one.
-const WIDGET_BOOT_RE = /^\/api\/v1\/(widgets\/|seo(?:\?|$)|(?:cookie-notice|accessibility|whatsapp-widget)\/(?:config|widget\.js)|i18n\/(?:widget(?:\.js)?|languages)(?:\?|$))/;
+const WIDGET_BOOT_RE = /^\/api\/v1\/(widgets\/|seo(?:\?|$)|(?:cookie-notice|accessibility|whatsapp-widget|popups)\/(?:config|widget\.js)|i18n\/(?:widget(?:\.js)?|languages)(?:\?|$))/;
 const WEBHOOK_RE = /^\/api\/v1\/(payments|channel-manager)\/webhook/;
 // Inline editing: one resolve per page plus one save per edit — its own bucket (below)
 const INLINE_EDIT_RE = /^\/api\/v1\/inline-edit\//;
@@ -495,6 +496,18 @@ app.get('/api/v1/whatsapp-widget/config', validateApiKey, async (_req, res) => {
     res.json({ data: await getWhatsAppConfig(), timestamp: new Date().toISOString() });
   } catch {
     res.json({ data: { enabled: false }, timestamp: new Date().toISOString() });
+  }
+});
+
+// Popups & announcement bars (add-on "Popups") — static widget + its config
+// (the bootstrap already carries the config; this is the widget's fallback)
+app.get('/api/v1/popups/widget.js', (req, res) => sendWidgetScript(req, res, 'popups-widget.js'));
+app.get('/api/v1/popups/config', validateApiKey, async (_req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.json({ data: await getPopupsConfig(), timestamp: new Date().toISOString() });
+  } catch {
+    res.json({ data: { items: [], turnstileSiteKey: '' }, timestamp: new Date().toISOString() });
   }
 });
 

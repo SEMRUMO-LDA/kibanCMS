@@ -1015,11 +1015,91 @@ const channelManager: AddonDefinition = {
 // REGISTRY
 // ============================================
 
+// ============================================
+// POPUPS & ANNOUNCEMENT BARS ADD-ON
+// ============================================
+
+const popups: AddonDefinition = {
+  id: 'popups',
+  name: 'Popups e barras de anúncio',
+  description: 'Promoções, avisos e inscrições na newsletter em barra ou popup, sem tocar no site',
+  longDescription: 'Crie uma barra de anúncio ou um popup a partir do admin: texto, botão (ligação, WhatsApp, código de desconto, inscrição na newsletter), em que páginas aparece, quando (ao abrir, após alguns segundos, ao descer a página, ao tentar sair) e com que frequência por visitante. Datas de início e fim para campanhas. O script dos widgets do Kiban mostra-o no site; nada a instalar no site. Sem cookies de rastreio: a frequência fica guardada no browser do visitante.',
+  icon: 'sparkles',
+  color: '#F59E0B',
+  category: 'marketing',
+  version: '1.0.0',
+  author: 'kibanCMS',
+  collections: [
+    {
+      name: 'Popups',
+      slug: 'popups',
+      description: 'Barras de anúncio e popups mostrados no site pelo script dos widgets. Uma entrada por campanha; só as publicadas e activas aparecem.',
+      type: 'custom',
+      fields: [
+        { id: 'name', name: 'name', label: 'Nome interno', type: 'text', required: true, placeholder: 'Promoção de Natal', helpText: 'Só para si; não aparece no site' },
+        { id: 'enabled', name: 'enabled', label: 'Activo', type: 'boolean', defaultValue: true, helpText: 'Desligue para pausar sem apagar' },
+        { id: 'kind', name: 'kind', label: 'Formato', type: 'select', required: true, defaultValue: 'bar', options: [
+          { label: 'Barra de anúncio (topo ou fundo da página)', value: 'bar' },
+          { label: 'Popup (janela ao centro)', value: 'popup' },
+        ]},
+        { id: 'position', name: 'position', label: 'Posição da barra', type: 'select', defaultValue: 'top', options: [
+          { label: 'Topo', value: 'top' },
+          { label: 'Fundo', value: 'bottom' },
+        ], helpText: 'Só para barras. No topo pode sobrepor cabeçalhos fixos: nesses sites use o fundo.' },
+
+        { id: 'title', name: 'title', label: 'Título', type: 'text', placeholder: 'Promoção de Natal', helpText: 'Popup: título grande. Barra: texto a negrito.' },
+        { id: 'text', name: 'text', label: 'Texto', type: 'textarea', placeholder: '20% de desconto em massagens até 25 de dezembro.' },
+        { id: 'image', name: 'image', label: 'Imagem (só popup)', type: 'image', helpText: 'Opcional, aparece no topo do popup' },
+
+        { id: 'button_label', name: 'button_label', label: 'Texto do botão', type: 'text', placeholder: 'Marcar agora' },
+        { id: 'button_action', name: 'button_action', label: 'Acção do botão', type: 'select', defaultValue: 'link', options: [
+          { label: 'Abrir uma ligação', value: 'link' },
+          { label: 'Abrir conversa no WhatsApp', value: 'whatsapp' },
+          { label: 'Inscrição na newsletter (formulário no popup)', value: 'newsletter' },
+          { label: 'Mostrar um código de desconto', value: 'coupon' },
+          { label: 'Só fechar', value: 'close' },
+        ]},
+        { id: 'button_url', name: 'button_url', label: 'Ligação', type: 'url', placeholder: 'https://… ou /marcar', helpText: 'Para a acção "Abrir uma ligação"' },
+        { id: 'whatsapp_number', name: 'whatsapp_number', label: 'Número WhatsApp', type: 'text', placeholder: '+351912345678', helpText: 'Para a acção WhatsApp, formato internacional' },
+        { id: 'whatsapp_message', name: 'whatsapp_message', label: 'Mensagem WhatsApp', type: 'text', placeholder: 'Olá! Vi a promoção no site…' },
+        { id: 'coupon_code', name: 'coupon_code', label: 'Código de desconto', type: 'text', placeholder: 'NATAL20', helpText: 'Crie o cupão no add-on Cupões; aqui só se mostra o código com botão "Copiar"' },
+        { id: 'newsletter_source', name: 'newsletter_source', label: 'Origem (newsletter)', type: 'text', placeholder: 'popup-natal', helpText: 'Etiqueta guardada com cada inscrição vinda deste popup' },
+        { id: 'consent_text', name: 'consent_text', label: 'Consentimento (newsletter)', type: 'text', placeholder: 'Aceito receber novidades por email', helpText: 'Texto da caixa que o visitante tem de marcar (RGPD). Vazio = sem caixa.' },
+
+        { id: 'pages', name: 'pages', label: 'Páginas', type: 'text', placeholder: '/, /tours/*', helpText: 'Vazio = todas. Separe por vírgulas. "/tours/*" apanha tudo debaixo de /tours.' },
+        { id: 'trigger', name: 'trigger', label: 'Quando aparece', type: 'select', defaultValue: 'delay', options: [
+          { label: 'Ao abrir a página', value: 'immediate' },
+          { label: 'Após alguns segundos', value: 'delay' },
+          { label: 'Ao descer a página (percentagem)', value: 'scroll' },
+          { label: 'Ao tentar sair (desktop; no telemóvel após 8 s)', value: 'exit' },
+        ]},
+        { id: 'trigger_value', name: 'trigger_value', label: 'Segundos (atraso) ou % (descer)', type: 'number', placeholder: '5' },
+        { id: 'frequency', name: 'frequency', label: 'Frequência por visitante', type: 'select', defaultValue: 'session', options: [
+          { label: 'Sempre', value: 'always' },
+          { label: 'Uma vez por visita', value: 'session' },
+          { label: 'Uma vez a cada N dias', value: 'days' },
+        ]},
+        { id: 'frequency_days', name: 'frequency_days', label: 'N dias', type: 'number', placeholder: '7' },
+        { id: 'start_at', name: 'start_at', label: 'Início', type: 'date', helpText: 'Vazio = já' },
+        { id: 'end_at', name: 'end_at', label: 'Fim', type: 'date', helpText: 'Vazio = sem fim. Inclui o dia todo.' },
+
+        { id: 'theme', name: 'theme', label: 'Tema', type: 'select', defaultValue: 'light', options: [
+          { label: 'Claro', value: 'light' },
+          { label: 'Escuro', value: 'dark' },
+        ]},
+        { id: 'accent_color', name: 'accent_color', label: 'Cor do botão', type: 'text', placeholder: '#06b6d4', helpText: 'Hex. Vazio = cor por defeito do tema' },
+        { id: 'priority', name: 'priority', label: 'Prioridade', type: 'number', placeholder: '10', helpText: 'Quando há vários na mesma página mostra-se uma barra e um popup: os de número mais baixo primeiro' },
+      ],
+    },
+  ],
+};
+
 export const ADDONS_REGISTRY: AddonDefinition[] = [
   cookieNotice,
   accessibility,
   widgetCluster,
   newsletter,
+  popups,
   seo,
   forms,
   bookings,
