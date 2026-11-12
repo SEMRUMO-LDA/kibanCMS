@@ -26,6 +26,8 @@ import { hasSoftDelete } from '../lib/soft-delete.js';
 import { invalidateCachePattern } from '../lib/redis.js';
 import { validateContent } from '../lib/validate-content.js';
 import { getSingletonContent } from '../lib/sitemap.js';
+import { invalidateSiteContentCache } from '../lib/site-content.js';
+import { cacheGet, cacheSet } from '../lib/ttl-cache.js';
 import { autoTranslateEntryToAllLanguages, getI18nConfig } from './i18n.js';
 import { redactForPublic } from './entries.js';
 import { mediaUpload, processUpload } from './media.js';
@@ -233,27 +235,40 @@ router.get('/resolve', async (req: EditRequest, res: Response) => {
     // Open notes pinned on this page ("Nota")
     const notes = await loadOpenNotes(normalizePagePath(path), softDelete);
 
+    // data-kiban refs: one query per collection, not one per ref
+    const refsByCol = new Map<string, string[]>();
     for (const ref of refs) {
       const [colSlug, entrySlug] = ref.split('/');
       const col = bySlug.get(colSlug);
       if (!col || !entrySlug || !/^[a-z0-9-]+$/.test(entrySlug)) continue;
       if (entries.some(e => e.collection_id === col.id && e.slug === entrySlug)) continue;
-      let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', col.id).eq('slug', entrySlug).order('status', { ascending: false }).limit(1);
+      const list = refsByCol.get(col.id) || [];
+      if (!list.includes(entrySlug)) list.push(entrySlug);
+      refsByCol.set(col.id, list);
+    }
+    for (const [colId, slugs] of refsByCol) {
+      let q = supabase.from('entries').select(ENTRY_COLS).eq('collection_id', colId).in('slug', slugs)
+        .order('status', { ascending: false }).limit(slugs.length * 2);
       if (softDelete) q = q.is('deleted_at', null);
       const { data } = await q;
-      if (data && data[0]) { entries.push(data[0]); sourceOf.set(data[0].id, 'ref'); }
+      const taken = new Set<string>();
+      for (const e of (data || []) as any[]) {
+        if (taken.has(e.slug) || sourceOf.has(e.id)) continue; // published sorts first: one entry per slug
+        taken.add(e.slug); entries.push(e); sourceOf.set(e.id, 'ref');
+      }
     }
 
     // Lists on a page (team, services, testimonials…) belong to entries the URL
     // never names: send the small editable collections whole and let the overlay
     // match their values by text. Big collections (a blog) stay out.
     if (editableCols.length) {
-      const counts = await Promise.all(editableCols.map(async c => {
+      // One count per editable collection: remembered for a minute per tenant (resolve runs on every navigation)
+      const counts = cacheGet<Array<{ id: string; count: number }>>('inline-edit:counts') || cacheSet('inline-edit:counts', await Promise.all(editableCols.map(async c => {
         let q = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', c.id);
         if (softDelete) q = q.is('deleted_at', null);
         const { count } = await q;
         return { id: c.id as string, count: count || 0 };
-      }));
+      })), 60_000);
       const chosen = pickFallbackCollections(counts);
       if (chosen.length) {
         let q = supabase.from('entries').select(ENTRY_COLS).in('collection_id', chosen)
@@ -358,6 +373,7 @@ router.post('/site-content', async (req: EditRequest, res: Response) => {
 
     audit(req, 'inline_edit_capture', 'entry', entry.id, { page: cap.path, kind: cap.kind, label: cap.label, slug });
     invalidateCachePattern(`entries:${SITE_CONTENT_SLUG}:*`).catch(() => {});
+    invalidateSiteContentCache();
     res.status(201).json({ data: { entry: serializeEntry(entry, col, null, 'page'), created: true }, timestamp: new Date().toISOString() });
   } catch (err: any) {
     logger.error('Inline edit capture failed', { error: err?.message });
@@ -563,8 +579,10 @@ router.patch('/entries/:id', async (req: EditRequest, res: Response) => {
     }
 
     audit(req, 'inline_edit', 'entry', id, { collection: col.slug, fields, lang });
+    if (col.slug === SITE_CONTENT_SLUG) invalidateSiteContentCache();
     invalidateCachePattern(`entries:${col.slug}:*`).catch(() => {});
-    if (saved.status === 'published' && !lang) autoTranslateEntryToAllLanguages(id, col.slug).catch(() => { /* logged inside */ });
+    // Captured site texts are never served from meta.translations: translating them only spends quota
+    if (saved.status === 'published' && !lang && col.slug !== SITE_CONTENT_SLUG) autoTranslateEntryToAllLanguages(id, col.slug).catch(() => { /* logged inside */ });
 
     res.json({ data: { saved: 'live', entry_id: id, version: saved.version }, timestamp: new Date().toISOString() });
   } catch (err: any) {
@@ -661,8 +679,9 @@ export async function applyPendingHandler(req: AuthRequest, res: Response) {
     throw error;
   }
   audit(req, 'inline_edit_apply', 'entry', id, { collection: col.slug, fields: selected.map(p => p.field), count: selected.length });
+  if (col.slug === SITE_CONTENT_SLUG) invalidateSiteContentCache();
   invalidateCachePattern(`entries:${col.slug}:*`).catch(() => {});
-  if (saved.status === 'published') autoTranslateEntryToAllLanguages(id, col.slug).catch(() => { /* logged inside */ });
+  if (saved.status === 'published' && col.slug !== SITE_CONTENT_SLUG) autoTranslateEntryToAllLanguages(id, col.slug).catch(() => { /* logged inside */ });
   res.json({ data: saved, meta: { applied: selected.length, remaining: remaining.length }, timestamp: new Date().toISOString() });
 }
 

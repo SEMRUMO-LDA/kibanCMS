@@ -1,7 +1,7 @@
 name: CI
 
 # Runs on every PR and on pushes to main. Same toolchain as the Dockerfile
-# (Node 22, pnpm 8.14) so a green CI means the Railway build will pass too.
+# (Node 22, pnpm 10.34.9) so a green CI means the Railway build will pass too.
 on:
   pull_request:
   push:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from "packageManager" in package.json (8.14.0)
+      # pnpm version comes from "packageManager" in package.json (10.34.9)
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4

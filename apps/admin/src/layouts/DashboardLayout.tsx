@@ -158,6 +158,11 @@ const NavLabel = styled.div<{ $collapsed?: boolean }>`
   display: ${p => p.$collapsed ? 'none' : 'block'};
 `;
 
+// Sidebar items are divs with role="button": Enter and Space must activate them like a real button
+function navKey(e: { key: string; preventDefault(): void; currentTarget: HTMLElement }) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); }
+}
+
 const NavItem = styled.div<{ $active?: boolean; $collapsed?: boolean }>`
   display: flex;
   align-items: center;
@@ -603,6 +608,9 @@ export const DashboardLayout = () => {
       } catch { /* site-settings not installed yet — fine */ }
     };
     resolveSiteUrl();
+    // Settings → General saves site_url / inline_editing without a reload: refresh on its signal
+    window.addEventListener('kiban:site-settings-saved', resolveSiteUrl);
+    return () => window.removeEventListener('kiban:site-settings-saved', resolveSiteUrl);
   }, []);
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -687,11 +695,11 @@ export const DashboardLayout = () => {
           <img src="/logo.png" alt="kibanCMS" style={{ height: collapsed ? '32px' : '40px', objectFit: 'contain' }} className="logo-icon" />
           <div className="logo-text">
             <h1>kibanCMS</h1>
-            <span className="version">v1.6.0</span>
+            <span className="version">v{__APP_VERSION__}</span>
           </div>
         </LogoSection>
 
-        <SearchHint $collapsed={collapsed} onClick={() => setCommandPaletteOpen(true)}>
+        <SearchHint $collapsed={collapsed} onClick={() => setCommandPaletteOpen(true)} tabIndex={0} role="button" onKeyDown={navKey} aria-label="Search (⌘K)">
           <Search size={16} />
           <span>Search...</span>
           <kbd>⌘K</kbd>
@@ -730,15 +738,15 @@ export const DashboardLayout = () => {
         <Nav>
           <NavSection>
             <NavLabel $collapsed={collapsed}>{t('nav.main')}</NavLabel>
-            <NavItem $active={location.pathname === '/'} $collapsed={collapsed} onClick={() => handleNavigation('/')} role="button" tabIndex={0} title={collapsed ? t('nav.dashboard') : undefined}>
+            <NavItem $active={location.pathname === '/'} $collapsed={collapsed} onClick={() => handleNavigation('/')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.dashboard') : undefined}>
               <LayoutDashboard size={20} />
               <span>{t('nav.dashboard')}</span>
             </NavItem>
-            <NavItem $active={location.pathname === '/content' || location.pathname.startsWith('/content/')} $collapsed={collapsed} onClick={() => handleNavigation('/content')} role="button" tabIndex={0} title={collapsed ? t('nav.content') : undefined}>
+            <NavItem $active={location.pathname === '/content' || location.pathname.startsWith('/content/')} $collapsed={collapsed} onClick={() => handleNavigation('/content')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.content') : undefined}>
               <Files size={20} />
               <span>{t('nav.content')}</span>
             </NavItem>
-            <NavItem $active={location.pathname.startsWith('/media')} $collapsed={collapsed} onClick={() => handleNavigation('/media')} role="button" tabIndex={0} title={collapsed ? t('nav.media') : undefined}>
+            <NavItem $active={location.pathname.startsWith('/media')} $collapsed={collapsed} onClick={() => handleNavigation('/media')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.media') : undefined}>
               <ImageIcon size={20} />
               <span>{t('nav.media')}</span>
             </NavItem>
@@ -764,19 +772,19 @@ export const DashboardLayout = () => {
               );
             })}
             {hasBookings && (
-              <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} title={collapsed ? 'Bookings' : undefined}>
+              <NavItem $active={location.pathname === '/bookings'} $collapsed={collapsed} onClick={() => handleNavigation('/bookings')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? 'Bookings' : undefined}>
                 <CalendarCheck size={20} />
                 <span>Bookings</span>
               </NavItem>
             )}
             {hasOrders && (
-              <NavItem $active={location.pathname === '/orders'} $collapsed={collapsed} onClick={() => handleNavigation('/orders')} role="button" tabIndex={0} title={collapsed ? 'Orders' : undefined}>
+              <NavItem $active={location.pathname === '/orders'} $collapsed={collapsed} onClick={() => handleNavigation('/orders')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? 'Orders' : undefined}>
                 <ShoppingBag size={20} />
                 <span>Orders</span>
               </NavItem>
             )}
             {hasAffiliates && isAdminRole && (
-              <NavItem $active={location.pathname === '/affiliates' || location.pathname.startsWith('/affiliates/')} $collapsed={collapsed} onClick={() => handleNavigation('/affiliates')} role="button" tabIndex={0} title={collapsed ? 'Affiliates' : undefined}>
+              <NavItem $active={location.pathname === '/affiliates' || location.pathname.startsWith('/affiliates/')} $collapsed={collapsed} onClick={() => handleNavigation('/affiliates')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? 'Affiliates' : undefined}>
                 <Handshake size={20} />
                 <span>Affiliates</span>
               </NavItem>
@@ -789,8 +797,8 @@ export const DashboardLayout = () => {
           {(shortcuts.length > 0 || inlineEditing !== 'off') && (
             <NavSection>
               <NavLabel $collapsed={collapsed}>Inbox</NavLabel>
-              {inlineEditing !== 'off' && (
-                <NavItem $active={location.pathname === '/site-notes'} $collapsed={collapsed} onClick={() => handleNavigation('/site-notes')} role="button" tabIndex={0} title={collapsed ? 'Notas do site' : undefined}>
+              {inlineEditing !== 'off' && ['super_admin', 'admin', 'editor'].includes(profile?.role) && (
+                <NavItem $active={location.pathname === '/site-notes'} $collapsed={collapsed} onClick={() => handleNavigation('/site-notes')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? 'Notas do site' : undefined}>
                   <StickyNote size={20} />
                   <span>Notas do site</span>
                 </NavItem>
@@ -820,27 +828,27 @@ export const DashboardLayout = () => {
           <NavSection>
             <NavLabel $collapsed={collapsed}>{t('nav.system')}</NavLabel>
             {isAdminRole && (
-              <NavItem $active={location.pathname.startsWith('/users')} $collapsed={collapsed} onClick={() => handleNavigation('/users')} role="button" tabIndex={0} title={collapsed ? t('nav.users') : undefined}>
+              <NavItem $active={location.pathname.startsWith('/users')} $collapsed={collapsed} onClick={() => handleNavigation('/users')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.users') : undefined}>
                 <Users size={20} /><span>{t('nav.users')}</span>
               </NavItem>
             )}
-            <NavItem $active={location.pathname === '/activity'} $collapsed={collapsed} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0} title={collapsed ? t('nav.activity') : undefined}>
+            <NavItem $active={location.pathname === '/activity'} $collapsed={collapsed} onClick={() => handleNavigation('/activity')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.activity') : undefined}>
               <Activity size={20} /><span>{t('nav.activity')}</span>
             </NavItem>
-            <NavItem $active={location.pathname.startsWith('/addons')} $collapsed={collapsed} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0} title={collapsed ? t('nav.addons') : undefined}>
+            <NavItem $active={location.pathname.startsWith('/addons')} $collapsed={collapsed} onClick={() => handleNavigation('/addons')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? t('nav.addons') : undefined}>
               <Puzzle size={20} /><span>{t('nav.addons')}</span>
             </NavItem>
             {/* Trash hidden until the soft-delete UX is fully wired across
                 all collections + bulk-actions are reviewed. Route remains
                 active at /trash for direct access during testing. */}
-            <NavItem $active={location.pathname.startsWith('/settings')} $collapsed={collapsed} onClick={() => handleNavigation('/settings')} role="button" tabIndex={0} title={collapsed ? 'Settings' : undefined}>
+            <NavItem $active={location.pathname.startsWith('/settings')} $collapsed={collapsed} onClick={() => handleNavigation('/settings')} role="button" tabIndex={0} onKeyDown={navKey} title={collapsed ? 'Settings' : undefined}>
               <Settings size={20} />
               <span>Settings</span>
             </NavItem>
           </NavSection>
         </Nav>
 
-        <CollapseBtn $collapsed={collapsed} onClick={toggleCollapse}>
+        <CollapseBtn $collapsed={collapsed} onClick={toggleCollapse} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={collapsed ? 'Expand sidebar' : undefined}>
           {collapsed ? <ChevronsRight /> : <><ChevronsLeft /><span>Collapse</span></>}
         </CollapseBtn>
 

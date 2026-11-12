@@ -225,7 +225,10 @@ export async function processUpload(
  * Multipart: field name "file", optional fields: alt_text, caption, folder_path, is_public
  * Base64:    JSON body with { file, filename, mime_type, alt_text?, caption?, folder_path?, is_public? }
  */
-router.post('/upload', (req: AuthRequest, res: Response, _next) => {
+import { requireRole } from '../middleware/auth.js';
+
+// Viewers read; everyone with a content role may upload (API keys are already read-only here)
+router.post('/upload', requireRole('super_admin', 'admin', 'editor', 'author'), (req: AuthRequest, res: Response, _next) => {
   // Detect content type to route to multipart or base64 handler
   const contentType = req.headers['content-type'] || '';
   if (contentType.includes('multipart/form-data')) {
@@ -295,7 +298,6 @@ async function handleMultipartUpload(req: AuthRequest, res: Response) {
     res.status(500).json({
       error: {
         message: error.message || 'Upload failed',
-        details: error.details || error.hint || undefined,
         status: 500,
         timestamp: new Date().toISOString(),
       },
@@ -360,7 +362,6 @@ async function handleBase64Upload(req: AuthRequest, res: Response) {
     res.status(500).json({
       error: {
         message: error.message || 'Upload failed',
-        details: error.details || error.hint || undefined,
         status: 500,
         timestamp: new Date().toISOString(),
       },

@@ -4,37 +4,50 @@ import { AuthProvider, useAuth } from './features/auth/hooks/useAuth';
 import { ToastProvider } from './components/Toast';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { I18nProvider } from './lib/i18n';
+// Eager: what every session needs on first paint
 import { Login } from './pages/Login';
-import { Onboarding } from './pages/Onboarding';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Collections } from './pages/Collections';
-import { CollectionBuilder } from './pages/CollectionBuilder';
 import { CollectionEntries } from './pages/CollectionEntries';
-import { EntryEdit } from './pages/EntryEdit';
-import { Media } from './pages/Media';
-import { Users } from './pages/Users';
-import { CollectionEdit } from './pages/CollectionEdit';
 import { Settings } from './pages/Settings';
 import { Addons } from './pages/Addons';
 import { ActivityLog } from './pages/ActivityLog';
 // SiteSettings merged into unified Settings page
-import { Diagnostics } from './pages/Diagnostics';
-import { BookingsManager } from './pages/BookingsManager';
-import { OrdersManager } from './pages/OrdersManager';
-import { AffiliatesManager } from './pages/AffiliatesManager';
-import { AffiliateDetail } from './pages/AffiliateDetail';
-import { CommissionReport } from './pages/CommissionReport';
-import { TrashManager } from './pages/TrashManager';
-import { SiteNotes } from './pages/SiteNotes';
-import { I18nManager } from './pages/I18nManager';
-import { CookieNoticeSettings } from './pages/CookieNoticeSettings';
-import { AccessibilitySettings } from './pages/AccessibilitySettings';
-import { WidgetClusterSettings } from './pages/WidgetClusterSettings';
-import { WhatsAppWidgetSettings } from './pages/WhatsAppWidgetSettings';
-import { PostTourReviewsSettings } from './pages/PostTourReviewsSettings';
-import { NewsletterBrevoSettings } from './pages/NewsletterBrevoSettings';
-import { ChannelManagerSettings } from './pages/ChannelManagerSettings';
+
+// Lazy: loaded on first visit to the route. Keeps the rich-text editor
+// (TipTap), the collection builder and the add-on pages out of the first chunk.
+const lazyPage = <K extends string>(load: () => Promise<Record<K, React.ComponentType<any>>>, name: K) =>
+  React.lazy(() => load().then(m => ({ default: m[name] })));
+const Onboarding = lazyPage(() => import('./pages/Onboarding'), 'Onboarding');
+const CollectionBuilder = lazyPage(() => import('./pages/CollectionBuilder'), 'CollectionBuilder');
+const EntryEdit = lazyPage(() => import('./pages/EntryEdit'), 'EntryEdit');
+const Media = lazyPage(() => import('./pages/Media'), 'Media');
+const Users = lazyPage(() => import('./pages/Users'), 'Users');
+const CollectionEdit = lazyPage(() => import('./pages/CollectionEdit'), 'CollectionEdit');
+const Diagnostics = lazyPage(() => import('./pages/Diagnostics'), 'Diagnostics');
+const BookingsManager = lazyPage(() => import('./pages/BookingsManager'), 'BookingsManager');
+const OrdersManager = lazyPage(() => import('./pages/OrdersManager'), 'OrdersManager');
+const AffiliatesManager = lazyPage(() => import('./pages/AffiliatesManager'), 'AffiliatesManager');
+const AffiliateDetail = lazyPage(() => import('./pages/AffiliateDetail'), 'AffiliateDetail');
+const CommissionReport = lazyPage(() => import('./pages/CommissionReport'), 'CommissionReport');
+const TrashManager = lazyPage(() => import('./pages/TrashManager'), 'TrashManager');
+const SiteNotes = lazyPage(() => import('./pages/SiteNotes'), 'SiteNotes');
+const I18nManager = lazyPage(() => import('./pages/I18nManager'), 'I18nManager');
+const CookieNoticeSettings = lazyPage(() => import('./pages/CookieNoticeSettings'), 'CookieNoticeSettings');
+const AccessibilitySettings = lazyPage(() => import('./pages/AccessibilitySettings'), 'AccessibilitySettings');
+const WidgetClusterSettings = lazyPage(() => import('./pages/WidgetClusterSettings'), 'WidgetClusterSettings');
+const WhatsAppWidgetSettings = lazyPage(() => import('./pages/WhatsAppWidgetSettings'), 'WhatsAppWidgetSettings');
+const PostTourReviewsSettings = lazyPage(() => import('./pages/PostTourReviewsSettings'), 'PostTourReviewsSettings');
+const NewsletterBrevoSettings = lazyPage(() => import('./pages/NewsletterBrevoSettings'), 'NewsletterBrevoSettings');
+const ChannelManagerSettings = lazyPage(() => import('./pages/ChannelManagerSettings'), 'ChannelManagerSettings');
+
+const PageLoading = () => (
+  <div style={{ padding: '80px 0', textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+    <div style={{ width: '32px', height: '32px', margin: '0 auto 12px', border: '3px solid #e5e7eb', borderTopColor: '#0d9488', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+  </div>
+);
 
 // Protected Route Wrapper — never shows a blank page.
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -84,6 +97,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppContent = () => {
   return (
+    <React.Suspense fallback={<PageLoading />}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route
@@ -138,6 +152,7 @@ const AppContent = () => {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </React.Suspense>
   );
 };
 

@@ -257,13 +257,18 @@ export function EntryEdit() {
   }, [isDirty]);
 
   useEffect(() => {
+    // `active` guards against a slow response for entry A landing after the
+    // operator already navigated to entry B (⌘K) and showing A under B's URL.
+    let active = true;
     async function fetchData() {
       try {
         setLoading(true);
         setError(null);
+        setEntry(null);
 
         // Fetch collection via API
         const { data: colData, error: colErr } = await api.getCollection(collectionSlug!);
+        if (!active) return;
         if (colErr || !colData) throw new Error(colErr || 'Collection not found');
         setCollection(colData);
 
@@ -273,19 +278,19 @@ export function EntryEdit() {
         // soft-deleted entries. Direct UUID lookup is reliable.
         if (isEditMode && entryId) {
           const { data: entryData, error: entryErr } = await api.getEntryById(entryId);
+          if (!active) return;
           if (entryErr || !entryData) throw new Error(entryErr || 'Entry not found');
           setEntry(entryData);
         }
       } catch (err: any) {
-        setError(err.message || 'Failed to load data');
+        if (active) setError(err.message || 'Failed to load data');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
     fetchData();
-    const timeout = setTimeout(() => setLoading(false), 10000);
-    return () => clearTimeout(timeout);
+    return () => { active = false; };
   }, [collectionSlug, entryId, isEditMode]);
 
   const handleSave = async (data: EntryData, status: string) => {
@@ -350,7 +355,8 @@ export function EntryEdit() {
               return;
             }
             setSaveStatus('idle');
-            return;
+            // Not saved: the editor must show that, not "Saved successfully"
+            throw new Error('Not saved — this entry was changed by someone else. Copy your changes and reload.');
           }
           throw new Error(error);
         }

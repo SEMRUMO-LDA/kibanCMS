@@ -55,11 +55,27 @@ const num = (v: unknown, fallback: number, min: number, max: number) => {
   const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() ? Number(v) : NaN);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
-/** Date or date-time; a bare date as `end` means the end of that day. */
-const isoDate = (v: unknown, end = false): string | null => {
+/** Offset (ms) of an IANA time zone at a given instant; 0 when the zone is unknown. */
+function tzOffsetMs(utcMs: number, tz: string): number {
+  try {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p: Record<string, string> = {};
+    for (const part of dtf.formatToParts(new Date(utcMs))) p[part.type] = part.value;
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - utcMs;
+  } catch { return 0; }
+}
+/** Date or date-time. A bare date is a whole day in the site's time zone (`end` = its last second). */
+const isoDate = (v: unknown, end: boolean, tz: string): string | null => {
   const s = String(v ?? '').trim();
   if (!s) return null;
-  const t = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(s) && end ? `${s}T23:59:59` : s);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) {
+    const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], end ? 23 : 0, end ? 59 : 0, end ? 59 : 0);
+    return new Date(guess - tzOffsetMs(guess, tz)).toISOString();
+  }
+  const t = Date.parse(s);
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 };
 const safeUrl = (v: unknown): string => {
@@ -94,8 +110,8 @@ export function matchesPage(patterns: string[], path: string): boolean {
   });
 }
 
-/** Cleans one entry into what the widget may render. Never throws. */
-export function normalizePopup(entry: { id: string; content?: Record<string, any> | null }): PopupItem {
+/** Cleans one entry into what the widget may render. Never throws. `tz` = the site's time zone for bare dates. */
+export function normalizePopup(entry: { id: string; content?: Record<string, any> | null }, tz = 'UTC'): PopupItem {
   const c = entry.content || {};
   const kind = oneOf(c.kind, ['bar', 'popup'] as const, 'popup');
   return {
@@ -119,8 +135,8 @@ export function normalizePopup(entry: { id: string; content?: Record<string, any
     trigger_value: num(c.trigger_value, 5, 0, 600),
     frequency: oneOf(c.frequency, ['always', 'session', 'days'] as const, 'session'),
     frequency_days: num(c.frequency_days, 7, 1, 365),
-    start_at: isoDate(c.start_at),
-    end_at: isoDate(c.end_at, true),
+    start_at: isoDate(c.start_at, false, tz),
+    end_at: isoDate(c.end_at, true, tz),
     accent: hexColor(c.accent_color),
     theme: oneOf(c.theme, ['light', 'dark'] as const, 'light'),
     priority: num(c.priority, 10, 0, 1000),
@@ -139,15 +155,25 @@ export function isActive(item: PopupItem, enabled: unknown, now = Date.now()): b
   return true;
 }
 
-export async function loadActivePopups(now = Date.now()): Promise<PopupItem[]> {
+/** Campaign dates are whole days in the site's time zone (Settings → General), UTC when unset. */
+async function siteTimezone(site?: Record<string, any>): Promise<string> {
+  const s = site || await getSingletonContent('site-settings');
+  const tz = String(s.timezone || '').trim();
+  return tz || 'UTC';
+}
+
+export async function loadActivePopups(now = Date.now(), site?: Record<string, any>): Promise<PopupItem[]> {
   const { data: col } = await supabase.from('collections').select('id').eq('slug', POPUPS_SLUG).maybeSingle();
   if (!col) return [];
   let q = supabase.from('entries').select('id, content').eq('collection_id', col.id).eq('status', 'published').limit(200);
   if (await hasSoftDelete()) q = q.is('deleted_at', null);
   const { data } = await q;
+  const rows = (data || []) as any[];
+  if (!rows.length) return [];
+  const tz = await siteTimezone(site);
   const items: PopupItem[] = [];
-  for (const row of (data || []) as any[]) {
-    const item = normalizePopup(row);
+  for (const row of rows) {
+    const item = normalizePopup(row, tz);
     if (isActive(item, row.content?.enabled, now)) items.push(item);
   }
   items.sort((a, b) => a.priority - b.priority);
@@ -161,11 +187,11 @@ export interface PopupsConfig {
 }
 
 export async function getPopupsConfig(): Promise<PopupsConfig> {
-  const items = await loadActivePopups();
+  const site = await getSingletonContent('site-settings');
+  const items = await loadActivePopups(Date.now(), site);
   let turnstileSiteKey = '';
-  if (items.some(i => i.action === 'newsletter')) {
-    const site = await getSingletonContent('site-settings');
-    if (String(site.turnstile_secret_key || '').trim()) turnstileSiteKey = String(site.turnstile_site_key || '').trim().slice(0, 100);
+  if (items.some(i => i.action === 'newsletter') && String(site.turnstile_secret_key || '').trim()) {
+    turnstileSiteKey = String(site.turnstile_site_key || '').trim().slice(0, 100);
   }
   return { items, turnstileSiteKey };
 }

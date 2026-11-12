@@ -23,6 +23,8 @@ import { supabase } from '../lib/supabase.js';
 import { logger } from '../lib/logger.js';
 import { getAdapter, listAdapters } from '../lib/channels/index.js';
 import type { NormalizedBooking } from '../lib/channels/index.js';
+import { tenantStore, getOrCreateClients } from '../middleware/tenant.js';
+import { resolveTenantById } from '../config/tenants.js';
 
 // Explicit annotation: with `declaration: true`, the inferred Router type
 // references @pnpm/-internal paths which TS2742s the build. Annotating with
@@ -76,7 +78,21 @@ function redactConnection(row: any) {
 //   /webhook/:provider         — hmac auth (FareHarbor, Cloudbeds, …)
 // Both need raw body, mounted before express.json() in server.ts.
 
+/**
+ * Webhooks arrive on the shared domain without X-Tenant: the URL the admin
+ * copied into the provider carries `?t=<tenant>`, so run the handler inside
+ * that tenant instead of the hostname's default one.
+ */
 async function handleWebhook(req: Request, res: Response, urlToken: string | null) {
+  const t = typeof req.query.t === 'string' ? req.query.t : null;
+  const tenant = t ? resolveTenantById(t) : null;
+  if (tenant && tenantStore.getStore()?.tenant?.id !== tenant.id) {
+    return tenantStore.run({ tenant, ...getOrCreateClients(tenant) }, () => handleWebhookInTenant(req, res, urlToken));
+  }
+  return handleWebhookInTenant(req, res, urlToken);
+}
+
+async function handleWebhookInTenant(req: Request, res: Response, urlToken: string | null) {
   const provider = req.params.provider;
   const adapter = getAdapter(provider);
   if (!adapter) {
@@ -348,9 +364,11 @@ channelManagerRouter.post('/connections', asyncRoute(async (req, res) => {
   const fwdProto = req.headers['x-forwarded-proto'];
   const protocol = (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(',')[0]?.trim() || req.protocol;
   const baseUrl = `${protocol}://${req.get('host')}/api/v1/channel-manager/webhook/${provider}`;
-  const webhookUrl = adapter?.webhookAuthMode === 'url-token'
+  // The provider calls the shared domain with no X-Tenant header: the tenant travels in the URL
+  const tenantQs = `?t=${encodeURIComponent(tenantStore.getStore()?.tenant?.id || 'default')}`;
+  const webhookUrl = (adapter?.webhookAuthMode === 'url-token'
     ? `${baseUrl}/${webhookSecret}`
-    : baseUrl;
+    : baseUrl) + tenantQs;
   res.json({
     data: {
       ...redactConnection(data),

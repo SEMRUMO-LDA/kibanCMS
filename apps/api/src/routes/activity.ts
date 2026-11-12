@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { supabase } from '../lib/supabase.js';
-import type { AuthRequest } from '../middleware/auth.js';
+import { requireEditor, requireAdmin, type AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
@@ -9,7 +9,7 @@ const router: Router = Router();
  * Returns recent activity across the CMS — entries created/updated/deleted.
  * Query params: limit (default 50), offset (default 0)
  */
-router.get('/', async (req: AuthRequest, res: Response) => {
+router.get('/', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
@@ -61,7 +61,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({
-      error: { message: error.message || 'Failed to load activity', status: 500, timestamp: new Date().toISOString() },
+      error: { message: 'Failed to load activity', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });
@@ -71,7 +71,7 @@ router.get('/', async (req: AuthRequest, res: Response) => {
  * Returns the full audit log (admin only).
  * Query params: limit, offset, resource, action
  */
-router.get('/audit', async (req: AuthRequest, res: Response) => {
+router.get('/audit', requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
@@ -101,7 +101,7 @@ router.get('/audit', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     res.status(500).json({
-      error: { message: error.message || 'Failed to load audit log', status: 500, timestamp: new Date().toISOString() },
+      error: { message: 'Failed to load audit log', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });

@@ -30,6 +30,17 @@ describe('popups: normalize', () => {
     assert.equal(normalizePopup({ id: 'x', content: { button_url: '/promo' } }).url, '/promo');
     assert.equal(normalizePopup({ id: 'x', content: { button_url: '//evil.com' } }).url, '');
   });
+
+  it('reads bare campaign dates as whole days in the site time zone', () => {
+    const lisbonSummer = normalizePopup({ id: 'x', content: { ...base, start_at: '2026-07-01', end_at: '2026-07-10' } }, 'Europe/Lisbon');
+    assert.equal(lisbonSummer.start_at, '2026-06-30T23:00:00.000Z'); // 00:00 WEST
+    assert.equal(lisbonSummer.end_at, '2026-07-10T22:59:59.000Z');   // 23:59:59 WEST
+    const lisbonWinter = normalizePopup({ id: 'x', content: { ...base, start_at: '2026-12-01' } }, 'Europe/Lisbon');
+    assert.equal(lisbonWinter.start_at, '2026-12-01T00:00:00.000Z'); // WET = UTC
+    const unknownZone = normalizePopup({ id: 'x', content: { ...base, start_at: '2026-12-01' } }, 'Mars/Olympus');
+    assert.equal(unknownZone.start_at, '2026-12-01T00:00:00.000Z');   // falls back to UTC, never throws
+    assert.equal(normalizePopup({ id: 'x', content: { ...base, start_at: '2026-12-01T10:30:00Z' } }, 'Europe/Lisbon').start_at, '2026-12-01T10:30:00.000Z');
+  });
 });
 
 describe('popups: active window and requirements', () => {

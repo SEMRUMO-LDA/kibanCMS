@@ -26,10 +26,6 @@ pnpm dev
 # Terminal 2: Admin UI (Vite dev server)
 cd apps/admin
 pnpm dev
-
-# Terminal 3: Example Frontend
-cd apps/example
-pnpm dev
 ```
 
 **URLs:**

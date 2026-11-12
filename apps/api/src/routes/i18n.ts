@@ -277,6 +277,8 @@ router.post('/detect-language', requireEditor, async (req: AuthRequest, res: Res
 // Body: { entry_id, collection_slug, target_lang }
 // ============================================
 
+import { PRIVATE_COLLECTIONS } from './entries.js';
+
 router.post('/translate', requireEditor, async (req: AuthRequest, res: Response) => {
   try {
     const { entry_id, collection_slug, target_lang } = req.body;
@@ -284,6 +286,13 @@ router.post('/translate', requireEditor, async (req: AuthRequest, res: Response)
     if (!entry_id || !collection_slug || !target_lang) {
       return res.status(400).json({
         error: { message: 'Missing required fields: entry_id, collection_slug, target_lang', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+    // Config and customer collections are never translated: their fields would be sent
+    // to the provider and copied into the translation log
+    if (PRIVATE_COLLECTIONS.has(String(collection_slug))) {
+      return res.status(403).json({
+        error: { message: 'This collection cannot be translated', status: 403, timestamp: new Date().toISOString() }
       });
     }
 
@@ -294,14 +303,16 @@ router.post('/translate', requireEditor, async (req: AuthRequest, res: Response)
       });
     }
 
-    // Fetch the entry
+    // Fetch the entry — and make sure it really belongs to the collection named in the
+    // request (the fields and the private check above are keyed by that slug)
+    const colIdForEntry = await getCollectionId(String(collection_slug));
     const { data: entry, error: fetchErr } = await supabase
       .from('entries')
-      .select('id, title, content, meta')
+      .select('id, title, content, meta, collection_id')
       .eq('id', entry_id)
       .single();
 
-    if (fetchErr || !entry) {
+    if (fetchErr || !entry || !colIdForEntry || entry.collection_id !== colIdForEntry) {
       return res.status(404).json({
         error: { message: 'Entry not found', status: 404, timestamp: new Date().toISOString() }
       });
@@ -429,6 +440,11 @@ router.post('/translate-bulk', requireEditor, async (req: AuthRequest, res: Resp
     if (!collection_slug || !target_lang) {
       return res.status(400).json({
         error: { message: 'Missing required fields: collection_slug, target_lang', status: 400, timestamp: new Date().toISOString() }
+      });
+    }
+    if (PRIVATE_COLLECTIONS.has(String(collection_slug))) {
+      return res.status(403).json({
+        error: { message: 'This collection cannot be translated', status: 403, timestamp: new Date().toISOString() }
       });
     }
 

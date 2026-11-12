@@ -24,8 +24,8 @@ import type { AuthRequest } from '../middleware/auth.js';
 
 const router: Router = Router();
 
-/** Must match `schema_version` in the newest kiban_schema_status() (migration 013). */
-export const EXPECTED_SCHEMA_VERSION = 14;
+/** Must match `schema_version` in the newest kiban_schema_status() (migration 015). */
+export const EXPECTED_SCHEMA_VERSION = 15;
 
 export type CheckStatus = 'ok' | 'warn' | 'error' | 'info';
 
@@ -39,6 +39,7 @@ const SCHEMA_FEATURES = [
   'snapshots', 'coupon_limits', 'trash', 'addons', 'channel_manager',
   'api_key_rpc', 'role_protection', 'cookie_consents', 'media_bucket',
   'translation_cache', 'private_rls', 'author_set_null', 'live_slug_index',
+  'site_notes_private', 'translation_log_private',
 ] as const;
 
 const STALE_KEY_DAYS = 7;

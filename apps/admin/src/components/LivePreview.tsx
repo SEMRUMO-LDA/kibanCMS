@@ -126,6 +126,11 @@ interface LivePreviewProps {
   onClose: () => void;
 }
 
+/** Entry data is posted only to the origin of the preview URL, never to whatever the iframe ends up on. */
+function previewOrigin(u: string): string {
+  try { return new URL(u, window.location.href).origin; } catch { return ''; }
+}
+
 export function LivePreview({ previewUrl, entryData, collectionSlug, onClose }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -139,7 +144,7 @@ export function LivePreview({ previewUrl, entryData, collectionSlug, onClose }: 
         type: 'kiban-preview',
         entry: entryData,
         collection: collectionSlug,
-      }, '*');
+      }, previewOrigin(url) || '*');
     }
   }, [entryData, collectionSlug, url]);
 
@@ -192,7 +197,7 @@ export function LivePreview({ previewUrl, entryData, collectionSlug, onClose }: 
                   type: 'kiban-preview',
                   entry: entryData,
                   collection: collectionSlug,
-                }, '*');
+                }, previewOrigin(url) || '*');
               }, 500);
             }}
           />

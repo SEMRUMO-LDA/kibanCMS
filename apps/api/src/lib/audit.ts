@@ -45,7 +45,8 @@ export function audit(
     resource,
     resource_id: resourceId,
     details: details || {},
-    ip_address: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip,
+    // req.ip honours `trust proxy` (Railway appends the real client address); the first X-Forwarded-For entry is client-controlled
+    ip_address: req.ip,
     request_id: reqWithId.requestId,
   };
 

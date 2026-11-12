@@ -469,6 +469,10 @@ function resolveCustomLineItem(item: CustomLineItem, idx: number, defaultCurrenc
 // ============================================
 
 router.post('/create-session', async (req: AuthRequest, res: Response) => {
+  // Rows created before Stripe answers: released again if anything below fails,
+  // so a failed request cannot hold seats or leave orders pending for an hour
+  let createdOrderId: string | null = null;
+  const createdBookingIds: string[] = [];
   try {
     const body = req.body as CheckoutBody;
 
@@ -657,6 +661,8 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
     if (orderErr) throw orderErr;
 
+    createdOrderId = order.id;
+
     // ── Create booking entries (one per booking line item) linked to order ──
     const bookingIds: string[] = [];
     const bookingsColId = await getCollectionId('bookings');
@@ -708,6 +714,7 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
 
         if (bkErr) throw bkErr;
         bookingIds.push(bk.id);
+        createdBookingIds.push(bk.id);
 
         // Insert-then-verify: another buyer may have taken the last seats.
         if (!(await keepsSeat(bookingsColId, bk.id, { resource_slug: m.resource_slug, date: m.date, time_slot: m.time_slot }, Number(m.capacity) || 1))) {
@@ -853,8 +860,19 @@ router.post('/create-session', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Unified checkout error', { error: error.message, stack: error.stack });
+    // Give the seats back and close the order: nothing was paid
+    for (const id of createdBookingIds) releaseBooking(id, 'checkout_failed').catch(() => {});
+    if (createdOrderId) {
+      const orderId = createdOrderId;
+      supabase.from('entries').select('content').eq('id', orderId).single()
+        .then(({ data }) => supabase.from('entries')
+          .update({ content: { ...((data?.content as Record<string, any>) || {}), status: 'cancelled', cancel_reason: 'checkout_failed' }, tags: ['order', 'cancelled'] })
+          .eq('id', orderId))
+        .then(() => {}, () => {});
+    }
+    // Provider/DB messages stay in the logs: the browser gets a constant
     res.status(500).json({
-      error: { message: error.message || 'Failed to create checkout session', status: 500, timestamp: new Date().toISOString() },
+      error: { message: 'Failed to create checkout session', status: 500, timestamp: new Date().toISOString() },
     });
   }
 });

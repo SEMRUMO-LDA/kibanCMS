@@ -123,8 +123,13 @@ nothing to do.
 
 When capturing, choose **Em todas as páginas**: the entry is stored with page
 `*` and the loader applies it on every page (after that page's own
-captures). The editor finds it on any page by its original text. Use it for
-the footer line, the phone number, the opening hours.
+captures), to **every occurrence** of that text (header and footer phone at
+once). The editor finds it on any page by its original text. Use it for the
+footer line, the phone number, the opening hours.
+
+The API answers `/widgets/site-content` from a per-tenant cache (60 s) that a
+capture, a live save or an approval clears; turning "Edição no site" off
+takes effect on visitors within a minute.
 
 ## Notes on the site ("Nota")
 

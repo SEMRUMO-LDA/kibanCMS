@@ -584,6 +584,9 @@ router.get('/resources/:slug/availability', async (req: AuthRequest, res: Respon
 // ============================================
 
 router.post('/checkout', async (req: AuthRequest, res: Response) => {
+  // The pending booking is inserted before Stripe answers: release it if anything fails,
+  // so a bad request cannot hold the seats until the sweeper runs
+  let createdBookingId: string | null = null;
   try {
     const {
       resource_slug,
@@ -771,6 +774,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
       .single();
 
     if (insertError) throw insertError;
+    createdBookingId = booking.id;
 
     // Insert-then-verify: if another buyer took the last seats in the
     // meantime, this booking is released (no overbooking).
@@ -954,6 +958,7 @@ router.post('/checkout', async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     logger.error('Error creating booking', { error: error.message });
+    if (createdBookingId) releaseBooking(createdBookingId, 'checkout_failed').catch(() => {});
     res.status(500).json({
       error: { message: 'Failed to create booking', status: 500, timestamp: new Date().toISOString() },
     });

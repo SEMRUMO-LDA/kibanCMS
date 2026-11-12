@@ -108,6 +108,8 @@
     if (it.trigger === 'delay') { setTimeout(once, (it.trigger_value || 0) * 1000); return; }
     if (it.trigger === 'scroll') {
       var target = Math.max(1, Math.min(100, it.trigger_value || 50));
+      // A page shorter than the viewport can never be scrolled: show it as if the visitor reached the end
+      if (document.documentElement.scrollHeight <= window.innerHeight + 2) { setTimeout(once, 1000); return; }
       var onScroll = function () {
         var doc = document.documentElement;
         var max = (doc.scrollHeight - window.innerHeight) || 1;

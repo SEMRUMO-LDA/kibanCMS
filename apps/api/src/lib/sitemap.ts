@@ -14,6 +14,7 @@ import { PRIVATE_COLLECTIONS } from '../routes/entries.js';
 export const NON_PAGE_COLLECTIONS = new Set([
   'site-settings', 'seo-settings', 'redirects', 'whatsapp-widget',
   'i18n-config', 'i18n-translations', 'forms-config', 'post-tour-reviews',
+  'site-content', 'site-notes', 'popups', // inline-editing captures, notes and popup campaigns: not pages
   'addons-config',
 ]);
 

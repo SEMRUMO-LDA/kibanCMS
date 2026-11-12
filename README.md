@@ -29,9 +29,6 @@ Admin: http://localhost:5173 | API: http://localhost:5001
 apps/
   admin/        React SPA (admin panel)
   api/          Express REST API
-  example/      Next.js example frontend
-packages/
-  kiban-client/ Published JS client (@kiban/client)
 database/
   migrations/   SQL for Supabase (see migrations/README.md)
   UPGRADE_TENANT.sql  All migrations in one file for existing clients
