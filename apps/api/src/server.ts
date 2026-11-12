@@ -35,6 +35,10 @@ import {
 } from './lib/widgets-bootstrap.js';
 import { siteContentForPage } from './lib/site-content.js';
 import { getPopupsConfig } from './lib/popups.js';
+import { createRequire } from 'node:module';
+
+// Reported by /health; comes from apps/api/package.json so a release bump never drifts
+const API_VERSION: string = createRequire(import.meta.url)('../package.json').version;
 import i18nRouter from './routes/i18n.js';
 import newsletterRouter, { newsletterConfirmHandler, newsletterUnsubscribeLinkHandler } from './routes/newsletter.js';
 import brevoRouter from './routes/brevo.js';
@@ -241,6 +245,8 @@ const formsLimiter = rateLimit({
       timestamp: new Date().toISOString(),
     },
   },
+  // Anti-spam is for submissions: the admin's GET listing of leads must not spend it
+  skip: (req) => req.method !== 'POST',
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -282,7 +288,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'KibanCMS Unified Server',
-    version: '1.5.0',
+    version: API_VERSION,
     mode: NODE_ENV,
     tenant: ctx?.tenant?.id || 'default',
   });
@@ -318,8 +324,8 @@ app.use('/api/v1/users', adminLimiter, validateJWT, usersRouter);
 app.use('/api/v1/entries', validateAny, apiKeyReadOnly, entriesRouter);
 app.use('/api/v1/media', validateAny, apiKeyReadOnly, mediaRouter);
 app.use('/api/v1/webhooks', validateJWT, requireAdmin, webhooksRouter);
-app.use('/api/v1/ai', aiLimiter, validateJWT, aiRouter);
-app.use('/api/v1/ai', aiLimiter, validateJWT, aiContentRouter);
+// One mount: two mounts ran the limiter and the JWT lookup twice for ai-content routes
+app.use('/api/v1/ai', aiLimiter, validateJWT, aiRouter, aiContentRouter);
 app.use('/api/v1/dashboard', validateJWT, dashboardRouter);
 app.use('/api/v1/activity', validateJWT, activityRouter);
 app.use('/api/v1/media-intel', validateJWT, mediaIntelRouter);
@@ -430,7 +436,7 @@ app.get('/api/v1/widgets/bootstrap', validateApiKey, async (req, res) => {
 app.get('/api/v1/widgets/site-content', validateApiKey, async (req, res) => {
   try {
     const data = await siteContentForPage(req.query.path);
-    res.setHeader('Cache-Control', 'private, max-age=60'); res.setHeader('Vary', 'Authorization, X-Tenant');
+    res.setHeader('Cache-Control', 'private, max-age=300'); res.setHeader('Vary', 'Authorization, X-Tenant');
     res.json({ data, timestamp: new Date().toISOString() });
   } catch (err: any) {
     logger.error('Widgets site-content failed', { error: err.message });

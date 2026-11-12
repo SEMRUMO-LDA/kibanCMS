@@ -31,6 +31,7 @@ export const PRIVATE_COLLECTIONS = new Set([
   'affiliates', 'commission-ledger',
   'automations', 'post-tour-reviews',
   'site-notes', // feedback left on the live site ("Nota"): internal, never public
+  'i18n-translations', // translation log: holds copies of entry fields, including those of private entries
 ]);
 
 export const SECRET_FIELD_PATTERN = /(secret|password|passwd|api_?key|private_?key|access_?token|refresh_?token|notification_emails|credential|webhook_?url|dsn|smtp|service_?role)/i;
@@ -134,6 +135,20 @@ async function canAccessPrivate(req: AuthRequest, collectionSlug: string): Promi
   return isAdminOrEditor(role);
 }
 
+/**
+ * Settings singletons are public-tier (the site reads them through the API key)
+ * but carry secrets (CAPI token, Turnstile secret, notification addresses).
+ * API keys always get the redacted copy; logged-in users only see the secrets
+ * when they are admins.
+ */
+const SETTINGS_COLLECTIONS = new Set(['site-settings', 'seo-settings']);
+async function hideSecrets(req: AuthRequest, collectionSlug: string): Promise<boolean> {
+  if (isApiKeyRequest(req)) return true;
+  if (!SETTINGS_COLLECTIONS.has(collectionSlug)) return false;
+  const role = req.profileId ? await getUserRole(req.profileId) : null;
+  return !['super_admin', 'admin'].includes(role || '');
+}
+
 // ============================================
 // ENTRY SELECT FIELDS
 // Single source of truth for what we select from entries.
@@ -223,7 +238,7 @@ router.get('/by-id/:id', async (req: AuthRequest, res: Response) => {
     }
 
     res.json({
-      data: publicRead ? redactForPublic(entry) : entry,
+      data: (await hideSecrets(req, collection.slug)) ? redactForPublic(entry) : entry,
       meta: collection
         ? { collection: { id: collection.id, name: collection.name, slug: collection.slug } }
         : undefined,
@@ -425,7 +440,7 @@ router.get('/:collection/:slug', async (req: AuthRequest, res: Response) => {
     }
 
     res.json({
-      data: publicRead ? redactForPublic(responseEntry) : responseEntry,
+      data: (await hideSecrets(req, String(req.params.collection))) ? redactForPublic(responseEntry) : responseEntry,
       meta: {
         collection: { id: collection.id, name: collection.name, slug: collection.slug },
         ...(jsonld ? { jsonld } : {}),
@@ -783,6 +798,12 @@ router.post('/:collection/:slug/duplicate', async (req: AuthRequest, res: Respon
     if (!['super_admin', 'admin', 'editor', 'author'].includes(role || '')) {
       return res.status(403).json({
         error: { message: 'Forbidden: Insufficient permissions to duplicate entries', status: 403, timestamp: new Date().toISOString() },
+      });
+    }
+    // Private/config collections: the clone would hand the caller the source content (Stripe keys, leads…)
+    if (!(await canAccessPrivate(req, collectionSlug as string))) {
+      return res.status(403).json({
+        error: { message: 'Forbidden: Insufficient permissions for this collection', status: 403, timestamp: new Date().toISOString() },
       });
     }
 

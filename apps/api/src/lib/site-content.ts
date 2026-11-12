@@ -12,25 +12,42 @@ import { supabase } from './supabase.js';
 import { getSingletonContent } from './sitemap.js';
 import { hasSoftDelete } from './soft-delete.js';
 import { parseMode, normalizePagePath, SITE_CONTENT_SLUG, MAX_SITE_CONTENT_PER_PAGE, ALL_PAGES } from './inline-edit.js';
+import { cacheGet, cacheSet, cacheDelete } from './ttl-cache.js';
 
 export interface SiteContentItem {
   id: string;
   slug: string;
   kind: 'text' | 'image';
+  /** '*' = site-wide capture (header, footer…): the loader swaps every occurrence. */
+  page: string;
   /** CSS path recorded at capture time; the loader falls back to the original text when it no longer matches. */
   selector: string;
   original: string;
   value: string;
 }
 
-async function siteContentCollectionId(): Promise<string | null> {
-  const { data } = await supabase.from('collections').select('id').eq('slug', SITE_CONTENT_SLUG).maybeSingle();
-  return data?.id || null;
+// Read on every visitor page view: cached per tenant for a minute (a capture,
+// an approved edit or a live save clears it; the kill switch takes ≤ 60 s).
+const CACHE_TTL_MS = 60_000;
+const META_KEY = 'site-content:meta';
+const PAGE_KEY = 'site-content:page:';
+
+export function invalidateSiteContentCache(): void {
+  cacheDelete('site-content:');
 }
 
-async function featureOn(): Promise<boolean> {
+/** Feature switch + collection id, one cached lookup. */
+async function meta(): Promise<{ on: boolean; colId: string | null }> {
+  const hit = cacheGet<{ on: boolean; colId: string | null }>(META_KEY);
+  if (hit) return hit;
   const site = await getSingletonContent('site-settings');
-  return parseMode(site.inline_editing) !== 'off';
+  const on = parseMode(site.inline_editing) !== 'off';
+  let colId: string | null = null;
+  if (on) {
+    const { data } = await supabase.from('collections').select('id').eq('slug', SITE_CONTENT_SLUG).maybeSingle();
+    colId = data?.id || null;
+  }
+  return cacheSet(META_KEY, { on, colId }, CACHE_TTL_MS);
 }
 
 function imageUrl(v: unknown): string {
@@ -41,21 +58,23 @@ function imageUrl(v: unknown): string {
 
 /** For the bootstrap: whether the loader should ask for this page's content at all. */
 export async function siteContentEnabled(): Promise<boolean> {
-  if (!(await featureOn())) return false;
-  const colId = await siteContentCollectionId();
-  if (!colId) return false;
+  const { on, colId } = await meta();
+  if (!on || !colId) return false;
+  const hit = cacheGet<boolean>('site-content:enabled');
+  if (hit !== undefined) return hit;
   let q = supabase.from('entries').select('id', { count: 'exact', head: true }).eq('collection_id', colId).eq('status', 'published');
   if (await hasSoftDelete()) q = q.is('deleted_at', null);
   const { count } = await q;
-  return (count || 0) > 0;
+  return cacheSet('site-content:enabled', (count || 0) > 0, CACHE_TTL_MS);
 }
 
 /** Published captures of one page, ready for the loader. */
 export async function siteContentForPage(rawPath: unknown): Promise<{ path: string; items: SiteContentItem[] }> {
   const path = normalizePagePath(rawPath);
-  if (!(await featureOn())) return { path, items: [] };
-  const colId = await siteContentCollectionId();
-  if (!colId) return { path, items: [] };
+  const { on, colId } = await meta();
+  if (!on || !colId) return { path, items: [] };
+  const cached = cacheGet<{ path: string; items: SiteContentItem[] }>(PAGE_KEY + path);
+  if (cached) return cached;
   const softDelete = await hasSoftDelete();
   // This page's captures, then the site-wide ones (header, footer…)
   const rows: any[] = [];
@@ -73,7 +92,7 @@ export async function siteContentForPage(rawPath: unknown): Promise<{ path: stri
     const value = kind === 'image' ? imageUrl(c.image) : String(c.text ?? '');
     const original = String(c.original ?? '');
     if (!original || !value) continue;
-    items.push({ id: row.id, slug: row.slug, kind, selector: String(c.selector || ''), original, value });
+    items.push({ id: row.id, slug: row.slug, kind, page: String(c.page || path), selector: String(c.selector || ''), original, value });
   }
-  return { path, items };
+  return cacheSet(PAGE_KEY + path, { path, items }, CACHE_TTL_MS);
 }

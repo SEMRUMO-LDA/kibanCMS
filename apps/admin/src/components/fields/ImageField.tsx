@@ -13,6 +13,7 @@ import { colors, spacing, typography, borders, shadows, animations } from '../..
 import { FieldWrapper } from './FieldWrapper';
 import { Upload, X, Image as ImageIcon, FolderOpen, Link, Loader, Check, Crosshair } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 
 // ── Focal point helpers ──
@@ -347,30 +348,13 @@ export function ImageField({
     if (!user) return;
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop();
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
-      const storagePath = `${user.id}/${uniqueName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('media')
-        .upload(storagePath, file, { contentType: file.type });
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(storagePath);
-
-      await supabase.from('media').insert({
-        filename: uniqueName,
-        original_name: file.name,
-        mime_type: file.type,
-        size_bytes: file.size,
-        storage_path: storagePath,
-        bucket_name: 'media',
-        uploaded_by: user.id,
-        folder_path: '/',
-        is_public: false,
-      });
-
-      onChange(publicUrl);
+      // Through the API, like the Media page: type allow-list, size cap, image
+      // processing and the audit log all apply (a direct storage write skipped them)
+      const { data, error: uploadError } = await api.uploadMedia(file, { is_public: true });
+      if (uploadError || !data) throw new Error(uploadError || 'Upload failed');
+      const url = data.url || data.public_url || data.publicUrl;
+      if (!url) throw new Error('Upload returned no URL');
+      onChange(url);
     } catch (err) {
       console.error('Upload failed:', err);
     } finally {

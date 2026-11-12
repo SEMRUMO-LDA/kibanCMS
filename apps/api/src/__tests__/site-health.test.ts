@@ -17,6 +17,8 @@ const fullSchema = {
   private_rls: true,
   author_set_null: true,
   live_slug_index: true,
+  site_notes_private: true,
+  translation_log_private: true,
 };
 
 describe('evaluateSchema', () => {

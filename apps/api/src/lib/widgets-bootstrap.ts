@@ -69,8 +69,11 @@ async function collectionId(slug: string): Promise<string | null> {
   return data?.id || null;
 }
 
-/** addon_ids of widget add-ons that are installed AND enabled. */
-export async function getEnabledWidgets(): Promise<string[]> {
+/**
+ * addon_ids of widget add-ons that are installed AND enabled.
+ * `popupsActive`: pass it when the caller already loaded the popups (the bootstrap does), so they are not read twice.
+ */
+export async function getEnabledWidgets(popupsActive?: boolean): Promise<string[]> {
   const configs = await addonConfigs([...SETTINGS_WIDGET_ADDON_IDS, 'i18n']);
   const disabled = (id: string) => configs.get(id)?.enabled === false;
   const enabled = SETTINGS_WIDGET_ADDON_IDS.filter(id => !disabled(id));
@@ -81,7 +84,8 @@ export async function getEnabledWidgets(): Promise<string[]> {
   if ((await collectionId('i18n-config')) && !disabled('i18n')) enabled.push('i18n');
 
   // Popups: the widget is only worth loading when something is active today
-  if ((await loadActivePopups()).length > 0) enabled.push('popups');
+  const active = popupsActive === undefined ? (await loadActivePopups()).length > 0 : popupsActive;
+  if (active) enabled.push('popups');
   return enabled;
 }
 
@@ -139,7 +143,7 @@ async function guarded<T>(label: string, fallback: T, fn: () => Promise<T>): Pro
 
 export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap> {
   const [enabled, cluster, seo, cookie, a11y, whatsapp, i18nWidget, i18nLanguages, siteContent, popups] = await Promise.all([
-    guarded('enabled', [] as string[], getEnabledWidgets),
+    guarded('enabled', [] as string[], () => getEnabledWidgets(false)), // popups decided below from the loaded config
     guarded('cluster', DEFAULT_CLUSTER_CONFIG, getClusterConfig),
     guarded('seo', { analytics: {} } as any, loadSeoConfig),
     guarded('cookie-notice', { enabled: true }, () => getAddonConfig('cookie-notice')),
@@ -150,6 +154,7 @@ export async function buildBootstrap(baseUrl: string): Promise<WidgetsBootstrap>
     guarded('site-content', false, siteContentEnabled),
     guarded('popups', { items: [], turnstileSiteKey: '' } as PopupsConfig, getPopupsConfig),
   ]);
+  if (popups.items.length && !enabled.includes('popups')) enabled.push('popups');
   return {
     version: WIDGETS_VERSION,
     enabled,

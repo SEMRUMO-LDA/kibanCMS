@@ -1,6 +1,6 @@
 {
   "name": "@kiban/workspace",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "kibanCMS - Next-generation headless CMS",
   "author": "Kiban Agency <dev@kiban.pt>",
@@ -18,9 +18,6 @@
     "dev": "turbo dev",
     "dev:admin": "cd apps/admin && pnpm dev",
     "dev:api": "cd apps/api && pnpm dev",
-    "dev:example": "cd apps/example && pnpm dev",
-    "setup:example": "cd apps/example && pnpm run setup",
-    "setup:example:windows": "cd apps/example && pnpm run setup:windows",
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
@@ -38,5 +35,5 @@
     "node": ">=22.0.0",
     "pnpm": ">=8.0.0"
   },
-  "packageManager": "pnpm@8.14.0"
+  "packageManager": "pnpm@10.34.9"
 }

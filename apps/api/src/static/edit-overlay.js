@@ -978,6 +978,8 @@
     toggleCapture(false); toggleNote(false); closeDialog(); closeNotePop();
     if (state.pins && state.pins.parentNode) state.pins.parentNode.removeChild(state.pins);
     state.pins = null;
+    state.session = null; // a later resize/rescan must not bring the pins or bindings back
+    state.notes = [];
     document.body.classList.remove('kiban-ie-highlight');
     window.__kibanInlineEditor = false;
   }

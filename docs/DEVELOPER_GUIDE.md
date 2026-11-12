@@ -50,11 +50,7 @@ Cliente (browser) → Frontend (React/Next.js/HTML) → API kibanCMS → Supabas
 kibanCMS (monorepo)
 ├── apps/
 │   ├── admin/          → React SPA (painel de administracao)
-│   ├── api/            → Express.js (API REST)
-│   └── example/        → Next.js (frontend exemplo)
-│
-├── packages/
-│   └── kiban-client/   → Cliente JS oficial (@kiban/client)
+│   └── api/            → Express.js (API REST)
 │
 ├── database/
 │   ├── migrations/     → SQL para Supabase (ver migrations/README.md)

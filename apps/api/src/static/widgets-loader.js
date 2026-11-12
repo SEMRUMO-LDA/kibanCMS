@@ -172,7 +172,7 @@
       return x.origin + x.pathname;
     } catch (e) { return String(u || ''); }
   }
-  // normalised text → deepest element holding exactly that text
+  // normalised text → every element holding exactly that text (the deepest of each lineage)
   function scTextMap() {
     var map = {}, nodes = document.body.querySelectorAll(SC_TEXT_TAGS);
     for (var i = 0; i < nodes.length; i++) {
@@ -182,7 +182,12 @@
       if (!t || t.length > 5200) continue;
       var k = scNorm(t);
       if (!k) continue;
-      if (!map[k] || map[k].contains(el)) map[k] = el;
+      var list = map[k] || (map[k] = []), settled = false;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].contains(el)) { list[j] = el; settled = true; break; } // keep the deepest of a lineage
+        if (el.contains(list[j])) { settled = true; break; }
+      }
+      if (!settled) list.push(el);
     }
     return map;
   }
@@ -195,37 +200,56 @@
     }
     return null;
   }
+  // Elements to swap for one item: those tagged by an earlier pass, the CSS path, then by text.
+  // Site-wide items (page '*': header, footer, phone…) take every occurrence; page items the first.
   function scFind(item, ctx) {
+    var kind = item.kind === 'image' ? 'image' : 'text';
+    var siteWide = item.page === '*';
+    var out = Array.prototype.slice.call(document.querySelectorAll('[data-kiban="site-content/' + item.slug + '/' + kind + '"]'));
+    if (out.length && !siteWide) return out;
     var el = null;
     if (item.selector) { try { el = document.querySelector(item.selector); } catch (e) { el = null; } }
-    if (el) {
-      if (item.kind === 'image') { if (el.tagName === 'IMG') return el; }
-      else { var t = scNorm(el.textContent); if (t === scNorm(item.original) || t === scNorm(item.value)) return el; }
+    if (el && out.indexOf(el) < 0) {
+      var t = kind === 'text' ? scNorm(el.textContent) : '';
+      if (kind === 'image' ? el.tagName === 'IMG' : (t === scNorm(item.original) || t === scNorm(item.value))) out.push(el);
     }
-    if (item.kind === 'image') return scFindImage(item.original) || scFindImage(item.value);
+    if (out.length && !siteWide) return out;
+    if (kind === 'image') {
+      var img = scFindImage(item.original) || scFindImage(item.value);
+      if (img && out.indexOf(img) < 0) out.push(img);
+      return out;
+    }
     if (!ctx.map) ctx.map = scTextMap();
-    return ctx.map[scNorm(item.original)] || ctx.map[scNorm(item.value)] || null;
+    var found = (ctx.map[scNorm(item.original)] || []).concat(ctx.map[scNorm(item.value)] || []);
+    for (var f = 0; f < found.length; f++) {
+      if (out.indexOf(found[f]) >= 0) continue;
+      out.push(found[f]);
+      if (!siteWide) break;
+    }
+    return out;
+  }
+  function scApplyTo(el, it) {
+    if (it.kind === 'image') {
+      if (!/^(https?:)?\/\/|^\/[^/]/i.test(it.value)) return false; // only http(s) or site-relative URLs reach src
+      if (scKey(el.currentSrc || el.getAttribute('src') || '') !== scKey(it.value)) {
+        el.removeAttribute('srcset'); el.removeAttribute('sizes'); el.removeAttribute('data-src'); el.removeAttribute('data-srcset');
+        var pic = el.parentElement;
+        if (pic && pic.tagName === 'PICTURE') { var srcs = pic.querySelectorAll('source'); for (var s = 0; s < srcs.length; s++) pic.removeChild(srcs[s]); }
+        el.setAttribute('src', it.value);
+      }
+    } else if (scNorm(el.textContent) !== scNorm(it.value)) {
+      el.textContent = it.value;
+    }
+    // Lets the editor (and the next pass) find the element directly (data-kiban="collection/slug/field")
+    el.setAttribute('data-kiban', 'site-content/' + it.slug + '/' + (it.kind === 'image' ? 'image' : 'text'));
+    return true;
   }
   function scApply(items) {
     if (!items || !items.length || !document.body) return 0;
     var n = 0, ctx = {};
     for (var i = 0; i < items.length; i++) {
-      var it = items[i], el = scFind(it, ctx);
-      if (!el) continue;
-      if (it.kind === 'image') {
-        if (!/^(https?:)?\/\/|^\/[^/]/i.test(it.value)) continue; // only http(s) or site-relative URLs reach src
-        if (scKey(el.currentSrc || el.getAttribute('src') || '') !== scKey(it.value)) {
-          el.removeAttribute('srcset'); el.removeAttribute('sizes'); el.removeAttribute('data-src'); el.removeAttribute('data-srcset');
-          var pic = el.parentElement;
-          if (pic && pic.tagName === 'PICTURE') { var srcs = pic.querySelectorAll('source'); for (var s = 0; s < srcs.length; s++) pic.removeChild(srcs[s]); }
-          el.setAttribute('src', it.value);
-        }
-      } else if (scNorm(el.textContent) !== scNorm(it.value)) {
-        el.textContent = it.value;
-      }
-      // Lets the editor bind the element directly (data-kiban="collection/slug/field")
-      el.setAttribute('data-kiban', 'site-content/' + it.slug + '/' + (it.kind === 'image' ? 'image' : 'text'));
-      n++;
+      var it = items[i], els = scFind(it, ctx);
+      for (var e = 0; e < els.length; e++) if (scApplyTo(els[e], it)) n++;
     }
     return n;
   }
@@ -238,6 +262,8 @@
       document.dispatchEvent(ev);
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+    // Hydrated sites (React/Next) may restore the server text while hydrating: pass again after load
+    if (document.readyState !== 'complete') window.addEventListener('load', run);
     // Content rendered later (SPA shells, lazy sections): a couple more passes
     setTimeout(run, 1000); setTimeout(run, 3000);
   }

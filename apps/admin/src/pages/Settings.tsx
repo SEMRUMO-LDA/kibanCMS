@@ -387,6 +387,8 @@ export const Settings = () => {
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      // The sidebar ("Ver site", "Editar no site", "Notas do site") reads these settings once: tell it
+      window.dispatchEvent(new Event('kiban:site-settings-saved'));
     } catch (err: any) {
       toast.error('Failed to save: ' + (err.message || 'Unknown error'));
     } finally {
